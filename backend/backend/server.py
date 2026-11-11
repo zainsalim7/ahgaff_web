@@ -6564,6 +6564,12 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
     
+    # 🔒 معلم بلا أي صلة بهذا المقرر (لا ملكية ولا قيادة مجموعة) — مثلاً بعد إعادة إسناد المقرر لمعلم آخر
+    if current_user["role"] == UserRole.TEACHER:
+        _is_owner, _keys = await _teacher_group_scope(course, current_user)
+        if not _is_owner and not _keys:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بعرض هذا المقرر")
+    
     # جلب اسم المعلم
     teacher_name = None
     if course.get("teacher_id"):
@@ -7114,6 +7120,8 @@ async def get_course_enrollments(course_id: str, current_user: dict = Depends(ge
     _enr_q: dict = {"course_id": course_id}
     if current_user["role"] == UserRole.TEACHER:
         _is_owner, _keys = await _teacher_group_scope(course, current_user)
+        if not _is_owner and not _keys:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بعرض طلاب هذا المقرر")
         if _keys:
             _enr_q["group"] = {"$in": _keys}  # 👥 قائد المجموعة يرى طلاب مجموعته فقط
     enrollments = await db.enrollments.find(_enr_q).to_list(10000)
@@ -8398,11 +8406,25 @@ async def backfill_sections(current_user: dict = Depends(get_current_user)):
 
 
 def _teacher_lecture_scope(course_ids: list, teacher_ids: Optional[list]) -> dict:
-    """👥 نطاق محاضرات المدرّس: مقرراته + محاضرات المجموعات المُسندة إليه في مقررات أخرى
-    (teacher_ids: كل المعرّفات الممكنة للمدرّس — resolve_teacher_ids)"""
+    """👥 نطاق محاضرات المدرّس: مقرراته الحالية + محاضرات مجموعات/تبادل مُسندة إليه صراحةً في مقررات أخرى.
+    (teacher_ids: كل المعرّفات الممكنة للمدرّس — resolve_teacher_ids)
+    ⚠️ المطابقة المباشرة على teacher_id تُقيَّد بوجود group أو swap_id فقط — وإلا فمجرد قيمة teacher_id
+    قديمة متروكة على محاضرة مقرر أُعيد إسناده لمعلم آخر كانت تُسرِّب رؤيتها للمعلم السابق."""
     if teacher_ids:
-        return {"$or": [{"course_id": {"$in": course_ids}}, {"teacher_id": {"$in": teacher_ids}}]}
+        return {"$or": [
+            {"course_id": {"$in": course_ids}},
+            {"teacher_id": {"$in": teacher_ids}, "swap_id": {"$exists": True, "$ne": None}},
+            {"teacher_id": {"$in": teacher_ids}, "group": {"$exists": True, "$nin": [None, ""]}},
+        ]}
     return {"course_id": {"$in": course_ids}}
+
+
+def _lecture_teacher_override_valid(lecture: dict, teacher_ids: list) -> bool:
+    """🔑 يُعيد True فقط إذا كانت المحاضرة مُسندة صراحةً (مجموعة/تبادل) لأحد معرّفات المعلم الحالي.
+    لا يُعتمَد على lecture.teacher_id المجرّد وحده لأنه قد يكون أثراً قديماً من مقرر أُعيد إسناده لمعلم آخر."""
+    if lecture.get("teacher_id") not in teacher_ids:
+        return False
+    return bool(lecture.get("swap_id")) or bool(lecture.get("group"))
 
 
 async def _attach_group_courses(lectures: list, course_map: dict, teacher_ids: Optional[list]) -> list:
@@ -8855,6 +8877,12 @@ async def get_course_lectures(
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
     
+    # 🔒 معلم بلا أي صلة بهذا المقرر (لا ملكية ولا قيادة مجموعة)
+    if current_user["role"] == UserRole.TEACHER:
+        _is_owner0, _keys0 = await _teacher_group_scope(course, current_user)
+        if not _is_owner0 and not _keys0:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بعرض محاضرات هذا المقرر")
+    
     query = {"course_id": course_id}
     if status:
         query["status"] = status
@@ -8961,6 +8989,13 @@ async def get_course_lectures(
         _grp_clause = {"$or": [{"group": {"$exists": False}}, {"group": None}, {"group": ""}] + ([{"group": _my_group}] if _my_group else [])}
         query.setdefault("$and", []).append(_grp_clause)
         total = await db.lectures.count_documents(query)
+
+    # 👥 قائد مجموعة محددة (لا يملك المقرر أساسياً) يرى محاضرات مجموعته فقط
+    if current_user.get("role") == UserRole.TEACHER:
+        _is_owner1, _keys1 = await _teacher_group_scope(course, current_user)
+        if not _is_owner1 and _keys1:
+            query.setdefault("$and", []).append({"group": {"$in": _keys1}})
+            total = await db.lectures.count_documents(query)
 
     # تقسيم الصفحات
     skip = (page - 1) * per_page
@@ -10873,8 +10908,7 @@ async def get_lecture_details(
     # 🔒 التحقق من الصلاحية: فقط مدرّس المقرر/المحاضرة (أو قائد مجموعتها) يرى تفاصيلها، لا أي مستخدم مسجّل دخول
     if current_user["role"] == UserRole.TEACHER:
         _tids = await resolve_teacher_ids(current_user)
-        _lec_teacher = lecture.get("teacher_id")
-        if course["teacher_id"] not in _tids and _lec_teacher not in _tids:
+        if course["teacher_id"] not in _tids and not _lecture_teacher_override_valid(lecture, _tids):
             raise HTTPException(status_code=403, detail="غير مصرح لك بعرض تفاصيل هذه المحاضرة")
     elif current_user["role"] == UserRole.STUDENT:
         raise HTTPException(status_code=403, detail="غير مصرح")
@@ -11339,10 +11373,19 @@ async def get_lecture_attendance(
     if not lecture:
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
 
+    course_for_scope = await db.courses.find_one({"_id": ObjectId(lecture.get("course_id"))}) if ObjectId.is_valid(str(lecture.get("course_id", ""))) else None
+
+    # 🔒 معلم بلا أي صلة بهذه المحاضرة (لا ملكية مقرر، ولا قيادة مجموعتها، ولا تبادل/إنابة صريح)
+    if current_user["role"] == UserRole.TEACHER:
+        _tids = await resolve_teacher_ids(current_user)
+        _is_owner, _keys = await _teacher_group_scope(course_for_scope or {}, current_user)
+        _in_my_group = bool(lecture.get("group")) and lecture.get("group") in _keys
+        if not _is_owner and not _in_my_group and not _lecture_teacher_override_valid(lecture, _tids):
+            raise HTTPException(status_code=403, detail="غير مصرح لك بعرض حضور هذه المحاضرة")
+
     if current_user.get("advanced_access_real_enforcement"):
         from services.advanced_access_service import real_enforce_guard
-        course_doc = await db.courses.find_one({"_id": ObjectId(lecture.get("course_id"))}) if ObjectId.is_valid(str(lecture.get("course_id", ""))) else None
-        dep = str(course_doc.get("department_id")) if course_doc and course_doc.get("department_id") else None
+        dep = str(course_for_scope.get("department_id")) if course_for_scope and course_for_scope.get("department_id") else None
         await real_enforce_guard(db, current_user, "attendance_ser_get_lecture_attendance", dep)
 
     records = await db.attendance.find({"lecture_id": lecture_id}).to_list(1000)
@@ -11416,7 +11459,7 @@ async def record_attendance_session(
         _lec_teacher = lecture.get("teacher_id")
         if lecture.get("swap_id") and _lec_teacher not in _tids:
             raise HTTPException(status_code=403, detail=f"هذه المحاضرة أُسندت بالتبادل/الإنابة إلى أ. {lecture.get('teacher_name') or 'زميل آخر'} — هو من يسجّل حضورها")
-        if course["teacher_id"] not in _tids and _lec_teacher not in _tids:
+        if course["teacher_id"] not in _tids and not _lecture_teacher_override_valid(lecture, _tids):
             raise HTTPException(status_code=403, detail="غير مصرح لك بتسجيل حضور هذا المقرر")
     
     # 👥 محاضرة مجموعة: تُقبل سجلات طلاب تلك المجموعة فقط (حماية من نسخة قديمة من التطبيق) — تُطبَّق
@@ -11704,10 +11747,20 @@ async def get_course_attendance(
     date: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    # 🔒 معلم بلا أي صلة بهذا المقرر (لا ملكية ولا قيادة مجموعة)
+    _teacher_keys: list = []
+    if current_user["role"] == UserRole.TEACHER:
+        _is_owner, _teacher_keys = await _teacher_group_scope(course, current_user)
+        if not _is_owner and not _teacher_keys:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بعرض حضور هذا المقرر")
+
     if current_user.get("advanced_access_real_enforcement"):
         from services.advanced_access_service import real_enforce_guard
-        course_doc = await db.courses.find_one({"_id": ObjectId(course_id)}) if ObjectId.is_valid(course_id) else None
-        dep = str(course_doc.get("department_id")) if course_doc and course_doc.get("department_id") else None
+        dep = str(course.get("department_id")) if course.get("department_id") else None
         await real_enforce_guard(db, current_user, "attendance_ser_get_course_attendance", dep)
 
     # جلب المحاضرات النشطة فقط
@@ -11730,6 +11783,12 @@ async def get_course_attendance(
         query["date"] = {"$gte": day_start_utc, "$lt": day_end_utc}
     
     records = await db.attendance.find(query).sort("date", -1).to_list(1000)
+
+    # 👥 قائد مجموعة محددة (لا يملك المقرر أساسياً) يرى حضور مجموعته فقط
+    if current_user["role"] == UserRole.TEACHER and _teacher_keys:
+        _grp_lectures = await db.lectures.find({"course_id": course_id, "group": {"$in": _teacher_keys}}, {"_id": 1}).to_list(5000)
+        _grp_lecture_ids = {str(l["_id"]) for l in _grp_lectures}
+        records = [r for r in records if (r.get("lecture_id") in _grp_lecture_ids) or (r.get("group") in _teacher_keys)]
     
     # Get student details
     result = []
@@ -12143,7 +12202,7 @@ async def sync_offline_attendance(
                 if _lec.get("swap_id") and _lec_teacher not in _tids:
                     errors.append(f"محاضرة {lecture_id} أُسندت بالتبادل/الإنابة إلى زميل آخر — مرفوض")
                     continue
-                if owner not in _tids and _lec_teacher not in _tids:
+                if owner not in _tids and not _lecture_teacher_override_valid(_lec, _tids):
                     errors.append(f"غير مصرح لك بمزامنة حضور المقرر {course_id}")
                     continue
 
