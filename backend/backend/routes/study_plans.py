@@ -99,7 +99,7 @@ def _get_yemen_time() -> datetime:
 
 
 async def _ensure_teacher_owns_course(course_id: str, current_user: dict, db) -> dict:
-    """تتحقق من أن المعلم يملك المقرر، وإلا 403. تُرجع وثيقة المقرر."""
+    """تتحقق من أن المعلم يملك المقرر (user_id أو teacher_record_id معاً — موحّد)، وإلا 403. تُرجع وثيقة المقرر."""
     try:
         ObjectId(course_id)
     except Exception:
@@ -108,11 +108,12 @@ async def _ensure_teacher_owns_course(course_id: str, current_user: dict, db) ->
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
     if current_user["role"] == UserRole.TEACHER:
-        teacher_user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        teacher_record_id = (
-            teacher_user.get("teacher_record_id", current_user["id"]) if teacher_user else current_user["id"]
-        )
-        if course.get("teacher_id") != teacher_record_id:
+        teacher_user = await db.users.find_one({"_id": ObjectId(current_user["id"])}, {"teacher_record_id": 1})
+        _tids = {current_user["id"]}
+        _trid = (teacher_user or {}).get("teacher_record_id")
+        if _trid:
+            _tids.add(str(_trid))
+        if course.get("teacher_id") not in _tids:
             raise HTTPException(status_code=403, detail="غير مصرح لك بهذا المقرر")
     return course
 
@@ -122,6 +123,7 @@ async def _ensure_teacher_owns_course(course_id: str, current_user: dict, db) ->
 async def get_study_plan(course_id: str, current_user: dict = Depends(get_current_user)):
     """جلب الخطة الدراسية لمقرر مع حالة إكمال المواضيع"""
     db = get_db()
+    await _ensure_teacher_owns_course(course_id, current_user, db)
     plan = await db.study_plans.find_one({"course_id": course_id}, {"_id": 0})
     if not plan:
         return {
@@ -267,17 +269,7 @@ async def update_study_plan(
     ):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
-    course = await db.courses.find_one({"_id": ObjectId(course_id)})
-    if not course:
-        raise HTTPException(status_code=404, detail="المقرر غير موجود")
-
-    if current_user["role"] == UserRole.TEACHER:
-        user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        teacher_record_id = (
-            user.get("teacher_record_id", current_user["id"]) if user else current_user["id"]
-        )
-        if course.get("teacher_id") != teacher_record_id:
-            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل خطة هذا المقرر")
+    course = await _ensure_teacher_owns_course(course_id, current_user, db)
 
     weeks = data.get("weeks", [])
     for week in weeks:
@@ -383,21 +375,8 @@ async def upload_study_plan_excel(
     ):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
-    try:
-        ObjectId(course_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="معرف المقرر غير صالح")
-    course = await db.courses.find_one({"_id": ObjectId(course_id)})
-    if not course:
-        raise HTTPException(status_code=404, detail="المقرر غير موجود")
-
-    if current_user["role"] == UserRole.TEACHER:
-        teacher_user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        teacher_record_id = (
-            teacher_user.get("teacher_record_id", current_user["id"]) if teacher_user else current_user["id"]
-        )
-        if course.get("teacher_id") != teacher_record_id:
-            raise HTTPException(status_code=403, detail="غير مصرح لك برفع خطة هذا المقرر")
+    course = await _ensure_teacher_owns_course(course_id, current_user, db)
+    _ = course  # noqa: F841
 
     contents = await file.read()
     fname = (file.filename or "").lower()
