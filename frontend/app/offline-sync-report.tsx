@@ -131,7 +131,7 @@ export default function OfflineSyncReportPage() {
             <tbody>{shown.map((it: any) => { const st = STATUS[it.status] || STATUS.failed; return (
               <tr key={it.id} data-testid={`osr-row-${it.id}`} style={it.is_duplicate_attempt ? { background: '#f0fdfa' } : it.status === 'failed' ? { background: '#fff5f5' } : selected.has(it.id) ? { background: '#eff6ff' } : undefined}>
                 <td style={td}><input type="checkbox" checked={selected.has(it.id)} onChange={() => toggleSelect(it.id)} data-testid={`osr-row-checkbox-${it.id}`} /></td>
-                <td style={td}>{it.lecture_date}{it.lecture_start_time && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{it.lecture_start_time}{it.lecture_end_time ? ` - ${it.lecture_end_time}` : ''}</div>}</td><td style={td}>{it.course_name}</td><td style={td}>{it.teacher_name || '—'}</td>
+                <td style={td}>{it.lecture_date}{it.lecture_start_time && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, direction: 'ltr', textAlign: 'right' }}>{it.lecture_start_time}{it.lecture_end_time ? ` - ${it.lecture_end_time}` : ''}</div>}</td><td style={td}>{it.course_name}</td><td style={td}>{it.teacher_name || '—'}</td>
                 <td style={td}>
                   <Badge text={st.label} color={st.color} />
                   {it.is_duplicate_attempt && <div style={{ fontSize: 10.5, color: '#0e7490', fontWeight: 700, marginTop: 3 }}>محاولة مكررة — غير مؤثرة</div>}
