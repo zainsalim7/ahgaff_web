@@ -78,7 +78,7 @@ def build_router(db, get_current_user) -> APIRouter:
                 "teacher_id": l.get("teacher_id"), "teacher_name": l.get("teacher_name", ""),
                 "course_id": l.get("course_id"), "course_name": l.get("course_name", ""),
                 "lecture_id": l.get("lecture_id"), "lecture_date": l.get("lecture_date"),
-                "lecture_end_time": l.get("lecture_end_time"),
+                "lecture_start_time": l.get("lecture_start_time"), "lecture_end_time": l.get("lecture_end_time"),
                 "offline_recorded_at": l.get("offline_recorded_at"),
                 "synced_at": l.get("synced_at"),
                 "delay_minutes": delay_minutes,
