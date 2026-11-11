@@ -1090,6 +1090,16 @@ async def filter_attendance_by_active_lectures(records: list, course_id: str = N
 
 # ==================== Backend Scoping Helper ====================
 
+async def resolve_teacher_ids(current_user: dict) -> list:
+    """🔑 دالة موحّدة لحل هوية المعلم: تُرجع كل المعرّفات الممكنة لمطابقة حقل teacher_id
+    (user_id دائماً + teacher_record_id إن وُجد مرتبطاً بحساب المستخدم في جدول users).
+    يجب استخدامها في كل نقطة تُطابِق teacher_id بدل الاختيار اليدوي بين المعرّفين
+    (كانت هذه الفجوة سبب تضارب النتائج بين /courses و/lectures لنفس المعلم)."""
+    user_id = current_user.get("id")
+    user_doc = await db.users.find_one({"_id": ObjectId(user_id)}, {"teacher_record_id": 1}) if user_id else None
+    trid = (user_doc or {}).get("teacher_record_id")
+    return [i for i in {user_id, str(trid) if trid else None} if i]
+
 async def get_user_scope_filter(current_user: dict, scope_type: str = "students") -> dict:
     """
     إرجاع فلتر Query بناءً على دور المستخدم ونطاقه
@@ -1301,12 +1311,10 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
     
     # Teacher - يرى فقط مقرراته
     elif role == UserRole.TEACHER:
+        _tids = [i for i in {user_id, teacher_record_id} if i]
         if scope_type == "courses":
-            # استخدام teacher_record_id أو user_id
-            if teacher_record_id:
-                query["teacher_id"] = teacher_record_id
-            else:
-                query["teacher_id"] = user_id
+            # 🔑 موحّد (resolve_teacher_ids): يطابق user_id أو teacher_record_id معاً، لا اختياراً يدوياً بينهما
+            query["teacher_id"] = {"$in": _tids}
         elif scope_type == "students":
             # جلب طلاب مقرراته فقط
             course_ids = await get_teacher_course_ids(user_id, teacher_record_id)
@@ -1368,12 +1376,9 @@ async def get_faculty_department_ids(faculty_id: str) -> list:
     return [str(d["_id"]) for d in departments]
 
 async def get_teacher_course_ids(user_id: str, teacher_record_id: str = None) -> list:
-    """جلب معرفات المقررات التي يدرسها المعلم"""
-    query = {"is_active": True}
-    if teacher_record_id:
-        query["teacher_id"] = teacher_record_id
-    else:
-        query["teacher_id"] = user_id
+    """جلب معرفات المقررات التي يدرسها المعلم (يطابق user_id أو teacher_record_id معاً — موحّد)"""
+    _tids = [i for i in {user_id, teacher_record_id} if i]
+    query = {"is_active": True, "teacher_id": {"$in": _tids}}
     
     courses = await db.courses.find(query, {"_id": 1}).to_list(100)
     return [str(c["_id"]) for c in courses]
@@ -6268,17 +6273,20 @@ async def get_courses(
 
     # 👥 المدرّس يرى أيضاً المقررات التي يقود فيها مجموعة فقط (بشارة المجموعة)
     group_roles: dict = {}
-    if current_user["role"] == UserRole.TEACHER and "teacher_id" in query and isinstance(query["teacher_id"], str):
-        _tid = query["teacher_id"]
-        _gq = {k: v for k, v in query.items() if k != "teacher_id"}
-        _gq["groups"] = {"$elemMatch": {"teacher_id": _tid}}
-        _have = {str(c["_id"]) for c in courses}
-        for gc in await db.courses.find(_gq).to_list(None):
-            if str(gc["_id"]) in _have:
-                continue
-            _gs = [g for g in (gc.get("groups") or []) if g.get("teacher_id") == _tid]
-            group_roles[str(gc["_id"])] = [{"key": g["key"], "name": g.get("name") or f"مجموعة {g['key']}"} for g in _gs]
-            courses.append(gc)
+    if current_user["role"] == UserRole.TEACHER and "teacher_id" in query:
+        _tid_val = query["teacher_id"]
+        # 🔑 موحّد: query["teacher_id"] قد يكون نصاً مفرداً (تمرير صريح) أو {"$in": [...]} (resolve_teacher_ids)
+        _tids = _tid_val.get("$in", []) if isinstance(_tid_val, dict) else ([_tid_val] if _tid_val else [])
+        if _tids:
+            _gq = {k: v for k, v in query.items() if k != "teacher_id"}
+            _gq["groups"] = {"$elemMatch": {"teacher_id": {"$in": _tids}}}
+            _have = {str(c["_id"]) for c in courses}
+            for gc in await db.courses.find(_gq).to_list(None):
+                if str(gc["_id"]) in _have:
+                    continue
+                _gs = [g for g in (gc.get("groups") or []) if g.get("teacher_id") in _tids]
+                group_roles[str(gc["_id"])] = [{"key": g["key"], "name": g.get("name") or f"مجموعة {g['key']}"} for g in _gs]
+                courses.append(gc)
     
     # 👥 إثراء مجموعات المقررات: اسم مدرّس المجموعة + عدد طلابها + عدد محاضراتها
     _grp_course_ids = [str(c["_id"]) for c in courses if c.get("groups")]
@@ -8364,22 +8372,24 @@ async def backfill_sections(current_user: dict = Depends(get_current_user)):
     }
 
 
-def _teacher_lecture_scope(course_ids: list, teacher_id: Optional[str]) -> dict:
-    """👥 نطاق محاضرات المدرّس: مقرراته + محاضرات المجموعات المُسندة إليه في مقررات أخرى"""
-    if teacher_id:
-        return {"$or": [{"course_id": {"$in": course_ids}}, {"teacher_id": teacher_id}]}
+def _teacher_lecture_scope(course_ids: list, teacher_ids: Optional[list]) -> dict:
+    """👥 نطاق محاضرات المدرّس: مقرراته + محاضرات المجموعات المُسندة إليه في مقررات أخرى
+    (teacher_ids: كل المعرّفات الممكنة للمدرّس — resolve_teacher_ids)"""
+    if teacher_ids:
+        return {"$or": [{"course_id": {"$in": course_ids}}, {"teacher_id": {"$in": teacher_ids}}]}
     return {"course_id": {"$in": course_ids}}
 
 
-async def _attach_group_courses(lectures: list, course_map: dict, teacher_id: Optional[str]) -> list:
+async def _attach_group_courses(lectures: list, course_map: dict, teacher_ids: Optional[list]) -> list:
     """يستبعد محاضرات مجموعات مقرراته المُسندة لمدرّس آخر، ويُحمّل مقررات محاضرات المجموعات الخارجية في course_map"""
-    if not teacher_id:
+    if not teacher_ids:
         return lectures
+    _tid_set = set(teacher_ids)
     out = []
     missing = set()
     for lec in lectures:
         lt = lec.get("teacher_id")
-        if lec.get("course_id") in course_map and lt and lt != teacher_id and (lec.get("group") or lec.get("swap_id")):
+        if lec.get("course_id") in course_map and lt and lt not in _tid_set and (lec.get("group") or lec.get("swap_id")):
             continue
         out.append(lec)
         if lec.get("course_id") not in course_map:
@@ -8423,14 +8433,12 @@ async def get_today_lectures(
     
     # جلب مقررات المعلم
     course_query = {"is_active": True}
+    _my_tid = None
     
     if current_user["role"] == UserRole.TEACHER:
-        # البحث عن teacher_record_id في حساب المستخدم
-        user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        if user and user.get("teacher_record_id"):
-            course_query["teacher_id"] = user["teacher_record_id"]
-        else:
-            course_query["teacher_id"] = current_user["id"]
+        # 🔑 موحّد (resolve_teacher_ids): يطابق user_id أو teacher_record_id معاً
+        _my_tid = await resolve_teacher_ids(current_user)
+        course_query["teacher_id"] = {"$in": _my_tid}
     elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "view_lectures") and not has_permission(current_user, "manage_lectures"):
         # للمستخدمين غير المعلمين والمدير
         return []
@@ -8438,7 +8446,6 @@ async def get_today_lectures(
     courses = await db.courses.find(course_query).to_list(100)
     course_ids = [str(c["_id"]) for c in courses]
     course_map = {str(c["_id"]): c for c in courses}
-    _my_tid = course_query.get("teacher_id") if current_user["role"] == UserRole.TEACHER else None
     
     if not course_ids and not _my_tid:
         return []
@@ -8565,17 +8572,15 @@ async def get_all_schedule_lectures(
     if scope_filter:
         course_query.update(scope_filter)
     
+    _my_tid = None
     if current_user["role"] == UserRole.TEACHER:
-        user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        if user and user.get("teacher_record_id"):
-            course_query["teacher_id"] = user["teacher_record_id"]
-        else:
-            course_query["teacher_id"] = current_user["id"]
+        # 🔑 موحّد (resolve_teacher_ids): يطابق user_id أو teacher_record_id معاً
+        _my_tid = await resolve_teacher_ids(current_user)
+        course_query["teacher_id"] = {"$in": _my_tid}
     
     courses = await db.courses.find(course_query).to_list(500)
     course_ids = [str(c["_id"]) for c in courses]
     course_map = {str(c["_id"]): c for c in courses}
-    _my_tid = course_query.get("teacher_id") if current_user["role"] == UserRole.TEACHER else None
     
     if not course_ids and not _my_tid:
         return {"lectures": [], "date": date}
@@ -8690,20 +8695,18 @@ async def get_month_lectures(
     
     # جلب مقررات المعلم
     course_query = {"is_active": True}
+    _my_tid = None
     
     if current_user["role"] == UserRole.TEACHER:
-        user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        if user and user.get("teacher_record_id"):
-            course_query["teacher_id"] = user["teacher_record_id"]
-        else:
-            course_query["teacher_id"] = current_user["id"]
+        # 🔑 موحّد (resolve_teacher_ids): يطابق user_id أو teacher_record_id معاً
+        _my_tid = await resolve_teacher_ids(current_user)
+        course_query["teacher_id"] = {"$in": _my_tid}
     elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "view_lectures") and not has_permission(current_user, "manage_lectures"):
         return {"dates": [], "lectures": []}
     
     courses = await db.courses.find(course_query).to_list(100)
     course_ids = [str(c["_id"]) for c in courses]
     course_map = {str(c["_id"]): c for c in courses}
-    _my_tid = course_query.get("teacher_id") if current_user["role"] == UserRole.TEACHER else None
     
     if not course_ids and not _my_tid:
         return {"dates": [], "lectures": []}
@@ -10844,11 +10847,9 @@ async def get_lecture_details(
     
     # 🔒 التحقق من الصلاحية: فقط مدرّس المقرر/المحاضرة (أو قائد مجموعتها) يرى تفاصيلها، لا أي مستخدم مسجّل دخول
     if current_user["role"] == UserRole.TEACHER:
-        user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        teacher_record_id = user_doc.get("teacher_record_id") if user_doc else None
+        _tids = await resolve_teacher_ids(current_user)
         _lec_teacher = lecture.get("teacher_id")
-        if course["teacher_id"] != current_user["id"] and course["teacher_id"] != teacher_record_id \
-                and _lec_teacher not in (current_user["id"], teacher_record_id):
+        if course["teacher_id"] not in _tids and _lec_teacher not in _tids:
             raise HTTPException(status_code=403, detail="غير مصرح لك بعرض تفاصيل هذه المحاضرة")
     elif current_user["role"] == UserRole.STUDENT:
         raise HTTPException(status_code=403, detail="غير مصرح")
@@ -11385,15 +11386,12 @@ async def record_attendance_session(
     
     # Check if teacher owns this course
     if current_user["role"] == UserRole.TEACHER:
-        # البحث عن teacher_record_id من حساب المستخدم
-        user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        teacher_record_id = user_doc.get("teacher_record_id") if user_doc else None
-        # المقارنة بكلا المعرفين: user_id و teacher_record_id — أو مدرّس المجموعة المُسند للمحاضرة 👥
+        # 🔑 موحّد (resolve_teacher_ids): كل المعرّفات الممكنة للمعلم — user_id و teacher_record_id معاً
+        _tids = await resolve_teacher_ids(current_user)
         _lec_teacher = lecture.get("teacher_id")
-        if lecture.get("swap_id") and _lec_teacher not in (current_user["id"], teacher_record_id):
+        if lecture.get("swap_id") and _lec_teacher not in _tids:
             raise HTTPException(status_code=403, detail=f"هذه المحاضرة أُسندت بالتبادل/الإنابة إلى أ. {lecture.get('teacher_name') or 'زميل آخر'} — هو من يسجّل حضورها")
-        if course["teacher_id"] != current_user["id"] and course["teacher_id"] != teacher_record_id \
-                and _lec_teacher not in (current_user["id"], teacher_record_id):
+        if course["teacher_id"] not in _tids and _lec_teacher not in _tids:
             raise HTTPException(status_code=403, detail="غير مصرح لك بتسجيل حضور هذا المقرر")
     
     # 👥 محاضرة مجموعة: تُقبل سجلات طلاب تلك المجموعة فقط (حماية من نسخة قديمة من التطبيق) — تُطبَّق
@@ -12071,11 +12069,10 @@ async def sync_offline_attendance(
     synced = 0
     errors = []
 
-    # 🔐 معرف سجل المعلم لفحص ملكية المقرر
-    teacher_record_id = None
+    # 🔐 كل المعرّفات الممكنة للمعلم الحالي لفحص ملكية المقرر (موحّد — resolve_teacher_ids)
+    _tids = []
     if current_user["role"] == UserRole.TEACHER:
-        user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        teacher_record_id = user_doc.get("teacher_record_id") if user_doc else None
+        _tids = await resolve_teacher_ids(current_user)
 
     course_owner_cache = {}
     lecture_cache = {}
@@ -12101,7 +12098,7 @@ async def sync_offline_attendance(
                         _course = None
                     course_owner_cache[course_id] = (_course or {}).get("teacher_id")
                 owner = course_owner_cache[course_id]
-                if owner != current_user["id"] and owner != teacher_record_id:
+                if owner not in _tids:
                     errors.append(f"غير مصرح لك بمزامنة حضور المقرر {course_id}")
                     continue
 
@@ -19089,6 +19086,7 @@ async def _startup_db_tasks():
         ("cleanup_orphan_permissions", cleanup_orphan_permissions),
         ("migrate_broken_user_roles", migrate_broken_user_roles),
         ("backfill_offline_override_attendance_started_at", backfill_offline_override_attendance_started_at),
+        ("backfill_teacher_record_links", backfill_teacher_record_links),
         ("backfill_teaching_loads_semester_internal", backfill_teaching_loads_semester_internal),
         ("backfill_alumni_department_snapshot_internal", backfill_alumni_department_snapshot_internal),
         ("letters_backfill_people_faculty", lambda: letters_backfill_people_faculty(db)),
@@ -19585,6 +19583,62 @@ async def backfill_offline_override_attendance_started_at():
             logging.info(f"✅ Backfill: {fixed} overridden lecture(s) now show correctly in teacher-delays report.")
     except Exception as e:
         logging.warning(f"Backfill offline override attendance_started_at failed (non-critical): {e}")
+
+async def backfill_teacher_record_links():
+    """🔑 إصلاح تراجعي لمرة واحدة: لكل مستخدم بدور teacher بلا teacher_record_id مرتبط —
+    يُحاول الربط بسجل teachers موجود فعلاً (عبر user_id المطابق، ثم البريد الإلكتروني المؤكَّد)،
+    وإلا يُنشئ سجل teacher جديد تلقائياً ويربطه (بقرار صريح من المستخدم). يحل جذرياً تضارب هوية
+    المعلم بين /courses و/lectures لمن لم يُفعَّل حسابه عبر مسار التفعيل المعتاد.
+    Idempotent: لا يمسّ مستخدماً لديه teacher_record_id مسبقاً."""
+    try:
+        fixed_linked = 0
+        fixed_created = 0
+        async for user in db.users.find({
+            "role": UserRole.TEACHER,
+            "$or": [{"teacher_record_id": {"$exists": False}}, {"teacher_record_id": None}, {"teacher_record_id": ""}],
+        }):
+            uid = str(user["_id"])
+            # 1) سجل teacher مرتبط فعلاً بهذا المستخدم (user_id) لكن الربط العكسي على حساب المستخدم ناقص
+            teacher = await db.teachers.find_one({"user_id": uid})
+            # 2) أو تطابق مؤكّد بالبريد الإلكتروني مع سجل غير مرتبط بأي مستخدم آخر
+            if not teacher and user.get("email"):
+                teacher = await db.teachers.find_one({
+                    "email": user["email"],
+                    "$or": [{"user_id": {"$exists": False}}, {"user_id": None}, {"user_id": ""}],
+                })
+            if teacher:
+                await db.users.update_one({"_id": user["_id"]}, {"$set": {"teacher_record_id": str(teacher["_id"])}})
+                if not teacher.get("user_id"):
+                    await db.teachers.update_one({"_id": teacher["_id"]}, {"$set": {"user_id": uid}})
+                fixed_linked += 1
+                continue
+            # 3) لا يوجد أي تطابق — إنشاء سجل teacher جديد تلقائياً وربطه
+            emp_no = user.get("username") or uid
+            if await db.teachers.find_one({"teacher_id": emp_no}):
+                emp_no = f"AUTO-{uid}"
+            new_teacher = {
+                "teacher_id": emp_no,
+                "full_name": user.get("full_name") or user.get("username") or "معلم",
+                "department_id": user.get("department_id"),
+                "faculty_id": user.get("faculty_id"),
+                "email": user.get("email"),
+                "phone": user.get("phone"),
+                "specialization": None,
+                "academic_title": None,
+                "teaching_load": None,
+                "weekly_hours": 0,
+                "created_at": get_yemen_time(),
+                "is_active": True,
+                "user_id": uid,
+            }
+            res = await db.teachers.insert_one(new_teacher)
+            await db.users.update_one({"_id": user["_id"]}, {"$set": {"teacher_record_id": str(res.inserted_id)}})
+            fixed_created += 1
+        if fixed_linked or fixed_created:
+            logging.info(f"✅ Backfill teacher_record_id: {fixed_linked} ربط بسجل موجود، {fixed_created} سجل teacher جديد أُنشئ تلقائياً.")
+    except Exception as e:
+        logging.warning(f"Backfill teacher_record_id failed (non-critical): {e}")
+
 
 async def _ensure_weekly_schedule_unique_indexes(db, dedupe: bool = False):
     """
