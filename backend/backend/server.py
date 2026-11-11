@@ -19841,6 +19841,24 @@ async def create_indexes():
         # 🔔 تنبيه الأستاذ الغائب: منع إرسال أكثر من تنبيه واحد لنفس المحاضرة حتى عند طلبات متزامنة
         await db.absence_reminders.create_index("lecture_id", unique=True)
 
+        # 📱 توكن الجهاز (FCM) يجب أن يخصّ مستخدماً واحداً فقط — تنظيف التكرارات القديمة لمرة واحدة
+        # (قبل إضافة الفهرس الفريد، وإلا فشل إنشاؤه لو كانت هناك تكرارات سابقة)
+        if not await db.settings.find_one({"type": "migration_dedupe_fcm_tokens"}):
+            _dupe_cursor = db.fcm_tokens.aggregate([
+                {"$group": {"_id": "$token", "ids": {"$push": "$_id"}, "count": {"$sum": 1},
+                            "latest": {"$max": "$updated_at"}}},
+                {"$match": {"count": {"$gt": 1}}}
+            ])
+            _removed = 0
+            async for grp in _dupe_cursor:
+                keep = await db.fcm_tokens.find_one({"_id": {"$in": grp["ids"]}}, sort=[("updated_at", -1)])
+                stale_ids = [i for i in grp["ids"] if i != keep["_id"]]
+                if stale_ids:
+                    _r = await db.fcm_tokens.delete_many({"_id": {"$in": stale_ids}})
+                    _removed += _r.deleted_count
+            await db.settings.insert_one({"type": "migration_dedupe_fcm_tokens", "removed": _removed, "at": datetime.now(timezone.utc)})
+        await db.fcm_tokens.create_index("token", unique=True)
+
         # 🔒 حماية على مستوى قاعدة البيانات ضد التعارض المزدوج في الجدول الأسبوعي
         # نطبّق فهارس فريدة جزئية بعد إزالة أي تكرار قائم (نحتفظ بأقدم نسخة)
         await _ensure_weekly_schedule_unique_indexes(db)

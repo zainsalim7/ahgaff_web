@@ -128,24 +128,19 @@ async def register_device_token(
     db = get_db()
     user_id = str(current_user["_id"])
 
-    existing = await db.fcm_tokens.find_one({
-        "token": request.token,
-        "user_id": user_id
-    })
+    # 🔒 الجهاز الواحد (التوكن) يجب أن ينتمي لمستخدم واحد فقط — وإلا يتسرّب إشعار مستخدم لآخر
+    # عند تبديل الحسابات على نفس الجهاز (مثل جهاز مشترك بين أستاذين)
+    await db.fcm_tokens.delete_many({"token": request.token, "user_id": {"$ne": user_id}})
 
-    if not existing:
-        await db.fcm_tokens.insert_one({
+    await db.fcm_tokens.update_one(
+        {"token": request.token},
+        {"$set": {
             "user_id": user_id,
-            "token": request.token,
             "device_type": request.device_type,
-            "created_at": get_yemen_time().isoformat(),
             "updated_at": get_yemen_time().isoformat(),
-        })
-    else:
-        await db.fcm_tokens.update_one(
-            {"_id": existing["_id"]},
-            {"$set": {"updated_at": get_yemen_time().isoformat()}}
-        )
+        }, "$setOnInsert": {"created_at": get_yemen_time().isoformat()}},
+        upsert=True
+    )
 
     return {"message": "تم تسجيل الجهاز بنجاح"}
 
