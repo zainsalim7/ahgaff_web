@@ -122,12 +122,20 @@ class TestOfflineWindowContract:
         assert "خارج نافذة المحاضرة" in d and day.strftime("%Y-%m-%d") in d and "16:00-17:00" in d
         assert mdb.attendance.count_documents({"lecture_id": lid}) == 0
 
-    def test_just_after_end_within_grace_accepted(self, teacher_h):
-        # end + 1 minute is always within end + attendance_duration + max_delay (both >=0)
+    def test_at_max_delay_boundary_accepted_but_after_rejected(self, teacher_h):
+        # 🔒 قرار صريح من المستخدم (10-11-2026): مهلة فتح التحضير أوفلاين = نفس الأونلاين تماماً
+        # (بداية المحاضرة + max_delay دقيقة، افتراضياً 30) — لا تمديد إضافي بعد نهاية المحاضرة بعد الآن
         day = _now() - timedelta(days=1)
         lid = _mk_lecture(day, "14:00", "15:00")
-        r = _post(teacher_h, lid, _at(day, "15:00").isoformat())
-        assert r.status_code == 200, r.text
+        # عند الحد بالضبط (14:30) → مقبول
+        r_ok = _post(teacher_h, lid, _at(day, "14:30").isoformat())
+        assert r_ok.status_code == 200, r_ok.text
+        # دقيقة واحدة بعد الحد (14:31) لمحاضرة أخرى → مرفوض حتى لو داخل وقت المحاضرة نفسها
+        lid2 = _mk_lecture(day, "14:05", "15:05")
+        r_bad = _post(teacher_h, lid2, _at(day, "14:36").isoformat())
+        assert r_bad.status_code == 400
+        assert "خارج نافذة المحاضرة" in r_bad.json()["detail"]
+        assert mdb.attendance.count_documents({"lecture_id": lid2}) == 0
 
     def test_older_than_max_hours_rejected(self, teacher_h):
         mh = _max_hours()

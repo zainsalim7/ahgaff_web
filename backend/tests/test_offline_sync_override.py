@@ -2,7 +2,7 @@
 import os
 import pytest
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from bson import ObjectId
 from pymongo import MongoClient
 
@@ -25,6 +25,10 @@ mdb = MongoClient(_env["MONGO_URL"])[_env["DB_NAME"]]
 
 COURSE_ID = "698f0000d803b27aab0120af"  # دراسات حضرموت — teacher180156
 TEST_STUDENT = "TESTSTUDENT1"
+YEMEN = timezone(timedelta(hours=3))
+LEC_DAY = (datetime.now(YEMEN) - timedelta(days=2))  # يبقى ثابتاً نسبياً للوقت الحالي، لا يتعطل بمرور الزمن
+LEC_DATE = LEC_DAY.strftime("%Y-%m-%d")
+WINDOW_OFFLINE_TS = (LEC_DAY.replace(hour=8, minute=0) + timedelta(hours=26)).isoformat()  # +26h: خارج النافذة لكن ضمن max_hours
 
 
 def _login(u, p):
@@ -47,7 +51,7 @@ def teacher_h():
 @pytest.fixture(scope="module")
 def ctx():
     """Creates a dedicated TEST lecture (so override's delete_many cannot touch real data)."""
-    lec = {"course_id": COURSE_ID, "date": "2026-11-02", "start_time": "08:00", "end_time": "09:00",
+    lec = {"course_id": COURSE_ID, "date": LEC_DATE, "start_time": "08:00", "end_time": "09:00",
            "room": "TEST_OSR", "status": "scheduled"}
     lid = str(mdb.lectures.insert_one(lec).inserted_id)
     c = {"lecture_id": lid, "log_ids": []}
@@ -62,17 +66,18 @@ def ctx():
 
 def _get_item(admin_h, log_id):
     r = requests.get(f"{API}/reports/offline-sync", headers=admin_h,
-                     params={"start_date": "2026-10-01", "end_date": "2026-11-30"})
+                     params={"start_date": (LEC_DAY - timedelta(days=5)).strftime("%Y-%m-%d"),
+                             "end_date": (datetime.now(YEMEN) + timedelta(days=5)).strftime("%Y-%m-%d")})
     assert r.status_code == 200
     return next((i for i in r.json()["items"] if i["id"] == log_id), None), r.json()
 
 
 class TestOfflineSyncOverride:
     def test_real_sync_outside_window_logs_diagnosis_and_payload(self, teacher_h, admin_h, ctx):
-        # device recorded at 2026-11-04 10:00 for a lecture on 2026-11-02 08-09 (age < 168h) -> window failure
+        # device recorded 26h after lecture start (08:00) -> خارج مهلة الـ30 دقيقة لكن ضمن max_hours -> window failure
         r = requests.post(f"{API}/attendance/session", headers=teacher_h, json={
             "lecture_id": ctx["lecture_id"], "records": [{"student_id": TEST_STUDENT, "status": "present"}],
-            "notes": "TEST_notes", "offline_recorded_at": "2026-11-04T10:00:00+03:00"})
+            "notes": "TEST_notes", "offline_recorded_at": WINDOW_OFFLINE_TS})
         print(r.status_code, r.text[:300])
         assert r.status_code == 400
         assert "خارج نافذة المحاضرة" in r.json()["detail"]
@@ -80,7 +85,7 @@ class TestOfflineSyncOverride:
         assert log is not None
         ctx["window_log"] = str(log["_id"])
         assert log["pending_payload"]["records"] == [{"student_id": TEST_STUDENT, "status": "present"}]
-        assert "بعد نهاية نافذة السماح" in log["diagnosis"]
+        assert "بعد مهلة فتح التحضير المسموحة" in log["diagnosis"]
         item, _ = _get_item(admin_h, ctx["window_log"])
         assert item and item["can_override"] is True and item["diagnosis"] == log["diagnosis"]
         print("DIAG:", item["diagnosis"])
@@ -88,7 +93,7 @@ class TestOfflineSyncOverride:
     def test_real_sync_older_than_max_hours_logs_diagnosis(self, teacher_h, admin_h, ctx):
         r = requests.post(f"{API}/attendance/session", headers=teacher_h, json={
             "lecture_id": ctx["lecture_id"], "records": [{"student_id": TEST_STUDENT, "status": "absent"}],
-            "offline_recorded_at": "2026-10-01T08:30:00+03:00"})
+            "offline_recorded_at": (LEC_DAY - timedelta(days=200)).isoformat()})
         assert r.status_code == 400
         assert "أقدم من" in r.json()["detail"]
         log = mdb.offline_sync_log.find_one({"lecture_id": ctx["lecture_id"], "reason": {"$regex": "أقدم من"}})
@@ -145,8 +150,8 @@ class TestOfflineSyncOverride:
     def test_failed_without_payload_cannot_override(self, admin_h, ctx):
         base = {"teacher_id": "698f671431cfba92c49a550e", "teacher_name": "أستاذ اختبار 180156",
                 "course_id": COURSE_ID, "course_name": "TEST", "lecture_id": ctx["lecture_id"],
-                "lecture_date": "2026-11-02", "lecture_start_time": "08:00", "lecture_end_time": "09:00",
-                "offline_recorded_at": "2026-11-04T10:00:00", "synced_at": datetime.now(timezone.utc).isoformat(),
+                "lecture_date": LEC_DATE, "lecture_start_time": "08:00", "lecture_end_time": "09:00",
+                "offline_recorded_at": WINDOW_OFFLINE_TS, "synced_at": datetime.now(timezone.utc).isoformat(),
                 "delay_seconds": 3600, "status": "failed", "reason": "TEST old", "records_count": 1}
         ids = []
         for extra in ({}, {"pending_payload": None}, {"pending_payload": {}}):
@@ -161,7 +166,7 @@ class TestOfflineSyncOverride:
 
     def test_success_status_cannot_override(self, admin_h, ctx):
         lid = str(mdb.offline_sync_log.insert_one({"lecture_id": ctx["lecture_id"], "status": "success",
-                                                    "lecture_date": "2026-11-02", "synced_at": "2026-11-05T00:00:00",
+                                                    "lecture_date": LEC_DATE, "synced_at": datetime.now(timezone.utc).isoformat(),
                                                     "pending_payload": {"records": []}}).inserted_id)
         ctx["log_ids"].append(lid)
         item, _ = _get_item(admin_h, lid)
@@ -171,11 +176,11 @@ class TestOfflineSyncOverride:
 
     def test_malformed_lecture_id_in_log(self, admin_h, ctx):
         # robustness: failed log pointing to non-ObjectId / deleted lecture
-        lid1 = str(mdb.offline_sync_log.insert_one({"lecture_id": "not-an-oid", "status": "failed", "lecture_date": "2026-11-02",
-                                                     "synced_at": "2026-11-05T00:00:00",
+        lid1 = str(mdb.offline_sync_log.insert_one({"lecture_id": "not-an-oid", "status": "failed", "lecture_date": LEC_DATE,
+                                                     "synced_at": datetime.now(timezone.utc).isoformat(),
                                                      "pending_payload": {"records": [{"student_id": TEST_STUDENT, "status": "present"}]}}).inserted_id)
-        lid2 = str(mdb.offline_sync_log.insert_one({"lecture_id": str(ObjectId()), "status": "failed", "lecture_date": "2026-11-02",
-                                                     "synced_at": "2026-11-05T00:00:00",
+        lid2 = str(mdb.offline_sync_log.insert_one({"lecture_id": str(ObjectId()), "status": "failed", "lecture_date": LEC_DATE,
+                                                     "synced_at": datetime.now(timezone.utc).isoformat(),
                                                      "pending_payload": {"records": [{"student_id": TEST_STUDENT, "status": "present"}]}}).inserted_id)
         ctx["log_ids"] += [lid1, lid2]
         r2 = requests.post(f"{API}/reports/offline-sync/{lid2}/override", headers=admin_h, json={"reason": "x"})
