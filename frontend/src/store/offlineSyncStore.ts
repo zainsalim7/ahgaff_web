@@ -62,6 +62,9 @@ export interface OfflineSyncState {
   // إدارة الحضور أوفلاين — timestamp اختياري: إن مُرِّر (مثلاً وقت فتح شاشة المحاضرة) يُعتمَد بدل وقت الحفظ الفعلي،
   // لأن الفاصل بين فتح الشاشة (وقت المحاضرة الحقيقي) وضغط "حفظ" (قد يتأخر لو عُلِّق التطبيق بالخلفية) لا يعكس وقت الحضور الفعلي
   addAttendanceRecord: (record: Omit<OfflineAttendanceRecord, 'local_id' | 'synced'> & { timestamp?: string }) => Promise<void>;
+  // نسخة دفعية: تضيف كل السجلات بـ set() واحد ثم تُزامن مرة واحدة فقط — تمنع مزامنة جزئية (سجل واحد فقط) عند
+  // استدعاء addAttendanceRecord في حلقة متتالية لعشرات الطلاب (كل استدعاء كان يُطلق مزامنة منفصلة تتسابق مع الباقي)
+  addAttendanceRecords: (records: Array<Omit<OfflineAttendanceRecord, 'local_id' | 'synced'> & { timestamp?: string }>) => Promise<void>;
   getPendingRecordsCount: () => number;
   
   // التخزين المؤقت
@@ -148,6 +151,38 @@ export const useOfflineSyncStore = create<OfflineSyncState>((set, get) => ({
     console.log(`📝 تم حفظ سجل حضور أوفلاين: ${record.student_name || record.student_id}`);
     
     // إذا كان متصل، حاول المزامنة فوراً
+    if (get().isOnline) {
+      get().syncPendingRecords();
+    }
+  },
+
+  // إضافة عدة سجلات دفعة واحدة ثم مزامنة واحدة فقط بعد اكتمالها جميعاً
+  addAttendanceRecords: async (records) => {
+    if (records.length === 0) return;
+    const current = get().pendingRecords;
+    let updated = [...current];
+    
+    records.forEach(record => {
+      const newRecord: OfflineAttendanceRecord = {
+        ...record,
+        local_id: `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        timestamp: record.timestamp || new Date().toISOString(),
+        synced: false,
+      };
+      const existsIdx = updated.findIndex(
+        r => r.lecture_id === record.lecture_id && r.student_id === record.student_id && !r.synced
+      );
+      if (existsIdx !== -1) {
+        updated[existsIdx] = { ...updated[existsIdx], status: record.status, timestamp: newRecord.timestamp };
+      } else {
+        updated = [...updated, newRecord];
+      }
+    });
+    
+    set({ pendingRecords: updated });
+    await get().saveToStorage();
+    console.log(`📝 تم حفظ ${records.length} سجل حضور أوفلاين دفعة واحدة`);
+    
     if (get().isOnline) {
       get().syncPendingRecords();
     }

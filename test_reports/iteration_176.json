@@ -1,0 +1,37 @@
+{
+  "summary": "Retest of the 4 auto-close attendance fixes from iteration_175. Ran 6 live Playwright flows against the preview URL at mobile viewport, logged in as teacher180156 with X-Platform: mobile, using lectures created by autoclose_setup.py. All 4 original repro steps now pass. FIX#1: auto-save at the deadline saved exactly the 2 toggled students as absent and 70 as present (checked in Mongo). FIX#2: an expired lecture opened 3 times sent 0 POSTs, showed 0 dialogs and no auto-close banner, and the expired banner still showed. FIX#3: a forced 400 on the auto-save POST led to an offline save, an alert mentioning the 30-minute deadline, and goBack(). FIX#4: with the session POST aborted, all 72 records (3 toggled to absent) reached localStorage offline_pending_records. Regression checks passed: the banner and mm:ss countdown decrement, Save Now saves 72 records and navigates back, and there is no banner when the deadline is far away. New HIGH bug: the immediate sync after an offline fallback sends only 1 record, which leaves a partial attendance session on the server.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Offline fallback save then immediate sync (offlineSyncStore.addAttendanceRecord)",
+        "issue": "HIGH, reproduced live. addAttendanceRecord calls syncPendingRecords() after each record when isOnline is true. The first call starts syncing with only the 1 record added so far, and the other 71 calls return early because isSyncing is true. Repro: abort only the first POST /api/attendance/session (the 72-record save), then let later requests through. Result: the sync POST carried 1 record and the server accepted it. In Mongo the lecture status became 'completed' with only 1 attendance doc. localStorage had 71 records still unsynced, and they only sync on a later online transition or a manual sync. If that later sync gets a 400 (for example after the deadline, or edit-window rules), it is marked permanently_rejected and the 71 records are lost. The same pattern also hits the isAuto 400/403 fallback.",
+        "affected_selectors": ["confirm-lesson-save", "attendance-save-now-btn"]
+      }
+    ],
+    "design_issues": [
+      {"screen": "take-attendance auto-save fallback", "issues": ["After a server 400/403 rejection, the auto fallback message says 'فشل الاتصال بالخادم' (connection failed), but the server actually rejected the save. It should say the save was kept locally because the server rejected it at the deadline."]}
+    ]
+  },
+  "test_report_links": ["/app/tests/autoclose_setup.py"],
+  "action_items": [
+    "HIGH: Stop per-record sync in offline save loops. Add a batch API to offlineSyncStore (addAttendanceRecords(records[]) that does a single set, a single saveToStorage, then one syncPendingRecords), or a skipSync flag. Call it from both offline branches of take-attendance.saveAttendance (the else-branch and the catch fallback).",
+    "MEDIUM: After a successful manual save, or while saving===true, set autoSaveTriggeredRef.current = true (or setAttendanceRecorded(true)). On native, Alert.alert does not block, so the screen stays mounted until the user taps OK. The timer can then fire a second auto POST and a second alert if Save Now was used within 5s of the deadline or the alert is left open. Also guard tick() against firing while a manual save is in flight.",
+    "LOW: Fix the fallback message wording for server rejections (see design_issues)."
+  ],
+  "critical_code_review_comments": [
+    "offlineSyncStore.addAttendanceRecord: triggers sync per record, which causes the partial-session bug above (confirmed: the sync POST carried 1 record).",
+    "syncPendingRecords merge: records in updatedRecords that are missing from latest get().pendingRecords are re-appended. If another op removed them during the sync (e.g. clear or cleanup), they come back. Minor.",
+    "take-attendance timer: attendanceStatus.deadline is 'HH:MM' (no seconds) and is combined with lecture.date. If attendance_started_at has seconds, the client deadline is up to 59s earlier than the server's (safe, but the countdown is inaccurate). A deadline that crosses midnight would get the wrong date.",
+    "The isAuto 400/403 fallback queues records offline that the server already rejected. The sync sends offline_recorded_at = session-open time, so it may now be accepted. That is acceptable, but confirm it is the intended policy.",
+    "take-attendance.tsx is 1370 lines and should be split (timer hook, save logic, lesson modal)."
+  ],
+  "updated_files": ["/app/test_reports/iteration_176.json"],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100% of the 4 targeted fixes and regressions; 1 new HIGH issue found"},
+  "seed_data_creation": "6 TEST lectures (created_by='autoclose_test_script') and their attendance docs (145) were created and then fully deleted with autoclose_setup.py cleanup. No other data touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use /app/tests/autoclose_setup.py create <secs>|inspect <id>|cleanup. /tmp/chk.py (may be gone) printed the non-present students by student_id for a lecture. Login: set the X-Platform: mobile header, fill the placeholders, click the 'تسجيل الدخول' text. To repro the partial-sync bug: page.route('**/api/attendance/session**') aborts the 1st request and calls continue_() for later ones, then manual save on a lecture with a far deadline. Check that the DB attendance count is 72, not 1. After the fix, also verify that the 400-forced auto-save flow sends one sync POST with 72 records.",
+  "rca of the issue": "Partial session: saveAttendance loops `await addAttendanceRecord(...)` 72 times. Each call ends with `if (get().isOnline) get().syncPendingRecords()` (not awaited). The first invocation snapshots pending = [record1], sets isSyncing = true and POSTs 1 record. Calls 2 to 72 return early because isSyncing is true. When the server accepts the 1-record POST, the lecture becomes completed with 1 record. The remaining 71 wait in the queue for a later trigger. Mitigation: add records in one batch, then sync once."
+}

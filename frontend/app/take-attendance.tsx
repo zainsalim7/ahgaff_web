@@ -74,6 +74,7 @@ export default function TakeAttendanceScreen() {
   const { 
     isOnline, 
     addAttendanceRecord, 
+    addAttendanceRecords,
     getPendingRecordsCount,
     cacheLecture,
     cacheStudents,
@@ -481,6 +482,7 @@ export default function TakeAttendanceScreen() {
           } as any);
           // 🆕 مسار اعتماد العميد
           if (resp?.data?.status === 'pending_approval') {
+            autoSaveTriggeredRef.current = true; // سيُغادر المستخدم الشاشة — نمنع أي محاولة حفظ تلقائي لاحقة لنفس الجلسة
             const cnt = resp.data.created ?? records.length;
             const msg = `تم إرسال ${cnt} تعديل لاعتماد العميد`;
             if (Platform.OS === 'web') { window.alert(msg); goBack(); }
@@ -491,6 +493,7 @@ export default function TakeAttendanceScreen() {
         
         // تحديث الكاش بالحضور المحفوظ
         await updateCacheWithAttendance();
+        autoSaveTriggeredRef.current = true; // نجح الحفظ وسيُغلَق الشاشة — نمنع أي حفظ تلقائي إضافي لاحقاً
         
         const successMsg = isAuto
           ? '⏰ انتهت مهلة الـ30 دقيقة — تم حفظ الحضور تلقائياً وإغلاق الشاشة'
@@ -504,26 +507,25 @@ export default function TakeAttendanceScreen() {
           ]);
         }
       } else {
-        // أوفلاين - حفظ محلي مع المزامنة لاحقاً
+        // أوفلاين - حفظ محلي دفعة واحدة (لتفادي مزامنة جزئية) مع المزامنة لاحقاً
         const student_names: Record<string, string> = {};
         students.forEach(s => { student_names[s.id] = s.full_name; });
         
-        for (const [studentId, status] of Object.entries(attendance)) {
-          await addAttendanceRecord({
-            lecture_id: lectureId as string,
-            course_id: course?.id || courseId as string,
-            student_id: studentId,
-            student_name: student_names[studentId],
-            status: status as 'present' | 'absent' | 'late' | 'excused',
-            method: 'manual_offline',
-            timestamp: sessionOpenedAtRef.current?.lectureId === lectureId ? sessionOpenedAtRef.current.ts : undefined,
-          });
-        }
+        await addAttendanceRecords(Object.entries(attendance).map(([studentId, status]) => ({
+          lecture_id: lectureId as string,
+          course_id: course?.id || courseId as string,
+          student_id: studentId,
+          student_name: student_names[studentId],
+          status: status as 'present' | 'absent' | 'late' | 'excused',
+          method: 'manual_offline',
+          timestamp: sessionOpenedAtRef.current?.lectureId === lectureId ? sessionOpenedAtRef.current.ts : undefined,
+        })));
         
         const pendingCount = getPendingRecordsCount();
         
         // تحديث الكاش بالحضور المحفوظ أوفلاين
         await updateCacheWithAttendance();
+        autoSaveTriggeredRef.current = true; // نجح الحفظ محلياً وسيُغلَق الشاشة
         
         const offlineMsg = isAuto
           ? `⏰ انتهت مهلة الـ30 دقيقة — تم حفظ الحضور محلياً تلقائياً (${pendingCount} سجل معلق)\nسيتم المزامنة تلقائياً عند عودة الاتصال`
@@ -558,23 +560,25 @@ export default function TakeAttendanceScreen() {
           const student_names: Record<string, string> = {};
           students.forEach(s => { student_names[s.id] = s.full_name; });
           
-          for (const [studentId, status] of Object.entries(attendance)) {
-            await addAttendanceRecord({
-              lecture_id: lectureId as string,
-              course_id: course?.id || courseId as string,
-              student_id: studentId,
-              student_name: student_names[studentId],
-              status: status as 'present' | 'absent' | 'late' | 'excused',
-              method: 'manual_offline',
-              timestamp: sessionOpenedAtRef.current?.lectureId === lectureId ? sessionOpenedAtRef.current.ts : undefined,
-            });
-          }
+          await addAttendanceRecords(Object.entries(attendance).map(([studentId, status]) => ({
+            lecture_id: lectureId as string,
+            course_id: course?.id || courseId as string,
+            student_id: studentId,
+            student_name: student_names[studentId],
+            status: status as 'present' | 'absent' | 'late' | 'excused',
+            method: 'manual_offline',
+            timestamp: sessionOpenedAtRef.current?.lectureId === lectureId ? sessionOpenedAtRef.current.ts : undefined,
+          })));
           
+          const wasServerRejection = !!serverError && (statusCode === 400 || statusCode === 403);
           const fallbackMsg = isAuto
-            ? '⏰ انتهت مهلة الـ30 دقيقة — تم حفظ الحضور محلياً تلقائياً (فشل الاتصال بالخادم)'
-            : 'تم حفظ الحضور محلياً (فشل الاتصال بالخادم)';
+            ? (wasServerRejection
+                ? '⏰ انتهت مهلة الـ30 دقيقة — رفض الخادم الحفظ عند اللحظة الأخيرة، فتم حفظ الحضور محلياً تلقائياً وستتم مزامنته'
+                : '⏰ انتهت مهلة الـ30 دقيقة — تم حفظ الحضور محلياً تلقائياً (فشل الاتصال بالخادم)')
+            : (wasServerRejection ? serverError : 'تم حفظ الحضور محلياً (فشل الاتصال بالخادم)');
           // تحديث الكاش بالحضور الأوفلاين
           await updateCacheWithAttendance();
+          autoSaveTriggeredRef.current = true; // نجح الحفظ الاحتياطي محلياً وسيُغلَق الشاشة
           if (Platform.OS === 'web') {
             window.alert(fallbackMsg);
             goBack();
