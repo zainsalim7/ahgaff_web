@@ -27,11 +27,13 @@ export default function CourseDetailedReport() {
   const [reportError, setReportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'' | 'pdf' | 'excel'>('');
   const [tab, setTab] = useState<'students' | 'lectures'>('students');
+  // 🆕 وضع الاحتساب: بالمحاضرات (الافتراضي والسابق كما هو) أو بالساعات الفعلية
+  const [mode, setMode] = useState<'lectures' | 'hours'>('lectures');
 
   const handleExport = async (fmt: 'pdf' | 'excel') => {
     if (!selectedCourse) return;
     setExporting(fmt);
-    await downloadReport(fmt === 'pdf' ? `/reports/course/${selectedCourse}/export-pdf` : `/export/report/course/${selectedCourse}/excel`, {}, ['تقرير المقرر', reportData?.course?.name], fmt === 'pdf' ? 'pdf' : 'xlsx');
+    await downloadReport(fmt === 'pdf' ? `/reports/course/${selectedCourse}/export-pdf` : `/export/report/course/${selectedCourse}/excel`, { mode }, ['تقرير المقرر', reportData?.course?.name, mode === 'hours' ? 'بالساعات' : ''], fmt === 'pdf' ? 'pdf' : 'xlsx');
     setExporting('');
   };
 
@@ -88,6 +90,7 @@ export default function CourseDetailedReport() {
   const c = reportData?.course;
   const s = reportData?.summary;
   const lowStudents = (reportData?.students || []).filter((x: any) => x.attendance_rate < 60).length;
+  const lowStudentsHours = (reportData?.students || []).filter((x: any) => x.exceeded_unexcused_hours || x.exceeded_total_hours).length;
 
   return (
     <SafeAreaView style={reportPage.container} edges={['bottom']}>
@@ -101,6 +104,16 @@ export default function CourseDetailedReport() {
           onExcel={() => handleExport('excel')}
           exporting={exporting}
           testID="course-report-hero"
+          extra={!!reportData && (
+            <View style={styles.modeToggle} testID="course-report-mode-toggle">
+              <TouchableOpacity style={[styles.modeBtn, mode === 'lectures' && styles.modeBtnActive]} onPress={() => setMode('lectures')} testID="course-report-mode-lectures">
+                <Text style={[styles.modeBtnText, mode === 'lectures' && styles.modeBtnTextActive]}>بالمحاضرات</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modeBtn, mode === 'hours' && styles.modeBtnActive]} onPress={() => setMode('hours')} testID="course-report-mode-hours">
+                <Text style={[styles.modeBtnText, mode === 'hours' && styles.modeBtnTextActive]}>بالساعات</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         />
 
         {loading ? <ActivityIndicator size="large" color="#1565c0" style={{ marginTop: 30 }} /> : (
@@ -136,12 +149,20 @@ export default function CourseDetailedReport() {
         )}
 
         {!executing && reportData && s && (<>
-          <ReportKpis items={[
+          <ReportKpis items={mode === 'hours' ? [
+            { label: 'الطلاب', value: s.total_students, color: '#1565c0', icon: 'people' },
+            { label: 'الساعات المنفَّذة', value: s.total_hours_executed, color: '#0f2440', icon: 'time' },
+            { label: 'متوسط الحضور', value: `${s.avg_attendance_rate_hours}%`, color: rateColor(s.avg_attendance_rate_hours), icon: 'stats-chart' },
+            { label: 'طلاب متجاوزون للحد', value: lowStudentsHours, color: lowStudentsHours ? '#dc2626' : '#16a34a', icon: 'alert-circle' },
+          ] : [
             { label: 'الطلاب', value: s.total_students, color: '#1565c0', icon: 'people' },
             { label: 'المحاضرات المنعقدة', value: s.total_lectures, color: '#0f2440', icon: 'calendar', sub: s.absent_lectures ? `${s.absent_lectures} غياب مدرّس` : undefined },
             { label: 'متوسط الحضور', value: `${s.avg_attendance_rate}%`, color: rateColor(s.avg_attendance_rate), icon: 'stats-chart' },
             { label: 'طلاب دون 60%', value: lowStudents, color: lowStudents ? '#dc2626' : '#16a34a', icon: 'alert-circle' },
           ]} />
+          {mode === 'hours' && !!s.absence_rule_text && (
+            <Text style={styles.ruleText} testID="course-report-rule-text">{s.absence_rule_text}</Text>
+          )}
 
           <View style={styles.tabsContainer}>
             <TouchableOpacity style={[styles.tab, tab === 'students' && styles.tabActive]} onPress={() => setTab('students')} testID="tab-students">
@@ -154,7 +175,16 @@ export default function CourseDetailedReport() {
             </TouchableOpacity>
           </View>
 
-          {tab === 'students' && (
+          {tab === 'students' && mode === 'hours' && (
+            <DenseTable testID="course-students-hours" head={['#', 'الطالب', 'رقم القيد', 'ساعات حضور', 'غياب بعذر', 'غياب بلا عذر', 'نسبة الحضور', 'الحالة']}
+              align={['center', 'right', 'right', 'center', 'center', 'center', 'right', 'center']} rowTestID={(i) => `course-student-hours-${i}`} emptyText="لا يوجد طلاب مسجلون"
+              rows={(reportData.students || []).map((st: any, i: number) => [i + 1, <b style={{ color: '#0f2440' }}>{st.student_name}</b>, <span style={{ color: '#64748b', direction: 'ltr' }}>{st.student_id}</span>,
+                <Pill color="#16a34a">{st.present_hours}</Pill>, <Pill color="#f59e0b">{st.excused_hours}</Pill>, <Pill color="#dc2626">{st.unexcused_hours}</Pill>,
+                <Bar pct={st.attendance_rate_hours} color={rateColor(st.attendance_rate_hours)} />,
+                <Pill color={st.exceeded_total_hours ? '#dc2626' : (st.exceeded_unexcused_hours ? '#f97316' : '#16a34a')}>{st.status_ar_hours}</Pill>])}
+              footer={`${(reportData.students || []).length} طالب · ${s.absence_rule_text || ''}`} />
+          )}
+          {tab === 'students' && mode === 'lectures' && (
             <DenseTable testID="course-students" head={['#', 'الطالب', 'رقم القيد', 'حاضر', 'متأخر', 'غائب', 'نسبة الحضور']}
               align={['center', 'right', 'right', 'center', 'center', 'center', 'right']} rowTestID={(i) => `course-student-${i}`} emptyText="لا يوجد طلاب مسجلون"
               rows={(reportData.students || []).map((st: any, i: number) => [i + 1, <b style={{ color: '#0f2440' }}>{st.student_name}</b>, <span style={{ color: '#64748b', direction: 'ltr' }}>{st.student_id}</span>,
@@ -162,7 +192,20 @@ export default function CourseDetailedReport() {
               footer={`${(reportData.students || []).length} طالب`} />
           )}
 
-          {tab === 'lectures' && (
+          {tab === 'lectures' && mode === 'hours' && (
+            <DenseTable testID="course-lectures-hours" head={['#', 'التاريخ', 'الوقت', 'المدة (ساعة)', 'الحضور', 'الموقع', 'النسبة']}
+              align={['center', 'right', 'center', 'center', 'right', 'right', 'right']} rowTestID={(i) => `course-lecture-hours-${i}`} emptyText="لا توجد محاضرات"
+              rows={(reportData.lectures || []).map((l: any, i: number) => [i + 1,
+                <b style={{ color: '#1565c0' }}>{l.date ? formatGregorianDate(new Date(l.date), { includeYear: false, includeWeekday: true }) : '—'}</b>,
+                <span style={{ direction: 'ltr', display: 'inline-block' }}>{l.start_time}</span>,
+                <span>{l.hours}</span>,
+                l.status === 'absent' ? <Pill color="#e65100">لم تنعقد (غياب المدرّس)</Pill> : <span>{l.present_count}/{l.total_students} حاضر</span>,
+                l.location_flag === 'outside' ? <span style={{ fontSize: 11.5, color: '#b91c1c', fontWeight: 700 }}>📍 خارج النطاق</span>
+                  : l.location_flag === 'no_location' ? <span style={{ fontSize: 11.5, color: '#92400e', fontWeight: 700 }}>📍 بدون موقع</span> : <span style={{ color: '#94a3b8' }}>—</span>,
+                l.status === 'absent' ? <Pill color="#e65100">غياب</Pill> : <Bar pct={l.attendance_rate} color={rateColor(l.attendance_rate, 80, 60)} />])}
+              footer={`${(reportData.lectures || []).length} محاضرة · إجمالي الساعات المنفَّذة: ${s.total_hours_executed}`} />
+          )}
+          {tab === 'lectures' && mode === 'lectures' && (
             <DenseTable testID="course-lectures" head={['#', 'التاريخ', 'الوقت', 'الحضور', 'الموقع', 'النسبة']}
               align={['center', 'right', 'center', 'right', 'right', 'right']} rowTestID={(i) => `course-lecture-${i}`} emptyText="لا توجد محاضرات"
               rows={(reportData.lectures || []).map((l: any, i: number) => [i + 1,
@@ -182,6 +225,12 @@ export default function CourseDetailedReport() {
 
 const styles = StyleSheet.create({
   retryBtn: { marginTop: 16, backgroundColor: '#1565c0', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
+  modeToggle: { flexDirection: 'row-reverse', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 8, padding: 3, gap: 2 },
+  modeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
+  modeBtnActive: { backgroundColor: '#fff' },
+  modeBtnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
+  modeBtnTextActive: { color: '#0f2440' },
+  ruleText: { fontSize: 12, color: '#64748b', marginTop: -4, marginBottom: 10, textAlign: 'right', fontWeight: '600' },
   tabsContainer: { flexDirection: 'row-reverse', gap: 6, marginBottom: 8 },
   tab: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   tabActive: { backgroundColor: '#0f2440', borderColor: '#0f2440' },
