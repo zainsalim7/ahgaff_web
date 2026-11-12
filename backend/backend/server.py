@@ -12857,6 +12857,9 @@ async def get_course_detailed_report(
         if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_COURSE):
             raise HTTPException(status_code=403, detail="غير مصرح لك")
     
+    if date_from and date_to and date_from > date_to:
+        date_from, date_to = date_to, date_from
+    
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
@@ -14678,6 +14681,11 @@ async def export_course_monthly_excel(
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
     
+    if not ObjectId.is_valid(course_id):
+        raise HTTPException(status_code=400, detail="معرّف المقرر غير صالح")
+    if date_from and date_to and date_from > date_to:
+        date_from, date_to = date_to, date_from
+    
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
@@ -14689,18 +14697,24 @@ async def export_course_monthly_excel(
         fac_name = (fac.get("name") if fac else "") or ""
     dept_name = (dept.get("name") if dept else "") or ""
     
+    semester_name = course.get("semester_name") or ""
+    if not semester_name and course.get("semester_id") and ObjectId.is_valid(str(course["semester_id"])):
+        sem = await db.semesters.find_one({"_id": ObjectId(course["semester_id"])})
+        semester_name = (sem.get("name") if sem else "") or ""
+    
     enrollments = await db.enrollments.find({"course_id": course_id}).to_list(1000)
     from services.absence_engine import course_profiles, course_limits
     _limits = await course_limits(db, course)
     _student_ids = [str(e["student_id"]) for e in enrollments if e.get("student_id")]
     _profiles = await course_profiles(db, course, student_ids=_student_ids, limits=_limits, date_from=date_from, date_to=date_to)
     
+    _students_cache = {str(s["_id"]): s async for s in db.students.find({"_id": {"$in": [ObjectId(sid) for sid in _student_ids if ObjectId.is_valid(sid)]}})}
     students_rows = []
     for e in enrollments:
         sid = e.get("student_id")
         if not sid:
             continue
-        student = await db.students.find_one({"_id": ObjectId(sid)})
+        student = _students_cache.get(str(sid))
         if not student:
             continue
         p = _profiles.get(str(student["_id"])) or {}
@@ -14744,7 +14758,7 @@ async def export_course_monthly_excel(
     
     _info_row(3, [("الكلية", fac_name), ("القسم", dept_name)])
     _info_row(4, [("الدفعة", ""), ("رقم الدفعة", "")])
-    _info_row(5, [("المستوى", course.get("level")), ("الفصل", course.get("semester_name") or "")])
+    _info_row(5, [("المستوى", course.get("level")), ("الفصل", semester_name)])
     _info_row(6, [("الشعبة", course.get("section") or "كل الطلبة"), ("عدد الطلبة", len(students_rows))])
     _info_row(7, [("المادة", course.get("name") or ""), ("كود المادة", course.get("code") or "")])
     

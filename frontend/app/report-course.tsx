@@ -10,7 +10,7 @@ import { formatGregorianDate } from '../src/utils/dateUtils';
 import { CourseFilter } from '../src/components/CourseFilter';
 import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
-const dateInputStyle: any = { width: '100%', padding: 8, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, fontFamily: 'inherit' };
+const dateInputStyle: any = { width: '100%', padding: 8, borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 13, fontFamily: 'inherit', background: '#f8f9fa', boxSizing: 'border-box' };
 
 export default function CourseDetailedReport() {
   const params = useLocalSearchParams();
@@ -32,11 +32,12 @@ export default function CourseDetailedReport() {
   const [tab, setTab] = useState<'students' | 'lectures'>('students');
   // 🆕 وضع الاحتساب: بالمحاضرات (الافتراضي والسابق كما هو) أو بالساعات الفعلية
   const [mode, setMode] = useState<'lectures' | 'hours'>('lectures');
-  // 🆕 فلتر النطاق الزمني - افتراضياً الشهر الحالي فقط
-  const _toISO = (d: Date) => d.toISOString().slice(0, 10);
+  // 🆕 فلتر النطاق الزمني - افتراضياً الشهر الحالي فقط (بالتوقيت المحلي، وليس UTC)
+  const _toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const _now = new Date();
   const [dateFrom, setDateFrom] = useState(_toISO(new Date(_now.getFullYear(), _now.getMonth(), 1)));
   const [dateTo, setDateTo] = useState(_toISO(new Date(_now.getFullYear(), _now.getMonth() + 1, 0)));
+  const onDateChange = (setter: (v: string) => void) => (v: string) => { setter(v); setReportData(null); setHasRun(false); };
 
   const handleExport = async (fmt: 'pdf' | 'excel') => {
     if (!selectedCourse) return;
@@ -157,13 +158,13 @@ export default function CourseDetailedReport() {
                 onCourseChange={(v) => { setSelectedCourse(v); setReportData(null); setHasRun(false); }}
               />
             </View>
-            <View style={{ minWidth: 150 }}>
-              <Text style={reportPage.label}>من تاريخ</Text>
-              <input type="date" value={dateFrom} onChange={(e: any) => setDateFrom(e.target.value)} style={dateInputStyle} data-testid="course-report-date-from" />
+            <View style={[{ minWidth: 150 }, styles.dateField]}>
+              <Text style={styles.dateLabel}>من تاريخ</Text>
+              <input type="date" value={dateFrom} onChange={(e: any) => onDateChange(setDateFrom)(e.target.value)} style={dateInputStyle} data-testid="course-report-date-from" />
             </View>
-            <View style={{ minWidth: 150 }}>
-              <Text style={reportPage.label}>إلى تاريخ</Text>
-              <input type="date" value={dateTo} onChange={(e: any) => setDateTo(e.target.value)} style={dateInputStyle} data-testid="course-report-date-to" />
+            <View style={[{ minWidth: 150 }, styles.dateField]}>
+              <Text style={styles.dateLabel}>إلى تاريخ</Text>
+              <input type="date" value={dateTo} onChange={(e: any) => onDateChange(setDateTo)(e.target.value)} style={dateInputStyle} data-testid="course-report-date-to" />
             </View>
           </ReportFilters>
         )}
@@ -268,6 +269,8 @@ const styles = StyleSheet.create({
   modeBtnTextActive: { color: '#0f2440' },
   monthlyBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#8e24aa', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10 },
   monthlyBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
+  dateField: { alignSelf: 'flex-start' },
+  dateLabel: { fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 4, textAlign: 'right' },
   ruleText: { fontSize: 12, color: '#64748b', marginTop: -4, marginBottom: 10, textAlign: 'right', fontWeight: '600' },
   tabsContainer: { flexDirection: 'row-reverse', gap: 6, marginBottom: 8 },
   tab: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },

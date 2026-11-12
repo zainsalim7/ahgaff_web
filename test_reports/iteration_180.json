@@ -1,0 +1,46 @@
+{
+  "summary": "Frontend testing of report-course.tsx: the new date range filter, the new 'القالب الشهري' (monthly template) export, and a regression pass on the mode toggle and PDF/Excel exports. Logged in as admin and used the cascading CourseFilter (كلية البنات > الدراسات الإسلامية > دراسات حضرموت 698f0000d803b27aab0120af, 72 students). Everything worked in a UTC browser. In a browser on the users' timezone (Asia/Riyadh, UTC+3), the default current-month range is shifted one day back (2026-10-31 to 2026-11-29 instead of 2026-11-01 to 2026-11-30). Cause: _toISO uses toISOString(), which converts to UTC.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "GET /api/reports/course/{id}/monthly-excel", "issue": "The 'الفصل' info cell is empty for this course: the code reads course.semester_name, which the course document does not have. Probably needs a semester lookup by course.semester_id."},
+    {"endpoint": "GET /api/reports/course/{id}/detailed, monthly-excel, export-pdf, excel", "issue": "No validation that date_from <= date_to (not exercised via the UI, found by reading the code only)."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "report-course.tsx date range default (lines 36-39)", "issue": "_toISO = d.toISOString().slice(0,10) converts local midnight to UTC. In any UTC+ timezone (Yemen/Saudi UTC+3, as used by this university) the default range is 2026-10-31 to 2026-11-29 instead of 2026-11-01 to 2026-11-30. Reproduced with Playwright timezone_id='Asia/Riyadh'. The report and all exports then include the last day of the previous month and leave out the last day of the current month. Fix: format from local parts, e.g. `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`.", "selector": "[data-testid=course-report-date-from], [data-testid=course-report-date-to]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Change dates after a report has run", "issue": "Changing date_from/date_to does not clear the report on screen (unlike changing course). Old KPIs and tables stay visible, but PDF, Excel and القالب الشهري immediately export the NEW range. So the exported file can differ from what the user is looking at until they press إعادة التنفيذ. Suggest clearing reportData on date change, or exporting the last-run range.", "affected_selectors": ["course-report-date-from", "course-report-date-to", "course-report-monthly-template-btn", "report-export-pdf-btn", "report-export-excel-btn"]}
+    ],
+    "design_issues": [
+      {"screen": "Course report filter row", "issues": ["The من تاريخ / إلى تاريخ labels and inputs sit about 20px lower than the الكلية/القسم/المقرر labels and dropdowns, so the row is misaligned.", "The من تاريخ input is flush against / slightly overlapping the الكلية dropdown, with no gap.", "The date fields use the browser's native <input type='date'>, which shows mm/dd/yyyy LTR format in an Arabic RTL UI, not a themed date picker."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "HIGH: Fix _toISO in report-course.tsx so it uses local date parts instead of toISOString(); the default month range is off by one day for UTC+3 users.",
+    "MEDIUM: Clear reportData (or block exports) when the date range changes, so exports match the report on screen.",
+    "LOW: Fill the 'الفصل' cell in monthly-excel (the course has no semester_name; look the semester up).",
+    "LOW: Align the date inputs vertically with the CourseFilter dropdowns and add a gap; validate from <= to."
+  ],
+  "critical_code_review_comments": [
+    "report-course.tsx:36 _toISO uses toISOString(), which shifts the date in UTC+ timezones.",
+    "report-course.tsx: _now and _toISO are recomputed on every render (harmless, since they are only used as useState initialisers).",
+    "monthly-excel endpoint: N+1 queries (find_one per student inside the loop); fine for 72 students but slow for large courses. Use a single $in query.",
+    "monthly-excel endpoint: ObjectId(course_id) with an invalid id raises 500 instead of 400/404."
+  ],
+  "updated_files": ["/app/test_reports/iteration_180.json"],
+  "success_rate": {"backend": "N/A (not requested; spot-checked monthly-excel via curl for April-May data: values populated, e.g. unexcused 1.5h)", "frontend": "90% (all flows work; one HIGH timezone default bug)"},
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Course 698f0000d803b27aab0120af (faculty 698e4fb497fef774e66e93a6, dept 698e501d97fef774e66e93a9) has lectures in Apr-May 2026 (some held), Oct 2026 (5, teacher absent) and 2026-11-09 (1). Use the testids run-report-btn, course-filter-{faculty|department|course} and -option-{id}. Login: the first two <input> elements on the page. To test the timezone fix, use browser.new_context(timezone_id='Asia/Riyadh', accept_downloads=True).",
+  "verified_passing": [
+    "Both date inputs render; in a UTC browser they default to 2026-11-01 / 2026-11-30.",
+    "Run report with the Nov default range: GET detailed?date_from=2026-11-01&date_to=2026-11-30 returned 200 and the KPIs showed 72 students and 1 teacher absence.",
+    "Custom Oct range followed by re-run: 200; the KPIs updated to 5 teacher absences and the lectures tab showed only October lectures.",
+    "Mode toggle: the hours tables (course-students-hours, course-lectures-hours) and the lectures table (course-students) switch correctly.",
+    "PDF (4 pages, 227KB), Excel (sheets الطلاب/المحاضرات) and the monthly template all downloaded with HTTP 200, sent mode/date_from/date_to, and showed no error alert.",
+    "Monthly xlsx: sheet 'تقرير الحضور الشهري' in RTL; info rows الكلية/القسم/الدفعة/رقم الدفعة/المستوى/الفصل/الشعبة/عدد الطلبة(72)/المادة/كود المادة; period row 'فترة (من - إلى): 2026-10-01 إلى 2026-10-31'; header row with exactly 7 columns in the specified order; 72 student rows with the first 2 columns blank and ID/name filled.",
+    "Switching course clears the report and hides the monthly button; the date range is kept and the new course's report runs fine (no crash)."
+  ]
+}
