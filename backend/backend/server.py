@@ -19176,7 +19176,6 @@ async def _startup_db_tasks():
         ("migrate_broken_user_roles", migrate_broken_user_roles),
         ("backfill_offline_override_attendance_started_at", backfill_offline_override_attendance_started_at),
         ("backfill_teacher_record_links", backfill_teacher_record_links),
-        ("backfill_offline_sync_log_lecture_times", backfill_offline_sync_log_lecture_times),
         ("backfill_teaching_loads_semester_internal", backfill_teaching_loads_semester_internal),
         ("backfill_alumni_department_snapshot_internal", backfill_alumni_department_snapshot_internal),
         ("letters_backfill_people_faculty", lambda: letters_backfill_people_faculty(db)),
@@ -19650,40 +19649,6 @@ async def migrate_broken_user_roles():
             logging.info("User role migration: all users consistent (no fixes needed).")
     except Exception as e:
         logging.error(f"User role migration failed (non-critical): {e}")
-
-
-async def backfill_offline_sync_log_lecture_times():
-    """🔑 إصلاح تراجعي: سجلات offline_sync_log أُنشئت قبل إضافة عمود وقت المحاضرة في التقرير فبقيت
-    بلا lecture_start_time/lecture_end_time — نُكملهما الآن من وثيقة المحاضرة الحقيقية نفسها (start_time/end_time)
-    دون المساس بأي حقل آخر. Idempotent: لا يمسّ سجلاً يحمل الحقلين مسبقاً."""
-    try:
-        fixed = 0
-        cursor = db.offline_sync_log.find({
-            "lecture_id": {"$exists": True, "$ne": None},
-            "$or": [
-                {"lecture_start_time": {"$exists": False}}, {"lecture_start_time": None},
-                {"lecture_end_time": {"$exists": False}}, {"lecture_end_time": None},
-            ],
-        })
-        async for log in cursor:
-            lid = log.get("lecture_id", "")
-            if not ObjectId.is_valid(lid):
-                continue
-            lecture = await db.lectures.find_one({"_id": ObjectId(lid)}, {"start_time": 1, "end_time": 1})
-            if not lecture:
-                continue
-            upd = {}
-            if lecture.get("start_time") and not log.get("lecture_start_time"):
-                upd["lecture_start_time"] = lecture["start_time"]
-            if lecture.get("end_time") and not log.get("lecture_end_time"):
-                upd["lecture_end_time"] = lecture["end_time"]
-            if upd:
-                await db.offline_sync_log.update_one({"_id": log["_id"]}, {"$set": upd})
-                fixed += 1
-        if fixed:
-            logging.info(f"✅ Backfill offline_sync_log lecture times: {fixed} سجل أُكمل بوقت المحاضرة.")
-    except Exception as e:
-        logging.warning(f"Backfill offline_sync_log lecture times failed (non-critical): {e}")
 
 
 async def backfill_offline_override_attendance_started_at():
