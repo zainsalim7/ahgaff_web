@@ -11410,17 +11410,19 @@ async def get_lecture_attendance(
 
 # ==================== Attendance Routes ====================
 
-async def _log_offline_sync(db, *, current_user, lecture, course, session, now, lecture_end, status, reason="", records_count=0, diagnosis=None, pending_payload=None):
+async def _log_offline_sync(db, *, current_user, lecture, course, session, now, lecture_end, status, reason="", records_count=0, diagnosis=None, pending_payload=None, offline_recorded_at_yemen=None):
     """📝 سجل تدقيق لمحاولات مزامنة الحضور الأوفلاين (نجاح/فشل) — لتقرير /reports/offline-sync
     diagnosis: شرح دقيق للسبب الحقيقي للرفض (مقارنة وقت الجهاز بنافذة المحاضرة)
-    pending_payload: نسخة من بيانات الطلب المرفوض (السجلات) لإتاحة «القبول اليدوي» لاحقاً من التقرير"""
+    pending_payload: نسخة من بيانات الطلب المرفوض (السجلات) لإتاحة «القبول اليدوي» لاحقاً من التقرير
+    offline_recorded_at_yemen: وقت الجهاز بعد تحويله لتوقيت اليمن (datetime) — إن تَوفَّر يُخزَّن بدل النص
+    الخام من الجهاز (الذي يصل دائماً بتوقيت UTC عبر toISOString في التطبيق) لتوحيد التوقيت المعروض بالتقرير"""
     try:
         await db.offline_sync_log.insert_one({
             "teacher_id": current_user["id"], "teacher_name": current_user.get("full_name", ""),
             "course_id": lecture["course_id"], "course_name": course.get("name", ""),
             "lecture_id": session.lecture_id, "lecture_date": lecture.get("date"),
             "lecture_start_time": lecture.get("start_time"), "lecture_end_time": lecture.get("end_time"),
-            "offline_recorded_at": session.offline_recorded_at,
+            "offline_recorded_at": offline_recorded_at_yemen.isoformat() if offline_recorded_at_yemen else session.offline_recorded_at,
             "synced_at": now.isoformat(),
             "delay_seconds": (now - lecture_end).total_seconds(),
             "status": status, "reason": reason, "diagnosis": diagnosis, "records_count": records_count,
@@ -11511,12 +11513,12 @@ async def record_attendance_session(
             if age_seconds > _max_hours * 3600:
                 _reason = f"سجل التحضير الأوفلاين أقدم من {_max_hours} ساعة — لا يمكن قبوله"
                 _diag = f"وقت التسجيل على جهاز الأستاذ كان {offline_time.strftime('%Y-%m-%d %H:%M')} — أي قبل لحظة المزامنة بأكثر من {_max_hours} ساعة (الحد الأقصى المسموح حالياً من الإعدادات)"
-                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload)
+                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload, offline_recorded_at_yemen=offline_time)
                 raise HTTPException(status_code=400, detail=_reason)
             if age_seconds < -600:
                 _reason = "وقت التسجيل الأوفلاين في المستقبل — تحقق من ساعة الجهاز"
                 _diag = f"ساعة جهاز الأستاذ تُظهر وقتاً مستقبلياً ({offline_time.strftime('%Y-%m-%d %H:%M')}) بينما وقت السيرفر الفعلي {now.strftime('%Y-%m-%d %H:%M')} — الأرجح أن توقيت/تاريخ الجهاز غير مضبوط"
-                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload)
+                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload, offline_recorded_at_yemen=offline_time)
                 raise HTTPException(status_code=400, detail=_reason)
             # 🔒 نفس قاعدة الأونلاين تماماً بقرار صريح: مهلة فتح التحضير لأول مرة = (بداية المحاضرة + مهلة التأخير)
             # فقط — لا تمديد إضافي بعد نهاية المحاضرة حتى لو كان الجهاز أوفلاين. طول مدة الانقطاع نفسها
@@ -11530,7 +11532,7 @@ async def record_attendance_session(
                 else:
                     _gap_min = int((offline_time - offline_window_end).total_seconds() // 60)
                     _diag = f"⚠️ جهاز الأستاذ سجّل وقت الحضور الفعلي {offline_time.strftime('%Y-%m-%d %H:%M')} — أي بعد مهلة فتح التحضير المسموحة لهذه المحاضرة تحديداً ({offline_window_end.strftime('%Y-%m-%d %H:%M')}، أي {max_delay} دقيقة من بداية المحاضرة) بـ {_gap_min} دقيقة. هذه المهلة صارمة ومطابقة تماماً لقاعدة الأونلاين — لا يُسمح بفتح التحضير لأول مرة بعدها سواء كان الجهاز متصلاً أو منقطعاً عن الإنترنت. تحقَّق من الأستاذ ثم استخدم «قبول يدوياً» فقط إن تأكَّدت أنه حضر هذه المحاضرة تحديداً في وقتها الحقيقي."
-                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload)
+                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload, offline_recorded_at_yemen=offline_time)
                 raise HTTPException(status_code=400, detail=_reason)
             check_time = offline_time
             is_offline_sync = True
@@ -11666,11 +11668,11 @@ async def record_attendance_session(
     )
     await db.attendance_operations.insert_one({
         "lecture_id": session.lecture_id, "course_id": lecture["course_id"], "user_id": current_user["id"], "user_name": current_user.get("full_name", ""),
-        "records_count": len(attendance_records), "offline_recorded_at": session.offline_recorded_at, "location": loc_doc,
+        "records_count": len(attendance_records), "offline_recorded_at": (offline_time.isoformat() if is_offline_sync and offline_time else session.offline_recorded_at), "location": loc_doc,
         "recorded_at": get_yemen_time().isoformat(),
     })
     if is_offline_sync:
-        await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="success", records_count=len(attendance_records))
+        await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="success", records_count=len(attendance_records), offline_recorded_at_yemen=offline_time)
     # 🔔 تحضير خارج النطاق → إشعار رؤساء قسم المقرر (in-app + Push)
     if loc_doc and loc_doc.get("inside_campus") is False:
         try:
