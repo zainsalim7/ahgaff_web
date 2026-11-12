@@ -8531,7 +8531,7 @@ async def get_today_lectures(
     result = []
     allowed = parse_fields(fields)
     if allowed:
-        allowed = allowed | {"group", "group_name"}  # 👥 تُضمَّن دائماً كي يعرف العميل مجموعة المحاضرة
+        allowed = allowed | {"group", "group_name", "max_delay_minutes"}  # 👥 تُضمَّن دائماً
     need_attendance = (allowed is None) or ("attendance_count" in allowed) or ("total_enrolled" in allowed)
 
     # 🆕 batch lookup لأسماء الأقسام والكليات
@@ -8547,11 +8547,13 @@ async def get_today_lectures(
         except Exception:
             pass
     _fac_map: dict = {}
+    _fac_delay_map: dict = {}
     if _fac_ids:
         try:
             _foids = [ObjectId(x) for x in _fac_ids if x]
-            async for f in db.faculties.find({"_id": {"$in": _foids}}, {"name": 1}):
+            async for f in db.faculties.find({"_id": {"$in": _foids}}, {"name": 1, "max_attendance_delay_minutes": 1}):
                 _fac_map[str(f["_id"])] = (f.get("name") or "").strip()
+                _fac_delay_map[str(f["_id"])] = f.get("max_attendance_delay_minutes", 30)
         except Exception:
             pass
 
@@ -8573,6 +8575,8 @@ async def get_today_lectures(
         _cdept_name = _cdept_info.get("name") or None
         _cfac_id = _cdept_info.get("faculty_id")
         _cfac_name = _fac_map.get(_cfac_id, "") if _cfac_id else None
+        # 🆕 الحد الأقصى لتأخير الأستاذ لفتح التحضير (من إعدادات كلية المقرر، وإلا الافتراضي العام 30)
+        _max_delay = _fac_delay_map.get(_cfac_id, 30) if _cfac_id else 30
 
         result.append({
             "id": str(lecture["_id"]),
@@ -8585,6 +8589,7 @@ async def get_today_lectures(
             "department_name": _cdept_name,
             "faculty_id": _cfac_id,
             "faculty_name": _cfac_name,
+            "max_delay_minutes": _max_delay,
             "date": lecture["date"],
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
@@ -8813,11 +8818,13 @@ async def get_month_lectures(
         except Exception:
             pass
     _fac_map: dict = {}
+    _fac_delay_map: dict = {}
     if _fac_ids:
         try:
             _foids = [ObjectId(x) for x in _fac_ids if x]
-            async for f in db.faculties.find({"_id": {"$in": _foids}}, {"name": 1}):
+            async for f in db.faculties.find({"_id": {"$in": _foids}}, {"name": 1, "max_attendance_delay_minutes": 1}):
                 _fac_map[str(f["_id"])] = (f.get("name") or "").strip()
+                _fac_delay_map[str(f["_id"])] = f.get("max_attendance_delay_minutes", 30)
         except Exception:
             pass
 
@@ -8829,6 +8836,8 @@ async def get_month_lectures(
         _cdept_name = _cdept_info.get("name") or None
         _cfac_id = _cdept_info.get("faculty_id")
         _cfac_name = _fac_map.get(_cfac_id, "") if _cfac_id else None
+        # 🆕 الحد الأقصى لتأخير الأستاذ لفتح التحضير (من إعدادات كلية المقرر، وإلا الافتراضي العام 30)
+        _max_delay = _fac_delay_map.get(_cfac_id, 30) if _cfac_id else 30
 
         if date not in dates_with_lectures:
             dates_with_lectures[date] = []
@@ -8844,6 +8853,7 @@ async def get_month_lectures(
             "department_name": _cdept_name,
             "faculty_id": _cfac_id,
             "faculty_name": _cfac_name,
+            "max_delay_minutes": _max_delay,
             "date": date,
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
@@ -8858,7 +8868,7 @@ async def get_month_lectures(
     
     _month_allowed = parse_fields(fields)
     if _month_allowed:
-        _month_allowed = _month_allowed | {"group", "group_name"}  # 👥 تُضمَّن دائماً كي يعرف العميل مجموعة المحاضرة
+        _month_allowed = _month_allowed | {"group", "group_name", "max_delay_minutes"}  # 👥 تُضمَّن دائماً
     return {
         "dates": list(dates_with_lectures.keys()),
         "lectures_by_date": dates_with_lectures,
@@ -8879,6 +8889,9 @@ async def get_course_lectures(
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    
+    # 🆕 الحد الأقصى لتأخير الأستاذ لفتح التحضير (من إعدادات كلية المقرر، وإلا الافتراضي العام)
+    _, _course_max_delay, _ = await _get_faculty_attendance_settings(course)
     
     # 🔒 معلم بلا أي صلة بهذا المقرر (لا ملكية ولا قيادة مجموعة)
     if current_user["role"] == UserRole.TEACHER:
@@ -9037,6 +9050,7 @@ async def get_course_lectures(
             "status": lecture.get("status", LectureStatus.SCHEDULED),
             "notes": lecture.get("notes", ""),
             "created_at": lecture.get("created_at"),
+            "max_delay_minutes": _course_max_delay,
             # ملاحظات الإلغاء وإعادة الجدولة
             "original_date": lecture.get("original_date"),
             "last_rescheduled_from": lecture.get("last_rescheduled_from"),
@@ -11256,6 +11270,10 @@ def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, 
             "status": "error"
         }
     
+    # الحد الأقصى للتأخير: لا يمكن فتح التحضير بعد max_delay دقيقة من بداية المحاضرة
+    # (تُحسب دائماً أولاً لأنها مطلوبة في كل حالات الرجوع أدناه: max_delay_minutes + open_deadline)
+    max_open_time = lecture_start + timedelta(minutes=max_delay)
+
     # لا يمكن التحضير قبل بداية المحاضرة
     if now < lecture_start:
         minutes_until = int((lecture_start - now).total_seconds() / 60)
@@ -11263,11 +11281,10 @@ def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, 
             "can_take_attendance": False,
             "reason": f"لم يحن وقت المحاضرة بعد. تبدأ بعد {minutes_until} دقيقة",
             "status": "not_started",
-            "starts_at": lecture_start.strftime("%H:%M")
+            "starts_at": lecture_start.strftime("%H:%M"),
+            "max_delay_minutes": max_delay,
+            "open_deadline": max_open_time.strftime("%H:%M"),
         }
-    
-    # الحد الأقصى للتأخير: لا يمكن فتح التحضير بعد max_delay دقيقة من بداية المحاضرة
-    max_open_time = lecture_start + timedelta(minutes=max_delay)
     
     # هل بدأ التحضير فعلاً؟
     attendance_started_at = lecture.get("attendance_started_at")
@@ -11301,17 +11318,23 @@ def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, 
                     "deadline": edit_deadline.strftime("%H:%M"),
                     "teacher_delay_minutes": teacher_delay,
                     "attendance_started_at": started.strftime("%H:%M"),
+                    "max_delay_minutes": max_delay,
+                    "open_deadline": max_open_time.strftime("%H:%M"),
                 }
             if is_update:
                 return {
                     "can_take_attendance": False,
                     "reason": "تم التحضير وانتهت مدة التعديل",
-                    "status": "completed"
+                    "status": "completed",
+                    "max_delay_minutes": max_delay,
+                    "open_deadline": max_open_time.strftime("%H:%M"),
                 }
             return {
                 "can_take_attendance": False,
                 "reason": f"انتهت مدة التحضير ({attendance_duration} دقيقة من بدء التحضير)",
-                "status": "expired"
+                "status": "expired",
+                "max_delay_minutes": max_delay,
+                "open_deadline": max_open_time.strftime("%H:%M"),
             }
         
         time_remaining = int((attendance_deadline - now).total_seconds() / 60)
@@ -11323,6 +11346,8 @@ def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, 
             "deadline": attendance_deadline.strftime("%H:%M"),
             "teacher_delay_minutes": teacher_delay,
             "attendance_started_at": started.strftime("%H:%M"),
+            "max_delay_minutes": max_delay,
+            "open_deadline": max_open_time.strftime("%H:%M"),
         }
     else:
         # التحضير لم يبدأ بعد
@@ -11330,7 +11355,9 @@ def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, 
             return {
                 "can_take_attendance": False,
                 "reason": f"انتهى وقت فتح التحضير (الحد الأقصى للتأخير {max_delay} دقيقة)",
-                "status": "expired"
+                "status": "expired",
+                "max_delay_minutes": max_delay,
+                "open_deadline": max_open_time.strftime("%H:%M"),
             }
         
         time_remaining = int((max_open_time - now).total_seconds() / 60)
@@ -11340,6 +11367,8 @@ def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, 
             "status": "available",
             "minutes_remaining": time_remaining,
             "deadline": max_open_time.strftime("%H:%M"),
+            "max_delay_minutes": max_delay,
+            "open_deadline": max_open_time.strftime("%H:%M"),
         }
 
 @api_router.get("/lectures/{lecture_id}/attendance-status")
