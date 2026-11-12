@@ -601,8 +601,8 @@ export const reportsAPI = {
     api.get('/reports/daily', { params }),
   getWarningsReport: (params?: { department_id?: string; warning_threshold?: number; deprivation_threshold?: number }) =>
     api.get('/reports/warnings', { params }),
-  getCourseDetailedReport: (courseId: string) =>
-    api.get(`/reports/course/${courseId}/detailed`),
+  getCourseDetailedReport: (courseId: string, params?: { date_from?: string; date_to?: string }) =>
+    api.get(`/reports/course/${courseId}/detailed`, { params }),
   getTeacherWorkload: (params?: { teacher_id?: string; start_date?: string; end_date?: string }) =>
     api.get('/reports/teacher-workload', { params }),
   getTeacherSummary: (params?: { teacher_id?: string }) =>

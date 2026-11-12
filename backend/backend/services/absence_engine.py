@@ -78,8 +78,16 @@ def classify(unexcused_h: float, excused_h: float, executed_h: float, executed_c
     }
 
 
-async def executed_lectures(db, course_id: str) -> List[dict]:
-    return await db.lectures.find({"course_id": course_id, "status": "completed"}, {"date": 1, "start_time": 1, "end_time": 1, "credited_minutes": 1}).to_list(2000)
+async def executed_lectures(db, course_id: str, date_from: str = None, date_to: str = None) -> List[dict]:
+    q: dict = {"course_id": course_id, "status": "completed"}
+    if date_from or date_to:
+        date_q: dict = {}
+        if date_from:
+            date_q["$gte"] = date_from
+        if date_to:
+            date_q["$lte"] = date_to
+        q["date"] = date_q
+    return await db.lectures.find(q, {"date": 1, "start_time": 1, "end_time": 1, "credited_minutes": 1}).to_list(2000)
 
 
 async def prep_excluded_dates(db, course: dict) -> set:
@@ -120,11 +128,13 @@ async def board_decisions_map(db, cid: str, student_ids: List[str]) -> Dict[str,
     return out
 
 
-async def course_profiles(db, course: dict, student_ids: Optional[List[str]] = None, limits: Optional[dict] = None) -> Dict[str, dict]:
-    """{student_db_id: profile} لكل طلاب المقرر (أو قائمة محددة) — استعلامان فقط"""
+async def course_profiles(db, course: dict, student_ids: Optional[List[str]] = None, limits: Optional[dict] = None, date_from: str = None, date_to: str = None) -> Dict[str, dict]:
+    """{student_db_id: profile} لكل طلاب المقرر (أو قائمة محددة) — استعلامان فقط.
+    date_from/date_to (اختياريان، إضافيان) يحصران المحاضرات المحتسَبة ضمن فترة معيّنة فقط - الاستدعاء بلا هذين
+    المعاملين يُبقي السلوك كما هو تماماً (كل محاضرات المقرر المنفَّذة)."""
     cid = str(course["_id"])
     limits = limits or await course_limits(db, course)
-    lecs = await executed_lectures(db, cid)
+    lecs = await executed_lectures(db, cid, date_from=date_from, date_to=date_to)
     excluded_dates = await prep_excluded_dates(db, course)
     if excluded_dates:
         lecs = [l for l in lecs if str(l.get("date", ""))[:10] not in excluded_dates]

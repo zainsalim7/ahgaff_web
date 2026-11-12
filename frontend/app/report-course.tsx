@@ -10,6 +10,8 @@ import { formatGregorianDate } from '../src/utils/dateUtils';
 import { CourseFilter } from '../src/components/CourseFilter';
 import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
+const dateInputStyle: any = { width: '100%', padding: 8, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, fontFamily: 'inherit' };
+
 export default function CourseDetailedReport() {
   const params = useLocalSearchParams();
   const { hasPermission } = useAuth();
@@ -26,15 +28,28 @@ export default function CourseDetailedReport() {
   const [reportData, setReportData] = useState<any>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'' | 'pdf' | 'excel'>('');
+  const [exportingMonthly, setExportingMonthly] = useState(false);
   const [tab, setTab] = useState<'students' | 'lectures'>('students');
   // 🆕 وضع الاحتساب: بالمحاضرات (الافتراضي والسابق كما هو) أو بالساعات الفعلية
   const [mode, setMode] = useState<'lectures' | 'hours'>('lectures');
+  // 🆕 فلتر النطاق الزمني - افتراضياً الشهر الحالي فقط
+  const _toISO = (d: Date) => d.toISOString().slice(0, 10);
+  const _now = new Date();
+  const [dateFrom, setDateFrom] = useState(_toISO(new Date(_now.getFullYear(), _now.getMonth(), 1)));
+  const [dateTo, setDateTo] = useState(_toISO(new Date(_now.getFullYear(), _now.getMonth() + 1, 0)));
 
   const handleExport = async (fmt: 'pdf' | 'excel') => {
     if (!selectedCourse) return;
     setExporting(fmt);
-    await downloadReport(fmt === 'pdf' ? `/reports/course/${selectedCourse}/export-pdf` : `/export/report/course/${selectedCourse}/excel`, { mode }, ['تقرير المقرر', reportData?.course?.name, mode === 'hours' ? 'بالساعات' : ''], fmt === 'pdf' ? 'pdf' : 'xlsx');
+    await downloadReport(fmt === 'pdf' ? `/reports/course/${selectedCourse}/export-pdf` : `/export/report/course/${selectedCourse}/excel`, { mode, date_from: dateFrom, date_to: dateTo }, ['تقرير المقرر', reportData?.course?.name, mode === 'hours' ? 'بالساعات' : ''], fmt === 'pdf' ? 'pdf' : 'xlsx');
     setExporting('');
+  };
+
+  const handleMonthlyExport = async () => {
+    if (!selectedCourse) return;
+    setExportingMonthly(true);
+    await downloadReport(`/reports/course/${selectedCourse}/monthly-excel`, { date_from: dateFrom, date_to: dateTo }, ['القالب الشهري', reportData?.course?.name], 'xlsx');
+    setExportingMonthly(false);
   };
 
   const fetchCourses = useCallback(async () => {
@@ -61,7 +76,7 @@ export default function CourseDetailedReport() {
     try {
       setReportError(null);
       setReportData(null);
-      const res = await reportsAPI.getCourseDetailedReport(selectedCourse);
+      const res = await reportsAPI.getCourseDetailedReport(selectedCourse, { date_from: dateFrom, date_to: dateTo });
       setReportData(res.data);
       setHasRun(true);
     } catch (error: any) {
@@ -71,7 +86,7 @@ export default function CourseDetailedReport() {
       setExecuting(false);
       setRefreshing(false);
     }
-  }, [selectedCourse]);
+  }, [selectedCourse, dateFrom, dateTo]);
 
   useEffect(() => { fetchCourses(); }, [fetchCourses]);
 
@@ -108,14 +123,22 @@ export default function CourseDetailedReport() {
           exporting={exporting}
           testID="course-report-hero"
           extra={!!reportData && (
-            <View style={styles.modeToggle} testID="course-report-mode-toggle">
-              <TouchableOpacity style={[styles.modeBtn, mode === 'lectures' && styles.modeBtnActive]} onPress={() => setMode('lectures')} testID="course-report-mode-lectures">
-                <Text style={[styles.modeBtnText, mode === 'lectures' && styles.modeBtnTextActive]}>بالمحاضرات</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.modeBtn, mode === 'hours' && styles.modeBtnActive]} onPress={() => setMode('hours')} testID="course-report-mode-hours">
-                <Text style={[styles.modeBtnText, mode === 'hours' && styles.modeBtnTextActive]}>بالساعات</Text>
-              </TouchableOpacity>
-            </View>
+            <>
+              <View style={styles.modeToggle} testID="course-report-mode-toggle">
+                <TouchableOpacity style={[styles.modeBtn, mode === 'lectures' && styles.modeBtnActive]} onPress={() => setMode('lectures')} testID="course-report-mode-lectures">
+                  <Text style={[styles.modeBtnText, mode === 'lectures' && styles.modeBtnTextActive]}>بالمحاضرات</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modeBtn, mode === 'hours' && styles.modeBtnActive]} onPress={() => setMode('hours')} testID="course-report-mode-hours">
+                  <Text style={[styles.modeBtnText, mode === 'hours' && styles.modeBtnTextActive]}>بالساعات</Text>
+                </TouchableOpacity>
+              </View>
+              {hasPermission('export_reports') && (
+                <TouchableOpacity style={styles.monthlyBtn} onPress={handleMonthlyExport} disabled={exportingMonthly} testID="course-report-monthly-template-btn">
+                  {exportingMonthly ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="calendar" size={15} color="#fff" />}
+                  <Text style={styles.monthlyBtnText}>القالب الشهري</Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         />
 
@@ -133,6 +156,14 @@ export default function CourseDetailedReport() {
                 onDepartmentChange={setSelectedDept}
                 onCourseChange={(v) => { setSelectedCourse(v); setReportData(null); setHasRun(false); }}
               />
+            </View>
+            <View style={{ minWidth: 150 }}>
+              <Text style={reportPage.label}>من تاريخ</Text>
+              <input type="date" value={dateFrom} onChange={(e: any) => setDateFrom(e.target.value)} style={dateInputStyle} data-testid="course-report-date-from" />
+            </View>
+            <View style={{ minWidth: 150 }}>
+              <Text style={reportPage.label}>إلى تاريخ</Text>
+              <input type="date" value={dateTo} onChange={(e: any) => setDateTo(e.target.value)} style={dateInputStyle} data-testid="course-report-date-to" />
             </View>
           </ReportFilters>
         )}
@@ -235,6 +266,8 @@ const styles = StyleSheet.create({
   modeBtnActive: { backgroundColor: '#fff' },
   modeBtnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
   modeBtnTextActive: { color: '#0f2440' },
+  monthlyBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#8e24aa', paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10 },
+  monthlyBtnText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   ruleText: { fontSize: 12, color: '#64748b', marginTop: -4, marginBottom: 10, textAlign: 'right', fontWeight: '600' },
   tabsContainer: { flexDirection: 'row-reverse', gap: 6, marginBottom: 8 },
   tab: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },

@@ -12846,9 +12846,13 @@ async def get_warnings_report(
 @api_router.get("/reports/course/{course_id}/detailed")
 async def get_course_detailed_report(
     course_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ):
-    """تقرير المقرر التفصيلي - تحليل كامل لمقرر معين"""
+    """تقرير المقرر التفصيلي - تحليل كامل لمقرر معين
+    date_from/date_to (اختياريان، إضافيان، صيغة YYYY-MM-DD): يحصران المحاضرات المحتسَبة (بالمحاضرات وبالساعات
+    معاً) ضمن فترة معيّنة فقط. بدونهما: السلوك الافتراضي والسابق تماماً (كل محاضرات المقرر)."""
     if not current_user.get("advanced_access_real_enforcement"):
         if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_COURSE):
             raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -12879,10 +12883,23 @@ async def get_course_detailed_report(
             pass
     
     # جلب المحاضرات (تشمل الغائبة لعرض التسلسل الزمني الكامل)
+    # 🆕 حصر ضمن فترة معيّنة (إضافي بالكامل) - فقط عند تمرير date_from/date_to من الواجهة، وإلا نفس الاستعلام السابق تماماً
+    _date_range_q: dict = {}
+    if date_from or date_to:
+        if date_from:
+            _date_range_q["$gte"] = date_from
+        if date_to:
+            _date_range_q["$lte"] = date_to
+    
     active_lecture_ids = await get_active_lecture_ids(course_id)
+    if _date_range_q:
+        _in_range_ids = {str(l["_id"]) async for l in db.lectures.find({"course_id": course_id, "status": {"$in": ACTIVE_LECTURE_STATUSES}, "date": _date_range_q}, {"_id": 1})}
+        active_lecture_ids = active_lecture_ids & _in_range_ids
+    
     lectures = await db.lectures.find({
         "course_id": course_id,
-        "status": {"$in": [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.ABSENT, LectureStatus.ABSENT_EXCUSED]}
+        "status": {"$in": [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.ABSENT, LectureStatus.ABSENT_EXCUSED]},
+        **({"date": _date_range_q} if _date_range_q else {})
     }).sort("date", 1).to_list(500)
     
     # جلب التسجيلات
@@ -12896,7 +12913,7 @@ async def get_course_detailed_report(
     try:
         _hours_limits = await course_limits(db, course)
         _student_ids_for_hours = [str(e["student_id"]) for e in enrollments if e.get("student_id")]
-        _hours_profiles = await course_profiles(db, course, student_ids=_student_ids_for_hours, limits=_hours_limits)
+        _hours_profiles = await course_profiles(db, course, student_ids=_student_ids_for_hours, limits=_hours_limits, date_from=date_from, date_to=date_to)
     except Exception as e:
         logger.warning(f"Hours-mode absence engine failed for course {course_id}, falling back to empty hours data: {e}")
         _hours_limits = {"unexcused_limit": 10, "total_limit": 25}
@@ -13499,14 +13516,15 @@ async def export_daily_pdf(date: Optional[str] = None, department_id: Optional[s
 
 
 @api_router.get("/reports/course/{course_id}/export-pdf")
-async def export_course_detailed_pdf(course_id: str, mode: str = "lectures", current_user: dict = Depends(get_current_user)):
-    """📄 تقرير المقرر التفصيلي PDF - mode=lectures (افتراضي، كالسابق تماماً) أو mode=hours (بالساعات الفعلية)"""
+async def export_course_detailed_pdf(course_id: str, mode: str = "lectures", date_from: Optional[str] = None, date_to: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """📄 تقرير المقرر التفصيلي PDF - mode=lectures (افتراضي، كالسابق تماماً) أو mode=hours (بالساعات الفعلية)
+    date_from/date_to (اختياريان): حصر على فترة محدَّدة فقط - بدونهما نفس السلوك السابق تماماً (كل المقرر)"""
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
     from routes.report_pdf import build_report_pdf
-    report = await get_course_detailed_report(course_id, current_user)
+    report = await get_course_detailed_report(course_id, current_user, date_from=date_from, date_to=date_to)
     c, s = report["course"], report["summary"]
-    sub = f"الرمز: {c['code']}" + (f"   |   المدرّس: {c['teacher_name']}" if c.get("teacher_name") else "") + (f"   |   المستوى {c['level']}" if c.get("level") else "") + (f"   |   شعبة {c['section']}" if c.get("section") else "")
+    sub = f"الرمز: {c['code']}" + (f"   |   المدرّس: {c['teacher_name']}" if c.get("teacher_name") else "") + (f"   |   المستوى {c['level']}" if c.get("level") else "") + (f"   |   شعبة {c['section']}" if c.get("section") else "") + (f"   |   الفترة: {date_from or '…'} ← {date_to or '…'}" if (date_from or date_to) else "")
     if mode == "hours":
         # 🆕 وضع الاحتساب بالساعات الفعلية (بعذر/بلا عذر) وفق قواعد كلية المقرر - مرتَّب تنازلياً حسب نسبة الحضور بالساعات
         _students_hours_sorted = sorted(report["students"], key=lambda x: x["attendance_rate_hours"], reverse=True)
@@ -14565,13 +14583,16 @@ async def export_student_report_pdf(
 async def export_course_report_excel(
     course_id: str,
     mode: str = "lectures",
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """تصدير تقرير مقرر إلى Excel - mode=lectures (افتراضي، كالسابق تماماً) أو mode=hours (بالساعات الفعلية)"""
+    """تصدير تقرير مقرر إلى Excel - mode=lectures (افتراضي، كالسابق تماماً) أو mode=hours (بالساعات الفعلية)
+    date_from/date_to (اختياريان): حصر على فترة محدَّدة فقط - بدونهما نفس السلوك السابق تماماً (كل المقرر)"""
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
-    report = await get_course_detailed_report(course_id, current_user)
+    report = await get_course_detailed_report(course_id, current_user, date_from=date_from, date_to=date_to)
     
     output = BytesIO()
     
@@ -14642,6 +14663,127 @@ async def export_course_report_excel(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=ar_export_headers(ar_export_filename("تقرير مقرر" + (" بالساعات" if mode == "hours" else ""), report["course"].get("name") or report["course"].get("code", ""), ext="xlsx"))
+    )
+
+
+@api_router.get("/reports/course/{course_id}/monthly-excel")
+async def export_course_monthly_excel(
+    course_id: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """📊 نموذج رسمي ثابت: "تقرير الحضور الشهري لمادة" - حضور/غياب بعذر/غياب بلا عذر بالساعات الفعلية ضمن فترة محدَّدة.
+    تصدير جديد ومستقل تماماً (لا يُعدِّل أو يستبدل تصدير Excel السابق في export_course_report_excel)."""
+    if not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
+    
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    
+    dept = await db.departments.find_one({"_id": ObjectId(course["department_id"])}) if course.get("department_id") else None
+    fac_name = ""
+    if dept and dept.get("faculty_id"):
+        fac = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
+        fac_name = (fac.get("name") if fac else "") or ""
+    dept_name = (dept.get("name") if dept else "") or ""
+    
+    enrollments = await db.enrollments.find({"course_id": course_id}).to_list(1000)
+    from services.absence_engine import course_profiles, course_limits
+    _limits = await course_limits(db, course)
+    _student_ids = [str(e["student_id"]) for e in enrollments if e.get("student_id")]
+    _profiles = await course_profiles(db, course, student_ids=_student_ids, limits=_limits, date_from=date_from, date_to=date_to)
+    
+    students_rows = []
+    for e in enrollments:
+        sid = e.get("student_id")
+        if not sid:
+            continue
+        student = await db.students.find_one({"_id": ObjectId(sid)})
+        if not student:
+            continue
+        p = _profiles.get(str(student["_id"])) or {}
+        students_rows.append({
+            "student_id": student.get("student_id", ""),
+            "full_name": student.get("full_name", ""),
+            "excused": p.get("excused_hours", 0),
+            "unexcused": p.get("unexcused_hours", 0),
+            "present": p.get("present_hours", 0),
+        })
+    students_rows.sort(key=lambda x: x["full_name"])
+    
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "تقرير الحضور الشهري"
+    ws.sheet_view.rightToLeft = True
+    
+    thin = Side(style='thin', color='999999')
+    cell_border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    
+    ws.merge_cells('A1:G1')
+    ws['A1'] = 'تقرير الحضور الشهري لمادة'
+    ws['A1'].font = Font(bold=True, size=15)
+    ws['A1'].alignment = Alignment(horizontal='center')
+    ws.row_dimensions[1].height = 26
+    
+    def _info_row(row: int, pairs: list):
+        col = 1
+        for label, value in pairs:
+            lbl = ws.cell(row=row, column=col, value=f"{label}:")
+            lbl.font = Font(bold=True, size=11)
+            lbl.alignment = Alignment(horizontal='right')
+            ws.merge_cells(start_row=row, start_column=col + 1, end_row=row, end_column=col + 2)
+            val = ws.cell(row=row, column=col + 1, value=value or "")
+            val.alignment = Alignment(horizontal='right')
+            col += 3
+    
+    _info_row(3, [("الكلية", fac_name), ("القسم", dept_name)])
+    _info_row(4, [("الدفعة", ""), ("رقم الدفعة", "")])
+    _info_row(5, [("المستوى", course.get("level")), ("الفصل", course.get("semester_name") or "")])
+    _info_row(6, [("الشعبة", course.get("section") or "كل الطلبة"), ("عدد الطلبة", len(students_rows))])
+    _info_row(7, [("المادة", course.get("name") or ""), ("كود المادة", course.get("code") or "")])
+    
+    ws.merge_cells('A9:G9')
+    ws['A9'] = f"فترة (من - إلى): {date_from or '—'}  إلى  {date_to or '—'}"
+    ws['A9'].font = Font(bold=True, size=11)
+    ws['A9'].alignment = Alignment(horizontal='center')
+    ws['A9'].fill = PatternFill(start_color='E3F2FD', end_color='E3F2FD', fill_type='solid')
+    
+    headers = ['الدفعة', 'رقم الدفعة', 'الرقم الأكاديمي', 'اسم الطالب', 'بعذر', 'بدون عذر', 'حضور']
+    header_row = 11
+    header_fill = PatternFill(start_color='1565C0', end_color='1565C0', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=header_row, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = cell_border
+    
+    for i, st in enumerate(students_rows, 1):
+        r = header_row + i
+        values = ["", "", st["student_id"], st["full_name"], st["excused"], st["unexcused"], st["present"]]
+        for col, v in enumerate(values, 1):
+            cell = ws.cell(row=r, column=col, value=v)
+            cell.border = cell_border
+            cell.alignment = Alignment(horizontal='right' if col == 4 else 'center')
+    
+    for col, w in enumerate([10, 12, 18, 32, 10, 12, 10], 1):
+        ws.column_dimensions[get_column_letter(col)].width = w
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=ar_export_headers(ar_export_filename("تقرير الحضور الشهري", course.get("name") or course.get("code", ""), ext="xlsx"))
     )
 
 @api_router.get("/export/report/attendance-overview/excel")
