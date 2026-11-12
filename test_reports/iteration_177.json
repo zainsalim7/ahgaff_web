@@ -1,0 +1,31 @@
+{
+  "summary": "Third retest of the take-attendance 30-minute auto-close/auto-save, frontend only, run live with Playwright at mobile viewport as teacher180156 with X-Platform: mobile, on 4 TEST lectures for course 698f0000d803b27aab0120af (72 students). HIGH fix (batch addAttendanceRecords) is CONFIRMED. With only the first session POST aborted and a manual save with 3 students toggled, there was exactly ONE sync POST with 72 records. In Mongo the lecture is completed with 72 docs (69 present, 3 absent), and localStorage holds 72 records, 0 unsynced. LOW fix (message wording) is CONFIRMED for both variants. A forced 400 on the auto-save shows 'رفض الخادم الحفظ عند اللحظة الأخيرة...'. A real network abort on the auto-save shows '...تلقائياً (فشل الاتصال بالخادم)'. MEDIUM fix is PARTIALLY confirmed. A manual save rejected with 400 far from the deadline keeps the screen open and does NOT disable the safety net: the auto-save fired later at deadline-5s, used the current toggles (one toggle was made after the failed manual save; DB showed 2 absent), and sent ONE sync POST with 72 records. However, a manual 'Save Now' still in flight when the deadline-5s tick arrives still triggers a SECOND saveAttendance and a second POST (reproduced, see integration_issues). Smoke checks passed: the banner and countdown show (01:30 seen), the banner is hidden on an expired lecture, the expired banner is shown, and opening an expired lecture sent 0 POSTs and 0 dialogs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "take-attendance bottom save button", "issue": "Uses data-testid on a TouchableOpacity, which RN-web does not forward, so the attribute is missing from the DOM. Tests had to fall back to text 'حفظ الحضور'. Use testID='save-attendance-btn' (as the save-now button already does).", "selector": "[data-testid='save-attendance-btn']", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Manual Save Now in flight while the deadline-5s auto-save tick fires", "issue": "MEDIUM, reproduced live. Steps: press Save Now at 14s remaining with the first POST delayed 15s then aborted, so the request is still in flight at deadline-5s. Result: tick() saw autoSaveTriggeredRef=false, because the ref is only set on SUCCESS and the request was still pending, so it called saveAttendance({auto:true}). That sent a 2nd POST /api/attendance/session about 8s after the first. Two concurrent saveAttendance invocations ran. The auto one went offline and called goBack(). The manual one kept running after unmount and will run its own catch/offline fallback with an alert, or on a slow-but-successful network the server receives 2 session POSTs. The `saving` state only disables the buttons; it does not guard tick(). Fix: in tick, skip when a save is in flight (e.g. a savingRef). Or set autoSaveTriggeredRef.current=true at the START of every saveAttendance call and reset it to false only in the !isAuto 400/403 stay-on-screen branch and the offlineError branch.", "affected_selectors": ["attendance-save-now-btn", "confirm-lesson-save"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/autoclose_setup.py"],
+  "action_items": [
+    "MEDIUM: Guard the auto-save tick against firing while a manual saveAttendance is in flight. Use a savingRef, or set autoSaveTriggeredRef=true at the start of the save and reset it only on the manual 400/403 stay-on-screen path and the offlineError path.",
+    "LOW: Change data-testid to testID on the bottom save TouchableOpacity (take-attendance.tsx ~line 992)."
+  ],
+  "critical_code_review_comments": [
+    "saveAttendance online path: if updateCacheWithAttendance() throws AFTER a successful server POST, control goes to the catch and queues the same records offline. That causes a redundant re-sync. Minor.",
+    "In the catch fallback, the non-auto 'wasServerRejection ? serverError' branch is effectively unreachable, because the !isAuto 400/403 case with a detail is already handled above. Harmless.",
+    "Policy note: the auto-save fallback after a server 400 queues the records offline, and the sync with offline_recorded_at was accepted by the server after the deadline (DB got all 72). This is as designed, but the main agent should confirm it is intended.",
+    "take-attendance.tsx is about 1374 lines and should be split (timer hook, save logic, lesson modal)."
+  ],
+  "updated_files": ["/app/test_reports/iteration_177.json"],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "HIGH fix 100%, LOW fix 100%, MEDIUM fix partial (success-path guard and safety net after a manual failure work; the in-flight race remains), smoke 100%"},
+  "seed_data_creation": "4 TEST lectures (created_by='autoclose_test_script') and their 216 attendance docs were created, then all deleted with autoclose_setup.py cleanup. No other data was touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use /app/tests/autoclose_setup.py create <secs>|inspect <id>|cleanup (create aligns the start to the minute, so the real deadline is secs to secs+60). Login: set the X-Platform: mobile header, fill the placeholders, click the 'تسجيل الدخول' text. Navigate to /take-attendance?lectureId=..&courseId=..&courseName=x. Use the text 'حفظ الحضور' for the bottom button. To repro the in-flight race: page.route on **/api/attendance/session**, sleep 15s on the 1st POST then abort, and press attendance-save-now-btn + confirm-lesson-save at countdown <=14s. After the fix, expect only 1 non-sync POST.",
+  "rca of the issue": "In-flight race: autoSaveTriggeredRef is only set at the success exit points, which run after `await attendanceAPI.recordSession` resolves. While that await is pending, the 1s interval tick still checks only autoSaveTriggeredRef. So with diff<=5000 it starts a concurrent auto save. Mitigation: mark the ref or a savingRef at the start of the save, and clear it only on the paths where the user stays on screen."
+}

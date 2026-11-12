@@ -181,6 +181,9 @@ export default function TakeAttendanceScreen() {
       sessionOpenedAtRef.current = { lectureId: lectureId as string, ts: new Date().toISOString() };
     }
   };
+  // 🔒 true طوال مدة تنفيذ saveAttendance (يدوي أو تلقائي) — يمنع المؤقّت من إطلاق حفظ تلقائي ثانٍ بالتوازي
+  // بينما طلب حفظ سابق لا يزال معلّقاً بانتظار استجابة الشبكة (وليس فقط عند نجاحه)
+  const saveInFlightRef = useRef(false);
 
   // تصدير PDF
   const handleExportPdf = async () => {
@@ -464,6 +467,7 @@ export default function TakeAttendanceScreen() {
 
   const saveAttendance = async (opts?: { auto?: boolean }) => {
     const isAuto = !!opts?.auto;
+    saveInFlightRef.current = true;
     setSaving(true);
     try {
       const records = Object.entries(attendance).map(([studentId, status]) => ({
@@ -549,6 +553,7 @@ export default function TakeAttendanceScreen() {
       
       if (!isAuto && serverError && (statusCode === 400 || statusCode === 403)) {
         // خطأ من الخادم أثناء حفظ يدوي - عرض الرسالة الفعلية (مثل: لم يحن وقت المحاضرة) وترك الشاشة مفتوحة
+        saveInFlightRef.current = false; // نعيد تسليح شبكة الأمان التلقائية لأن المستخدم بقي في الشاشة
         if (Platform.OS === 'web') {
           window.alert(serverError);
         } else {
@@ -588,6 +593,7 @@ export default function TakeAttendanceScreen() {
             ]);
           }
         } catch (offlineError) {
+          saveInFlightRef.current = false; // فشل كل شيء وبقي المستخدم في الشاشة — نعيد تسليح شبكة الأمان
           const errorMsg = 'فشل في حفظ الحضور';
           if (Platform.OS === 'web') {
             window.alert(errorMsg);
@@ -631,7 +637,7 @@ export default function TakeAttendanceScreen() {
     const tick = () => {
       const diff = deadlineTs - getAdenDate().getTime();
       setRemainingMs(Math.max(0, diff));
-      if (diff <= AUTO_SAVE_SAFETY_BUFFER_MS && !autoSaveTriggeredRef.current) {
+      if (diff <= AUTO_SAVE_SAFETY_BUFFER_MS && !autoSaveTriggeredRef.current && !saveInFlightRef.current) {
         autoSaveTriggeredRef.current = true;
         saveAttendanceRef.current({ auto: true });
       }
@@ -990,6 +996,7 @@ export default function TakeAttendanceScreen() {
               onPress={promptForLessonAndSave}
               disabled={saving}
               data-testid="save-attendance-btn"
+              testID="save-attendance-btn"
             >
               {saving ? (
                 <ActivityIndicator color="#fff" />
