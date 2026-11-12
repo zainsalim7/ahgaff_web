@@ -1,0 +1,18 @@
+{
+  "summary": "Retest #4 (frontend only, Playwright mobile 390x844, teacher180156 + X-Platform: mobile). MEDIUM in-flight race FIXED: reproduced the exact iteration_177 scenario (1st POST /api/attendance/session delayed 15s then aborted, Save Now + confirm-lesson-save pressed at countdown 00:14). During the whole in-flight window, including the deadline-5s tick, NO second saveAttendance/POST fired (in iter_177 a 2nd POST appeared ~8s after the first). After the abort, the manual save fell back offline and showed exactly ONE dialog: 'تم حفظ الحضور محلياً (فشل الاتصال بالخادم)'. The only other POST was the expected offlineSyncStore sync, 1s after the abort and 16s after the first POST. DB: lecture completed with 72 docs. LOW FIX confirmed: [data-testid='save-attendance-btn'] and get_by_test_id('save-attendance-btn') both resolve (count=1) and are clickable. Smoke passed: countdown renders and decrements (00:51 -> 00:49); the auto-save at the deadline fired 1 POST with the dialog 'تم حفظ الحضور تلقائياً وإغلاق الشاشة'; normal manual save (no banner, 25 min left) gave 1 POST and 'تم حفظ الحضور بنجاح'; opening the expired lecture sent 0 POSTs, 0 dialogs, no countdown banner, and showed the expired message.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/tests/autoclose_setup.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "saveInFlightRef logic is correct: it is set synchronously before any await, and reset only on the two stay-on-screen failure branches. If a manual 400/403 resolves after deadline-5s, the reset lets the next tick fire the auto safety net, which is desirable.",
+    "Carry-over (minor, from iter_177): if updateCacheWithAttendance() throws after a successful server POST, the catch queues the same records offline, causing a redundant re-sync.",
+    "take-attendance.tsx is ~1370 lines; consider extracting the timer/auto-save hook and the lesson modal."
+  ],
+  "updated_files": ["/app/test_reports/iteration_178.json"],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "100% (MEDIUM fix, LOW fix, 4 smoke checks)"},
+  "seed_data_creation": "5 TEST lectures (created_by='autoclose_test_script') + 288 attendance docs were created, then all deleted via autoclose_setup.py cleanup. No other data touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Feature is complete after 4 iterations. In the smoke run the auto-save toggle-state check used 2 toggles, which cycled the student back to present, so this run did not independently re-verify it. It was verified in iter_176/177. Note: offline sync reuses the POST /api/attendance/session endpoint, so in a network-abort scenario expect 2 POSTs to that URL: the original save plus the post-fallback sync. Do not count the sync as a duplicate."
+}
