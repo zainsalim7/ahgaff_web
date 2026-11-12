@@ -26,6 +26,8 @@ COURSE_ID = "698f0000d803b27aab0120af"  # owned by teacher180156
 TEST_STUDENT = "TESTSTUDENT1"
 YEMEN = timezone(timedelta(hours=3))
 CREATED = []
+MAX_DELAY_DEFAULT = 30  # إعداد max_attendance_delay_minutes الافتراضي (لا يوجد تجاوز على مستوى كلية هذا المقرر)
+GRACE_MINUTES = 5  # ATTENDANCE_OPEN_GRACE_MINUTES في server.py (تحديث 12 نوفمبر 2026)
 
 
 def _now():
@@ -123,19 +125,43 @@ class TestOfflineWindowContract:
         assert mdb.attendance.count_documents({"lecture_id": lid}) == 0
 
     def test_at_max_delay_boundary_accepted_but_after_rejected(self, teacher_h):
-        # 🔒 قرار صريح من المستخدم (10-11-2026): مهلة فتح التحضير أوفلاين = نفس الأونلاين تماماً
-        # (بداية المحاضرة + max_delay دقيقة، افتراضياً 30) — لا تمديد إضافي بعد نهاية المحاضرة بعد الآن
+        # 🔒 تحديث 12 نوفمبر 2026: أُضيف هامش سماح ATTENDANCE_OPEN_GRACE_MINUTES (افتراضياً 5 دقائق) فوق
+        # max_delay الافتراضي (30) لقبول الحفظ الأول/الأوفلاين فقط — الحد الفعلي الجديد = 35 دقيقة من بداية
+        # المحاضرة (30+5). GET /attendance-status تبقى تُظهر "منتهية" بعد 30 دقيقة فقط دون أي تغيير (اختبار منفصل أدناه).
         day = _now() - timedelta(days=1)
+        effective = MAX_DELAY_DEFAULT + GRACE_MINUTES  # 35
         lid = _mk_lecture(day, "14:00", "15:00")
-        # عند الحد بالضبط (14:30) → مقبول
-        r_ok = _post(teacher_h, lid, _at(day, "14:30").isoformat())
+        # عند الحد الفعلي الجديد بالضبط (بداية+35) → مقبول
+        r_ok = _post(teacher_h, lid, (_at(day, "14:00") + timedelta(minutes=effective)).isoformat())
         assert r_ok.status_code == 200, r_ok.text
-        # دقيقة واحدة بعد الحد (14:31) لمحاضرة أخرى → مرفوض حتى لو داخل وقت المحاضرة نفسها
+        # دقيقة واحدة بعد الحد الفعلي الجديد لمحاضرة أخرى → مرفوض
         lid2 = _mk_lecture(day, "14:05", "15:05")
-        r_bad = _post(teacher_h, lid2, _at(day, "14:36").isoformat())
+        r_bad = _post(teacher_h, lid2, (_at(day, "14:05") + timedelta(minutes=effective + 1)).isoformat())
         assert r_bad.status_code == 400
         assert "خارج نافذة المحاضرة" in r_bad.json()["detail"]
         assert mdb.attendance.count_documents({"lecture_id": lid2}) == 0
+
+    def test_grace_window_previously_rejected_now_accepted(self, teacher_h):
+        # 🆕 يختبر تحديداً هامش السماح الجديد: وقت كان سيُرفض بالقاعدة القديمة (بعد max_delay=30 مباشرة)
+        # يجب أن يُقبل الآن طالما داخل هامش الـ5 دقائق الإضافي (بين 30 و35 دقيقة من بداية المحاضرة)
+        day = _now() - timedelta(days=1)
+        lid = _mk_lecture(day, "09:00", "10:00")
+        ts = (_at(day, "09:00") + timedelta(minutes=MAX_DELAY_DEFAULT + 2)).isoformat()  # +32 دقيقة
+        r = _post(teacher_h, lid, ts)
+        assert r.status_code == 200, r.text
+        assert mdb.attendance.count_documents({"lecture_id": lid}) == 1
+
+    def test_attendance_status_window_unchanged_still_expires_at_30(self, teacher_h):
+        # 🔒 يتحقّق أن GET /lectures/{id}/attendance-status لم يتأثر بهامش السماح الجديد — تبقى تُظهر
+        # "منتهية" بعد max_delay (30) دقيقة بالضبط من بداية المحاضرة، رغم أن POST يقبل حتى 35
+        day = _now() - timedelta(days=1)
+        lid = _mk_lecture(day, "11:00", "12:00")
+        r = requests.get(f"{API}/lectures/{lid}/attendance-status", headers=teacher_h)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        # المحاضرة بالأمس ومرَّ عليها أكثر من 30 دقيقة بكثير → يجب أن تكون منتهية (لم يتغيّر بهامش السماح)
+        assert data["can_take_attendance"] is False
+        assert data.get("status") in ("expired", "completed")
 
     def test_older_than_max_hours_rejected(self, teacher_h):
         mh = _max_hours()

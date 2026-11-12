@@ -28,6 +28,9 @@ import time as time_module
 # توقيت اليمن (عدن) UTC+3
 YEMEN_TIMEZONE = timezone(timedelta(hours=3))
 OFFLINE_SYNC_MAX_HOURS = 72  # 🔐 القيمة الافتراضية (تُستبدَل بإعداد قابل للتعديل من لوحة المدير إن وُجد)
+# 🕐 هامش سماح لقبول الحفظ الأول (فتح التحضير) في POST /attendance/session فقط — يحمي من تأخر الشبكة/المزامنة
+# بضع دقائق قرب نهاية نافذة الـmax_delay دون تمديد النافذة المعروضة فعلياً في GET /attendance-status (تبقى كما هي)
+ATTENDANCE_OPEN_GRACE_MINUTES = 5
 
 async def get_offline_sync_max_hours() -> float:
     """أقصى عمر لسجل تحضير أوفلاين قبل رفضه — من إعدادات النظام، أو الافتراضي 72 ساعة"""
@@ -11520,10 +11523,13 @@ async def record_attendance_session(
                 _diag = f"ساعة جهاز الأستاذ تُظهر وقتاً مستقبلياً ({offline_time.strftime('%Y-%m-%d %H:%M')}) بينما وقت السيرفر الفعلي {now.strftime('%Y-%m-%d %H:%M')} — الأرجح أن توقيت/تاريخ الجهاز غير مضبوط"
                 await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload, offline_recorded_at_yemen=offline_time)
                 raise HTTPException(status_code=400, detail=_reason)
-            # 🔒 نفس قاعدة الأونلاين تماماً بقرار صريح: مهلة فتح التحضير لأول مرة = (بداية المحاضرة + مهلة التأخير)
-            # فقط — لا تمديد إضافي بعد نهاية المحاضرة حتى لو كان الجهاز أوفلاين. طول مدة الانقطاع نفسها
-            # (حتى سقف OFFLINE_SYNC_MAX_HOURS) لا يسبب الرفض أبداً - فقط صحة الوقت الملتقَط هي المعيار.
-            offline_window_end = lecture_start + timedelta(minutes=max_delay)
+            # 🔒 نفس قاعدة الأونلاين تماماً بقرار صريح: مهلة فتح التحضير لأول مرة = (بداية المحاضرة + مهلة التأخير
+            # + هامش سماح ATTENDANCE_OPEN_GRACE_MINUTES دقائق لتعويض تأخر الشبكة/المزامنة) — لا تمديد إضافي
+            # بعد ذلك حتى لو كان الجهاز أوفلاين. طول مدة الانقطاع نفسها (حتى سقف OFFLINE_SYNC_MAX_HOURS) لا
+            # يسبب الرفض أبداً - فقط صحة الوقت الملتقَط هي المعيار. ملاحظة: نافذة GET /attendance-status
+            # المعروضة للمعلم تبقى بلا هامش سماح (max_delay فقط) حتى لا تُشجّعه الواجهة على الانتظار حتى آخر لحظة.
+            effective_max_delay = max_delay + ATTENDANCE_OPEN_GRACE_MINUTES
+            offline_window_end = lecture_start + timedelta(minutes=effective_max_delay)
             if offline_time < lecture_start or offline_time > offline_window_end:
                 _reason = f"وقت التسجيل الأوفلاين خارج نافذة المحاضرة ({lecture['date']} {lecture['start_time']}-{lecture['end_time']}) — مرفوض"
                 if offline_time < lecture_start:
@@ -11531,7 +11537,7 @@ async def record_attendance_session(
                     _diag = f"سجّل جهاز الأستاذ وقت الحضور {offline_time.strftime('%Y-%m-%d %H:%M')} — أي قبل بداية المحاضرة ({lecture_start.strftime('%Y-%m-%d %H:%M')}) بـ {_gap_min} دقيقة. السبب غالباً: ساعة/تاريخ الجهاز غير صحيحة."
                 else:
                     _gap_min = int((offline_time - offline_window_end).total_seconds() // 60)
-                    _diag = f"⚠️ جهاز الأستاذ سجّل وقت الحضور الفعلي {offline_time.strftime('%Y-%m-%d %H:%M')} — أي بعد مهلة فتح التحضير المسموحة لهذه المحاضرة تحديداً ({offline_window_end.strftime('%Y-%m-%d %H:%M')}، أي {max_delay} دقيقة من بداية المحاضرة) بـ {_gap_min} دقيقة. هذه المهلة صارمة ومطابقة تماماً لقاعدة الأونلاين — لا يُسمح بفتح التحضير لأول مرة بعدها سواء كان الجهاز متصلاً أو منقطعاً عن الإنترنت. تحقَّق من الأستاذ ثم استخدم «قبول يدوياً» فقط إن تأكَّدت أنه حضر هذه المحاضرة تحديداً في وقتها الحقيقي."
+                    _diag = f"⚠️ جهاز الأستاذ سجّل وقت الحضور الفعلي {offline_time.strftime('%Y-%m-%d %H:%M')} — أي بعد مهلة فتح التحضير المسموحة لهذه المحاضرة تحديداً ({offline_window_end.strftime('%Y-%m-%d %H:%M')}، أي {effective_max_delay} دقيقة من بداية المحاضرة شاملةً هامش سماح {ATTENDANCE_OPEN_GRACE_MINUTES} دقائق) بـ {_gap_min} دقيقة. لا يُسمح بفتح التحضير لأول مرة بعدها سواء كان الجهاز متصلاً أو منقطعاً عن الإنترنت. تحقَّق من الأستاذ ثم استخدم «قبول يدوياً» فقط إن تأكَّدت أنه حضر هذه المحاضرة تحديداً في وقتها الحقيقي."
                 await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload, offline_recorded_at_yemen=offline_time)
                 raise HTTPException(status_code=400, detail=_reason)
             check_time = offline_time
@@ -11587,12 +11593,13 @@ async def record_attendance_session(
                 "request_ids": diff_result["request_ids"],
             }
     else:
-        # التحضير لم يبدأ بعد - التحقق من الحد الأقصى للتأخير
-        max_open_time = lecture_start + timedelta(minutes=max_delay)
+        # التحضير لم يبدأ بعد - التحقق من الحد الأقصى للتأخير (+ هامش سماح ATTENDANCE_OPEN_GRACE_MINUTES
+        # للحفظ المباشر أونلاين أيضاً — موحَّد مع نافذة الحفظ الأوفلاين أعلاه)
+        max_open_time = lecture_start + timedelta(minutes=max_delay + ATTENDANCE_OPEN_GRACE_MINUTES)
         if check_time > max_open_time and not is_offline_sync and not has_edit_perm:
             raise HTTPException(
                 status_code=400,
-                detail=f"انتهى وقت فتح التحضير (الحد الأقصى للتأخير {max_delay} دقيقة)"
+                detail=f"انتهى وقت فتح التحضير (الحد الأقصى للتأخير {max_delay + ATTENDANCE_OPEN_GRACE_MINUTES} دقيقة، حتى الساعة {max_open_time.strftime('%H:%M')})"
             )
         # تسجيل وقت بدء التحضير الفعلي
         await db.lectures.update_one(
