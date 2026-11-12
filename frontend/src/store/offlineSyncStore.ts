@@ -269,9 +269,18 @@ export const useOfflineSyncStore = create<OfflineSyncState>((set, get) => ({
       }
     }
     
+    // 🔒 ندمج نتائج المزامنة في أحدث نسخة من pendingRecords (وليس في اللقطة الأولية state.pendingRecords)
+    // لأن addAttendanceRecord قد يضيف سجلات جديدة بالتوازي أثناء انتظار هذه الدالة لطلبات الشبكة،
+    // والاعتماد على اللقطة القديمة كان يحذف تلك الإضافات الجديدة عند الكتابة النهائية (سباق/race condition)
+    const resultsByLocalId = new Map(updatedRecords.map(r => [r.local_id, r]));
+    const latestRecords = get().pendingRecords;
+    const mergedRecords = latestRecords.map(r => resultsByLocalId.get(r.local_id) || r);
+    const mergedIds = new Set(mergedRecords.map(r => r.local_id));
+    updatedRecords.forEach(r => { if (!mergedIds.has(r.local_id)) mergedRecords.push(r); });
+    
     // حذف السجلات المتزامنة القديمة (أكثر من 7 أيام)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const cleanedRecords = updatedRecords.filter(
+    const cleanedRecords = mergedRecords.filter(
       r => !r.synced || r.timestamp > sevenDaysAgo
     );
     

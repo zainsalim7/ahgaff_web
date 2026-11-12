@@ -236,7 +236,26 @@ export default function TakeAttendanceScreen() {
           setAttendanceRecorded(data.attendance_recorded);
           setOfflineMode(false);
           captureSessionOpenedAt();
-          
+
+          // جلب حالة التحضير + تهيئة حالة الحضور قبل أي await آخر — لتفادي عرض وسيط بحالة فارغة
+          // قد يستغلها مؤقّت الإغلاق التلقائي (auto-close timer) ويظنّ المحاضرة منتهية المهلة خطأً
+          if (data.attendance_status) {
+            setAttendanceStatus(data.attendance_status);
+          } else {
+            try {
+              const statusRes = await lecturesAPI.getAttendanceStatus(lectureId as string);
+              setAttendanceStatus(statusRes.data);
+            } catch (e) {
+              console.log('Error fetching attendance status:', e);
+            }
+          }
+
+          const initialAttendance: { [key: string]: string } = {};
+          data.students.forEach((s: EnrolledStudent) => {
+            initialAttendance[s.id] = s.attendance_status || 'present';
+          });
+          setAttendance(initialAttendance);
+
           // تخزين البيانات محلياً للاستخدام أوفلاين (مع حالة الحضور)
           await cacheLecture({
             id: data.lecture.id,
@@ -255,25 +274,6 @@ export default function TakeAttendanceScreen() {
             })),
             cached_at: new Date().toISOString(),
           });
-          
-          // جلب حالة التحضير
-          if (data.attendance_status) {
-            setAttendanceStatus(data.attendance_status);
-          } else {
-            try {
-              const statusRes = await lecturesAPI.getAttendanceStatus(lectureId as string);
-              setAttendanceStatus(statusRes.data);
-            } catch (e) {
-              console.log('Error fetching attendance status:', e);
-            }
-          }
-            
-            // Initialize attendance
-            const initialAttendance: { [key: string]: string } = {};
-            data.students.forEach((s: EnrolledStudent) => {
-              initialAttendance[s.id] = s.attendance_status || 'present';
-            });
-            setAttendance(initialAttendance);
           } catch (error: any) {
             // فشل الاتصال - عرض رسالة خطأ واضحة مع إمكانية إعادة المحاولة
             console.log('فشل الاتصال:', error?.response?.status, error?.message);
@@ -545,15 +545,15 @@ export default function TakeAttendanceScreen() {
       const serverError = error?.response?.data?.detail;
       const statusCode = error?.response?.status;
       
-      if (serverError && (statusCode === 400 || statusCode === 403)) {
-        // خطأ من الخادم - عرض الرسالة الفعلية (مثل: لم يحن وقت المحاضرة)
+      if (!isAuto && serverError && (statusCode === 400 || statusCode === 403)) {
+        // خطأ من الخادم أثناء حفظ يدوي - عرض الرسالة الفعلية (مثل: لم يحن وقت المحاضرة) وترك الشاشة مفتوحة
         if (Platform.OS === 'web') {
           window.alert(serverError);
         } else {
           Alert.alert('غير مسموح', serverError);
         }
       } else {
-        // فشل اتصال حقيقي - حفظ أوفلاين
+        // فشل اتصال حقيقي، أو رفض الخادم للحفظ التلقائي (تأخر بسبب زمن الشبكة) - نحفظ أوفلاين دائماً ونغلق الشاشة
         try {
           const student_names: Record<string, string> = {};
           students.forEach(s => { student_names[s.id] = s.full_name; });
@@ -570,7 +570,9 @@ export default function TakeAttendanceScreen() {
             });
           }
           
-          const fallbackMsg = 'تم حفظ الحضور محلياً (فشل الاتصال بالخادم)';
+          const fallbackMsg = isAuto
+            ? '⏰ انتهت مهلة الـ30 دقيقة — تم حفظ الحضور محلياً تلقائياً (فشل الاتصال بالخادم)'
+            : 'تم حفظ الحضور محلياً (فشل الاتصال بالخادم)';
           // تحديث الكاش بالحضور الأوفلاين
           await updateCacheWithAttendance();
           if (Platform.OS === 'web') {
@@ -596,6 +598,10 @@ export default function TakeAttendanceScreen() {
   };
 
   // ⏰ الإغلاق التلقائي والحفظ التلقائي: عداد محلي مستقل عن الخادم يعمل حتى في وضع الأوفلاين (يعتمد على ساعة الجهاز)
+  // نحتفظ بمرجع لأحدث نسخة من saveAttendance حتى لا يلتقط المؤقّت (closure) حالة قديمة للحضور (toggles) عند آخر مرة أُعيد فيها بناء الـ effect
+  const saveAttendanceRef = useRef(saveAttendance);
+  saveAttendanceRef.current = saveAttendance;
+
   useEffect(() => {
     autoSaveTriggeredRef.current = false;
   }, [lectureId]);
@@ -606,23 +612,30 @@ export default function TakeAttendanceScreen() {
       return;
     }
     if (attendanceRecorded) { setRemainingMs(null); return; }
-    if (attendanceStatus && attendanceStatus.can_take_attendance === false) { setRemainingMs(null); return; }
+    // لا نُشغّل المؤقّت إلا عندما يؤكّد الخادم صراحة أن النافذة مفتوحة الآن (يمنع الإطلاق الوهمي أثناء اللحظة
+    // الوسيطة لتحميل البيانات، أو بعد أن أغلق الخادم النافذة فعلياً)
+    if (!attendanceStatus || attendanceStatus.can_take_attendance !== true) { setRemainingMs(null); return; }
+    if (Object.keys(attendance).length === 0) { setRemainingMs(null); return; }
     if (!canRecordAttendance && !canEditAttendance) { setRemainingMs(null); return; }
 
-    const deadlineTs = getAdenTimestamp(lecture.date, lecture.start_time) + ATTENDANCE_WINDOW_MS;
+    // نعتمد مهلة الخادم نفسها (attendanceStatus.deadline) إن وُجدت لتبقى متوافقة مع أي فرق بين الكليات،
+    // ونسقط فقط لحساب محلي (بداية المحاضرة + 30 دقيقة) إن لم يرسلها الخادم
+    const deadlineTs = attendanceStatus.deadline
+      ? getAdenTimestamp(lecture.date, attendanceStatus.deadline)
+      : getAdenTimestamp(lecture.date, lecture.start_time) + ATTENDANCE_WINDOW_MS;
 
     const tick = () => {
       const diff = deadlineTs - getAdenDate().getTime();
       setRemainingMs(Math.max(0, diff));
-      if (diff <= AUTO_SAVE_SAFETY_BUFFER_MS && !autoSaveTriggeredRef.current && !saving) {
+      if (diff <= AUTO_SAVE_SAFETY_BUFFER_MS && !autoSaveTriggeredRef.current) {
         autoSaveTriggeredRef.current = true;
-        saveAttendance({ auto: true });
+        saveAttendanceRef.current({ auto: true });
       }
     };
     tick();
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [errorMessage, lecture?.date, lecture?.start_time, students.length, attendanceRecorded, attendanceStatus?.can_take_attendance, canRecordAttendance, canEditAttendance, saving]);
+  }, [errorMessage, lecture?.date, lecture?.start_time, students.length, attendanceRecorded, attendanceStatus?.can_take_attendance, attendanceStatus?.deadline, canRecordAttendance, canEditAttendance]);
 
   const showAutoCloseWarning = remainingMs !== null && remainingMs > 0 && remainingMs <= WARNING_THRESHOLD_MS;
 
