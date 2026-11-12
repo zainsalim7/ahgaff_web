@@ -217,6 +217,18 @@ export function toAPIDate(date: Date): string {
 }
 
 /**
+ * تحويل تاريخ (YYYY-MM-DD) + وقت (HH:MM) بتوقيت عدن إلى timestamp
+ * قابل للمقارنة المباشرة مع getAdenDate().getTime() بغض النظر عن توقيت الجهاز
+ */
+export function getAdenTimestamp(dateStr: string, timeStr: string): number {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  const utcAsIfAden = Date.UTC(year, month - 1, day, hours || 0, minutes || 0);
+  const deviceOffsetMs = new Date().getTimezoneOffset() * 60000;
+  return utcAsIfAden + deviceOffsetMs;
+}
+
+/**
  * المقارنة بين تاريخين (بدون الوقت)
  */
 export function isSameDay(date1: Date, date2: Date): boolean {

@@ -28,7 +28,19 @@ import { useAuth, PERMISSIONS, PermissionGate } from '../src/contexts/AuthContex
 import { useRealEnforcementStore } from '../src/store/realEnforcementStore';
 import OfflineIndicator from '../src/components/OfflineIndicator';
 import AbsenceReminderButton from '../src/components/AbsenceReminderButton';
-import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR, getAdenDate, toAPIDate } from '../src/utils/dateUtils';
+import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR, getAdenDate, toAPIDate, getAdenTimestamp } from '../src/utils/dateUtils';
+
+const ATTENDANCE_WINDOW_MS = 30 * 60000;
+const WARNING_THRESHOLD_MS = 2 * 60000;
+// نرسل الحفظ التلقائي قبل اللحظة الفعلية للمهلة بثوانٍ قليلة لتفادي رفض الخادم بسبب زمن استجابة الشبكة
+const AUTO_SAVE_SAFETY_BUFFER_MS = 5000;
+
+const formatCountdown = (ms: number): string => {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+};
 
 interface EnrolledStudent {
   id: string;
@@ -151,6 +163,10 @@ export default function TakeAttendanceScreen() {
     minutes_remaining?: number;
     deadline?: string;
   } | null>(null);
+
+  // ⏰ الإغلاق التلقائي والحفظ التلقائي عند انتهاء مهلة الـ30 دقيقة (محسوبة محلياً من ساعة الجهاز)
+  const [remainingMs, setRemainingMs] = useState<number | null>(null);
+  const autoSaveTriggeredRef = useRef(false);
 
   // State لرسالة الخطأ
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -445,7 +461,8 @@ export default function TakeAttendanceScreen() {
     setShowLessonModal(true);
   };
 
-  const saveAttendance = async () => {
+  const saveAttendance = async (opts?: { auto?: boolean }) => {
+    const isAuto = !!opts?.auto;
     setSaving(true);
     try {
       const records = Object.entries(attendance).map(([studentId, status]) => ({
@@ -475,12 +492,14 @@ export default function TakeAttendanceScreen() {
         // تحديث الكاش بالحضور المحفوظ
         await updateCacheWithAttendance();
         
-        const successMsg = 'تم حفظ الحضور بنجاح';
+        const successMsg = isAuto
+          ? '⏰ انتهت مهلة الـ30 دقيقة — تم حفظ الحضور تلقائياً وإغلاق الشاشة'
+          : 'تم حفظ الحضور بنجاح';
         if (Platform.OS === 'web') {
           window.alert(successMsg);
           goBack();
         } else {
-          Alert.alert('نجاح', successMsg, [
+          Alert.alert(isAuto ? 'تم الحفظ التلقائي' : 'نجاح', successMsg, [
             { text: 'حسناً', onPress: () => goBack() }
           ]);
         }
@@ -506,13 +525,15 @@ export default function TakeAttendanceScreen() {
         // تحديث الكاش بالحضور المحفوظ أوفلاين
         await updateCacheWithAttendance();
         
-        const offlineMsg = `تم حفظ الحضور محلياً (${pendingCount} سجل معلق)\nسيتم المزامنة تلقائياً عند عودة الاتصال`;
+        const offlineMsg = isAuto
+          ? `⏰ انتهت مهلة الـ30 دقيقة — تم حفظ الحضور محلياً تلقائياً (${pendingCount} سجل معلق)\nسيتم المزامنة تلقائياً عند عودة الاتصال`
+          : `تم حفظ الحضور محلياً (${pendingCount} سجل معلق)\nسيتم المزامنة تلقائياً عند عودة الاتصال`;
         
         if (Platform.OS === 'web') {
           window.alert(offlineMsg);
           goBack();
         } else {
-          Alert.alert('تم الحفظ أوفلاين', offlineMsg, [
+          Alert.alert(isAuto ? 'تم الحفظ التلقائي أوفلاين' : 'تم الحفظ أوفلاين', offlineMsg, [
             { text: 'حسناً', onPress: () => goBack() }
           ]);
         }
@@ -573,6 +594,37 @@ export default function TakeAttendanceScreen() {
       setSaving(false);
     }
   };
+
+  // ⏰ الإغلاق التلقائي والحفظ التلقائي: عداد محلي مستقل عن الخادم يعمل حتى في وضع الأوفلاين (يعتمد على ساعة الجهاز)
+  useEffect(() => {
+    autoSaveTriggeredRef.current = false;
+  }, [lectureId]);
+
+  useEffect(() => {
+    if (errorMessage || !lecture?.date || !lecture?.start_time || students.length === 0) {
+      setRemainingMs(null);
+      return;
+    }
+    if (attendanceRecorded) { setRemainingMs(null); return; }
+    if (attendanceStatus && attendanceStatus.can_take_attendance === false) { setRemainingMs(null); return; }
+    if (!canRecordAttendance && !canEditAttendance) { setRemainingMs(null); return; }
+
+    const deadlineTs = getAdenTimestamp(lecture.date, lecture.start_time) + ATTENDANCE_WINDOW_MS;
+
+    const tick = () => {
+      const diff = deadlineTs - getAdenDate().getTime();
+      setRemainingMs(Math.max(0, diff));
+      if (diff <= AUTO_SAVE_SAFETY_BUFFER_MS && !autoSaveTriggeredRef.current && !saving) {
+        autoSaveTriggeredRef.current = true;
+        saveAttendance({ auto: true });
+      }
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [errorMessage, lecture?.date, lecture?.start_time, students.length, attendanceRecorded, attendanceStatus?.can_take_attendance, canRecordAttendance, canEditAttendance, saving]);
+
+  const showAutoCloseWarning = remainingMs !== null && remainingMs > 0 && remainingMs <= WARNING_THRESHOLD_MS;
 
   const renderStudent = ({ item, index }: { item: EnrolledStudent; index: number }) => {
     const status = attendance[item.id] || 'present';
@@ -636,6 +688,26 @@ export default function TakeAttendanceScreen() {
         }}
       />
       <SafeAreaView style={styles.container} edges={['bottom']}>
+        {showAutoCloseWarning && remainingMs !== null && (
+          <View style={styles.autoCloseBanner} data-testid="attendance-auto-close-banner" testID="attendance-auto-close-banner">
+            <Ionicons name="alarm" size={18} color="#fff" />
+            <Text style={styles.autoCloseBannerText}>
+              سيُحفَظ الحضور تلقائياً ويُغلَق خلال{' '}
+              <Text style={styles.autoCloseCountdown} data-testid="attendance-autoclose-countdown" testID="attendance-autoclose-countdown">
+                {formatCountdown(remainingMs)}
+              </Text>
+            </Text>
+            <TouchableOpacity
+              style={styles.autoCloseSaveNowBtn}
+              onPress={promptForLessonAndSave}
+              disabled={saving}
+              data-testid="attendance-save-now-btn"
+              testID="attendance-save-now-btn"
+            >
+              <Text style={styles.autoCloseSaveNowBtnText}>حفظ الآن</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {errorMessage ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pageScroll, { flexGrow: 1, justifyContent: 'center' }]}>
@@ -1256,6 +1328,13 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 50, gap: 6 },
   emptyTitle: { fontSize: 15, color: '#5b6678', marginTop: 12, fontWeight: '600' },
   emptySubtitle: { fontSize: 12, color: '#8a95a8', textAlign: 'center' },
+
+  // auto-close warning banner
+  autoCloseBanner: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#c62828', paddingVertical: 10, paddingHorizontal: 14, flexWrap: 'wrap' },
+  autoCloseBannerText: { flex: 1, color: '#fff', fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  autoCloseCountdown: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  autoCloseSaveNowBtn: { backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
+  autoCloseSaveNowBtnText: { color: '#c62828', fontSize: 12, fontWeight: '800' },
 
   // bottom bar
   bottomBar: { padding: 14, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eef1f6' },
