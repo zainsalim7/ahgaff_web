@@ -12890,11 +12890,17 @@ async def get_course_detailed_report(
     
     # 🆕 الاحتساب بالساعات الفعلية (إضافي فقط - لا يُغيّر الاحتساب بالمحاضرات أعلاه إطلاقاً):
     # يُعيد استخدام محرك absence_engine الموحَّد (نفس المستخدم في تقارير الإنذارات/الحرمان) الذي يحتسب
-    # كل محاضرة بمدتها الفعلية ويطبّق حدود الغياب (بعذر/بلا عذر) المضبوطة في إعدادات كلية المقرر تحديداً
+    # كل محاضرة بمدتها الفعلية ويطبّق حدود الغياب (بعذر/بلا عذر) المضبوطة في إعدادات كلية المقرر تحديداً.
+    # 🛡️ ملفوفة في try/except حتى لو فشل المحرك (بيانات كلية ناقصة مثلاً) لا يتأثر التقرير بالمحاضرات (الافتراضي والسابق)
     from services.absence_engine import course_profiles, course_limits, lecture_hours
-    _hours_limits = await course_limits(db, course)
-    _student_ids_for_hours = [str(e["student_id"]) for e in enrollments if e.get("student_id")]
-    _hours_profiles = await course_profiles(db, course, student_ids=_student_ids_for_hours, limits=_hours_limits)
+    try:
+        _hours_limits = await course_limits(db, course)
+        _student_ids_for_hours = [str(e["student_id"]) for e in enrollments if e.get("student_id")]
+        _hours_profiles = await course_profiles(db, course, student_ids=_student_ids_for_hours, limits=_hours_limits)
+    except Exception as e:
+        logger.warning(f"Hours-mode absence engine failed for course {course_id}, falling back to empty hours data: {e}")
+        _hours_limits = {"unexcused_limit": 10, "total_limit": 25}
+        _hours_profiles = {}
     
     # بيانات الطلاب
     students_data = []
@@ -13002,10 +13008,13 @@ async def get_course_detailed_report(
             "absent_excused_lectures": sum(1 for l in lectures_data if l.get("status") == LectureStatus.ABSENT_EXCUSED),
             "avg_attendance_rate": round(sum(s["attendance_rate"] for s in students_data) / len(students_data), 2) if students_data else 0,
             # 🆕 ملخص وضع "الساعات" (إضافي بالكامل - لا يُستخدَم إلا في وضع العرض بالساعات)
+            # يُستثنى من المتوسط الطلاب الذين لا توجد لهم محاضرات منفَّذة بعد منذ تسجيلهم (executed_hours=0) حتى
+            # لا تُضخَّم النسبة زوراً بـ"ممتاز" وهمية لطلاب لم يُقيَّموا فعلياً بعد
             "total_hours_executed": _total_hours_executed,
-            "avg_attendance_rate_hours": round(sum(s["attendance_rate_hours"] for s in students_data) / len(students_data), 2) if students_data else 0,
+            "avg_attendance_rate_hours": round(sum(s["attendance_rate_hours"] for s in students_data if s["executed_hours"] > 0) / max(1, sum(1 for s in students_data if s["executed_hours"] > 0)), 2) if any(s["executed_hours"] > 0 for s in students_data) else 0,
             "unexcused_limit_percent": _hours_limits["unexcused_limit"],
             "total_limit_percent": _hours_limits["total_limit"],
+            "exceeded_limit_students": sum(1 for s in students_data if s["exceeded_unexcused_hours"] or s["exceeded_total_hours"]),
             "absence_rule_text": f"وفق قواعد كلية هذا المقرر: غياب بلا عذر حتى {_hours_limits['unexcused_limit']:g}% · إجمالي الغياب (بعذر + بلا عذر) حتى {_hours_limits['total_limit']:g}% من الساعات المنفَّذة",
         }
     }
@@ -13499,9 +13508,10 @@ async def export_course_detailed_pdf(course_id: str, mode: str = "lectures", cur
     c, s = report["course"], report["summary"]
     sub = f"الرمز: {c['code']}" + (f"   |   المدرّس: {c['teacher_name']}" if c.get("teacher_name") else "") + (f"   |   المستوى {c['level']}" if c.get("level") else "") + (f"   |   شعبة {c['section']}" if c.get("section") else "")
     if mode == "hours":
-        # 🆕 وضع الاحتساب بالساعات الفعلية (بعذر/بلا عذر) وفق قواعد كلية المقرر
+        # 🆕 وضع الاحتساب بالساعات الفعلية (بعذر/بلا عذر) وفق قواعد كلية المقرر - مرتَّب تنازلياً حسب نسبة الحضور بالساعات
+        _students_hours_sorted = sorted(report["students"], key=lambda x: x["attendance_rate_hours"], reverse=True)
         st_rows = [["#", "الطالب", "رقم القيد", "ساعات حضور", "غياب بعذر (س)", "غياب بلا عذر (س)", "نسبة الحضور", "الحالة"]]
-        for i, x in enumerate(report["students"], 1):
+        for i, x in enumerate(_students_hours_sorted, 1):
             st_rows.append([i, x["student_name"], x["student_id"], x["present_hours"], x["excused_hours"], x["unexcused_hours"], f"{x['attendance_rate_hours']}%", x["status_ar_hours"]])
         lec_rows = [["#", "التاريخ", "الوقت", "الحالة", "حاضر / المسجَّلون", "المدة (ساعة)", "نسبة الحضور"]]
         _st = {"completed": "منعقدة", "scheduled": "مجدولة", "cancelled": "ملغاة", "absent": "غياب المدرّس"}
@@ -13509,8 +13519,8 @@ async def export_course_detailed_pdf(course_id: str, mode: str = "lectures", cur
             lec_rows.append([i, l["date"], l["start_time"], _st.get(l["status"], l["status"]), f"{l['present_count']} / {l['total_students']}", l["hours"], f"{l['attendance_rate']}%" if l["status"] != "absent" else "—"])
         buf = build_report_pdf(
             f"تقرير المقرر: {c['name']} (بالساعات الفعلية)", sub,
-            kpis=[("الطلاب", s["total_students"]), ("الساعات المنفَّذة", s["total_hours_executed"]), ("متوسط الحضور", f"{s['avg_attendance_rate_hours']}%")],
-            sections=[{"title": "حضور الطلاب بالساعات الفعلية", "rows": st_rows, "widths_mm": [10, 70, 28, 24, 26, 26, 28, 44], "show_empty": True},
+            kpis=[("الطلاب", s["total_students"]), ("الساعات المنفَّذة", s["total_hours_executed"]), ("متوسط الحضور", f"{s['avg_attendance_rate_hours']}%"), ("طلاب متجاوزون للحد", s.get("exceeded_limit_students", 0))],
+            sections=[{"title": "حضور الطلاب بالساعات الفعلية (مرتب تنازلياً)", "rows": st_rows, "widths_mm": [10, 70, 28, 24, 26, 26, 28, 44], "show_empty": True},
                       {"title": "سجل المحاضرات", "rows": lec_rows, "widths_mm": [10, 36, 26, 42, 48, 24, 32], "head_bg": "#37474f", "fs": 8.5}],
             footer=s["absence_rule_text"], generated_by=current_user.get("full_name", ""))
         return _pdf_stream(buf, "تقرير المقرر (بالساعات)", c["name"], c.get("section"))
@@ -14567,9 +14577,9 @@ async def export_course_report_excel(
     
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         if mode == "hours":
-            # 🆕 ورقة الطلاب بالساعات الفعلية (بعذر/بلا عذر) وفق قواعد كلية المقرر
+            # 🆕 ورقة الطلاب بالساعات الفعلية (بعذر/بلا عذر) وفق قواعد كلية المقرر - مرتَّب تنازلياً حسب نسبة الحضور بالساعات
             students_data = []
-            for idx, student in enumerate(report["students"], 1):
+            for idx, student in enumerate(sorted(report["students"], key=lambda x: x["attendance_rate_hours"], reverse=True), 1):
                 students_data.append({
                     "الترتيب": idx,
                     "رقم القيد": student["student_id"],

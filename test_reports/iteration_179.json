@@ -1,0 +1,37 @@
+{
+  "summary": "Tested the new by-lectures/by-hours toggle on the course report, across GET /api/reports/course/{id}/detailed, its PDF export and its Excel export, plus report-course.tsx. Default (by lectures) behaviour still matches the old one: same top-level keys, the original student/lecture/summary fields and values, the same Excel sheet and column names, and a valid PDF with the original sections and columns. An Excel file requested with no mode is identical to one requested with mode=lectures. Hours mode works end to end in JSON, PDF and Excel. In the UI the toggle defaults to lectures, switches KPIs and tables correctly, shows the rule text only in hours mode, and switching back restores the original tables exactly. The export buttons send ?mode=lectures or ?mode=hours and download valid files. Backend 16/16 pytest passed. Frontend checks all passed, with one display bug in the status pill colour and some UX issues with confusing numbers.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/reports/course/{id}/detailed", "issue": "The default mode now always calls absence_engine.course_profiles/course_limits, outside any try/except. If the engine throws (for example on bad faculty_id or enrolled_at data), the old by-lectures report would also return 500. Before this change it did not depend on the engine. Wrapping the engine call in try/except with an empty fallback would make the change truly additive."},
+      {"endpoint": "GET /api/reports/course/{id}/detailed", "issue": "Two hours numbers can be misleading: (1) summary.total_hours_executed is the sum over all completed lectures, but each student's executed_hours excludes lectures held before they enrolled and prep-excluded dates. Here the KPI shows 1.5 hours while 68 of 72 students have executed_hours=0. (2) Students with executed_hours=0 get attendance_rate_hours=100 and 'ممتاز', which pushes avg_attendance_rate_hours up to 94.44%."},
+      {"endpoint": "GET /api/reports/course/{id}/export-pdf?mode=hours and excel?mode=hours", "issue": "Students stay sorted by the by-lectures attendance_rate, not by attendance_rate_hours."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "report-course.tsx hours student table, status Pill", "issue": "The pill colour comes only from the exceeded flags (exceeded_total → red, exceeded_unexcused → orange, otherwise green). So statuses 'إنذار' (warning) and 'خطر الحرمان' (danger) show GREEN. A student who only exceeds the unexcused limit (status 'candidate', text 'تجاوز الحد') shows orange, not red. Base the colour on status_key_hours instead: excellent/good → green, warning → orange, danger/candidate → red. Not seen with current data, because only the 'candidate' (both limits exceeded) and 'excellent' statuses occur.", "selector": "[data-testid^=course-student-hours-]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "report-course hours mode", "issues": ["Students with 0 executed hours show 0/0/0 hours with 100% and 'ممتاز'. Consider showing '—' or a note like 'no executed lectures since enrolment' when executed_hours == 0.", "The 'الساعات المنفَّذة' KPI (1.5) does not match most students' own denominator (0)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_course_report_hours_mode.py", "/app/test_reports/pytest/course_report_hours.xml"],
+  "action_items": [
+    "Change the hours-mode status Pill colour in report-course.tsx to use status_key_hours (warning → orange, danger/candidate → red) instead of only the exceeded_* flags.",
+    "Optional hardening: wrap the absence_engine calls in get_course_detailed_report in try/except so the default report can never fail because of the hours add-on.",
+    "Optional UX: handle executed_hours == 0 (show '—' rather than 100% 'ممتاز') and/or leave such students out of avg_attendance_rate_hours. Sort the hours exports by attendance_rate_hours."
+  ],
+  "critical_code_review_comments": [
+    "The diff is additive in default mode: the original field computations and Excel/PDF branches are unchanged. The only default-mode change is extra keys (hours fields, end_time) added inside students/lectures/summary.",
+    "The hours-mode PDF KPIs leave out the 'طلاب متجاوزون للحد' count that the UI shows. Minor inconsistency.",
+    "Unrecognised mode values (for example mode=xyz) fall back to lectures. Verified: returns 200 and the original PDF."
+  ],
+  "updated_files": ["/app/backend/tests/test_course_report_hours_mode.py"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "seed_data_creation": "None. Read-only tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Teacher login needs the X-Platform: mobile header. For the UI, log in via page.request with that header, then set localStorage token and user, then open /report-course?courseId=698f0000d803b27aab0120af. Data: 72 students, 13 lectures (1 completed at 1.5h, the rest absent). 4 students are 'candidate' with 1.5 unexcused hours; 68 have executed_hours=0 (enrolled after the lecture) and show 100% 'ممتاز'. Run: pytest tests/test_course_report_hours_mode.py -p no:xdist -o addopts=''."
+}

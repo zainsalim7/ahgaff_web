@@ -87,10 +87,13 @@ export default function CourseDetailedReport() {
   };
 
   const rateColor = (r: number, good = 75, mid = 50) => (r >= good ? '#16a34a' : r >= mid ? '#f97316' : '#dc2626');
+  const statusHoursColor = (key: string) => (['excellent', 'good'].includes(key) ? '#16a34a' : key === 'warning' ? '#f97316' : '#dc2626'); // danger/candidate/deprived → أحمر
   const c = reportData?.course;
   const s = reportData?.summary;
   const lowStudents = (reportData?.students || []).filter((x: any) => x.attendance_rate < 60).length;
   const lowStudentsHours = (reportData?.students || []).filter((x: any) => x.exceeded_unexcused_hours || x.exceeded_total_hours).length;
+  // 🆕 ترتيب نسخة محلية للعرض بوضع الساعات دون التأثير على ترتيب reportData.students الأصلي (وضع المحاضرات)
+  const studentsSortedByHours = [...(reportData?.students || [])].sort((a: any, b: any) => (b.attendance_rate_hours ?? 0) - (a.attendance_rate_hours ?? 0));
 
   return (
     <SafeAreaView style={reportPage.container} edges={['bottom']}>
@@ -153,7 +156,7 @@ export default function CourseDetailedReport() {
             { label: 'الطلاب', value: s.total_students, color: '#1565c0', icon: 'people' },
             { label: 'الساعات المنفَّذة', value: s.total_hours_executed, color: '#0f2440', icon: 'time' },
             { label: 'متوسط الحضور', value: `${s.avg_attendance_rate_hours}%`, color: rateColor(s.avg_attendance_rate_hours), icon: 'stats-chart' },
-            { label: 'طلاب متجاوزون للحد', value: lowStudentsHours, color: lowStudentsHours ? '#dc2626' : '#16a34a', icon: 'alert-circle' },
+            { label: 'طلاب متجاوزون للحد', value: s.exceeded_limit_students ?? lowStudentsHours, color: (s.exceeded_limit_students ?? lowStudentsHours) ? '#dc2626' : '#16a34a', icon: 'alert-circle' },
           ] : [
             { label: 'الطلاب', value: s.total_students, color: '#1565c0', icon: 'people' },
             { label: 'المحاضرات المنعقدة', value: s.total_lectures, color: '#0f2440', icon: 'calendar', sub: s.absent_lectures ? `${s.absent_lectures} غياب مدرّس` : undefined },
@@ -178,10 +181,12 @@ export default function CourseDetailedReport() {
           {tab === 'students' && mode === 'hours' && (
             <DenseTable testID="course-students-hours" head={['#', 'الطالب', 'رقم القيد', 'ساعات حضور', 'غياب بعذر', 'غياب بلا عذر', 'نسبة الحضور', 'الحالة']}
               align={['center', 'right', 'right', 'center', 'center', 'center', 'right', 'center']} rowTestID={(i) => `course-student-hours-${i}`} emptyText="لا يوجد طلاب مسجلون"
-              rows={(reportData.students || []).map((st: any, i: number) => [i + 1, <b style={{ color: '#0f2440' }}>{st.student_name}</b>, <span style={{ color: '#64748b', direction: 'ltr' }}>{st.student_id}</span>,
-                <Pill color="#16a34a">{st.present_hours}</Pill>, <Pill color="#f59e0b">{st.excused_hours}</Pill>, <Pill color="#dc2626">{st.unexcused_hours}</Pill>,
-                <Bar pct={st.attendance_rate_hours} color={rateColor(st.attendance_rate_hours)} />,
-                <Pill color={st.exceeded_total_hours ? '#dc2626' : (st.exceeded_unexcused_hours ? '#f97316' : '#16a34a')}>{st.status_ar_hours}</Pill>])}
+              rows={studentsSortedByHours.map((st: any, i: number) => [i + 1, <b style={{ color: '#0f2440' }}>{st.student_name}</b>, <span style={{ color: '#64748b', direction: 'ltr' }}>{st.student_id}</span>,
+                st.executed_hours > 0 ? <Pill color="#16a34a">{st.present_hours}</Pill> : <span style={{ color: '#94a3b8' }}>—</span>,
+                st.executed_hours > 0 ? <Pill color="#f59e0b">{st.excused_hours}</Pill> : <span style={{ color: '#94a3b8' }}>—</span>,
+                st.executed_hours > 0 ? <Pill color="#dc2626">{st.unexcused_hours}</Pill> : <span style={{ color: '#94a3b8' }}>—</span>,
+                st.executed_hours > 0 ? <Bar pct={st.attendance_rate_hours} color={rateColor(st.attendance_rate_hours)} /> : <span style={{ color: '#94a3b8' }}>—</span>,
+                st.executed_hours > 0 ? <Pill color={statusHoursColor(st.status_key_hours)}>{st.status_ar_hours}</Pill> : <span style={{ fontSize: 11.5, color: '#94a3b8' }}>لا توجد محاضرات منفَّذة منذ التسجيل</span>])}
               footer={`${(reportData.students || []).length} طالب · ${s.absence_rule_text || ''}`} />
           )}
           {tab === 'students' && mode === 'lectures' && (
