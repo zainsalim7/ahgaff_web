@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend-only test of course-lectures ordering/dimming (course 698f0000d803b27aab0120af, admin). No lectures in the DB had future dates, so I created 5 TEST_ lectures through the API: one ending about 3 minutes later, one later the same day, and ones on Nov 15, 17 and 20. They were deleted by id afterwards. ALL PASS: (1) Upcoming lectures come first, sorted by nearest end time. (2) Past lectures come after them with opacity 0.6 and bg #f4f5f7, ordered most-recently-ended first, with the oldest (2026-04-06) last in the list. (3) Live transition VERIFIED: with the page open and no reload, the lecture ending at 19:36 Aden moved from upcoming position 1 to the top of the dimmed past section within about 30s of its end time. (4) Ordering stays correct across pagination (10 per page, page 2, 25 per page) and with the day filter (Friday), date range, status filters (absent, scheduled) and clearing filters. (5) Card content is intact: day, date, time, room, status badge, details/reschedule/assign-group/take-attendance buttons, 3-dot menu, selection-mode checkboxes and counter. No page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional/latent: lecturesAPI.getByCourse loads only page 1 (per_page=50). Backend sorts by date asc and the frontend never fetches further pages (totalPages is stored but unused). For a course with >50 lectures in the semester, upcoming lectures beyond the first 50 dates are never loaded, so 'upcoming first' would be incomplete. Consider raising per_page or fetching all pages for this screen."
+  ],
+  "critical_code_review_comments": [
+    "getAdenTimestamp vs getAdenDate().getTime() are consistent (both shifted by device tz offset), so the comparison is correct regardless of browser timezone.",
+    "Sorting computes getAdenTimestamp repeatedly in the comparator; negligible for <=50 items.",
+    "Pre-existing behaviour: the 'إجمالي المحاضرات' stat follows the server status filter (shows 5 when status=scheduled), not related to this change.",
+    "Lectures created via POST /api/lectures get the active semester_id, while this course's lectures belong to semester 698e5cc..., so newly added lectures did not show in this course's list until semester_id was aligned. This is pre-existing semester scoping. Worth checking whether that's intended."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "seed_data_creation": "Created 5 TEST_ordering lectures (room TEST_ROOM) in course 698f0000d803b27aab0120af and changed their semester_id in the DB so they would show. All 5 were deleted by id afterwards; the course is back to 9 lectures.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login: type into the first two inputs with press_sequentially, then click 'تسجيل الدخول'. Card testids: lecture-card-upcoming-{id} / lecture-card-past-{id}. Selects order: 0=status, 1=day, 2=per-page. As of 2026-11-13 the DB has no future-dated lectures; create TEST_ ones and set semester_id=698e5cc524745fb79482e099 for this course."
+}
