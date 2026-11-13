@@ -29,7 +29,7 @@ import { suggestEndTime } from '../src/utils/timeFormat';
 import { useAuthStore } from '../src/store/authStore';
 import { CourseTabBar } from '../src/components/CourseTabBar';
 import { PERMISSIONS } from '../src/contexts/AuthContext';
-import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR } from '../src/utils/dateUtils';
+import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR, getAdenTimestamp, getAdenDate } from '../src/utils/dateUtils';
 import { goBack, goHome } from '../src/utils/navigation';
 
 interface Lecture {
@@ -204,6 +204,13 @@ export default function CourseLecturesScreen() {
   const [selectedDay, setSelectedDay] = useState<string>('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+
+  // 🆕 عدّاد زمني للتحديث الدوري - يسمح بنقل المحاضرات المنتهية تلقائياً إلى الأسفل دون إعادة تحميل
+  const [nowTick, setNowTick] = useState(() => getAdenDate().getTime());
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(getAdenDate().getTime()), 30000);
+    return () => clearInterval(t);
+  }, []);
   
   // أسماء الأشهر بالعربية
   const MONTHS_AR = [
@@ -258,8 +265,17 @@ export default function CourseLecturesScreen() {
       });
     }
     
-    return filtered.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [lectures, selectedMonth]);
+    // 🆕 القادمة أولاً (الأقرب فالأبعد)، والمنتهية بالأسفل (الأحدث انتهاءً أولاً)
+    const upcoming: Lecture[] = [];
+    const past: Lecture[] = [];
+    filtered.forEach(l => {
+      const endTs = getAdenTimestamp(l.date, l.end_time || l.start_time || '23:59');
+      if (endTs <= nowTick) past.push(l); else upcoming.push(l);
+    });
+    upcoming.sort((a, b) => getAdenTimestamp(a.date, a.end_time || a.start_time || '23:59') - getAdenTimestamp(b.date, b.end_time || b.start_time || '23:59'));
+    past.sort((a, b) => getAdenTimestamp(b.date, b.end_time || b.start_time || '23:59') - getAdenTimestamp(a.date, a.end_time || a.start_time || '23:59'));
+    return [...upcoming, ...past];
+  }, [lectures, selectedMonth, nowTick]);
   
   // إحصائيات ثابتة من السيرفر (لا تتغير عند الفلترة)
   const getStats = useCallback(() => {
@@ -896,13 +912,16 @@ export default function CourseLecturesScreen() {
     const stCounts = (item as any).attendance_stats || {};
     const presentCount = stCounts.present ?? 0;
     const absentCount = stCounts.absent ?? studentsTotal;
+    // 🆕 هل انقضت هذه المحاضرة زمنياً (تُعرض بمظهر خافت بالأسفل)
+    const isElapsed = getAdenTimestamp(item.date, item.end_time || item.start_time || '23:59') <= nowTick;
 
     const CardWrapper: any = selectionMode ? TouchableOpacity : View;
     return (
       <CardWrapper
         dataSet={{ responsive: "lecture-card" }}
-        style={[styles.lectureCardNew, isSelected && styles.lectureCardNewSelected]}
+        style={[styles.lectureCardNew, isSelected && styles.lectureCardNewSelected, isElapsed && styles.lectureCardElapsed]}
         {...(selectionMode ? { onPress: () => toggleLectureSelection(item.id), activeOpacity: 0.7 } : {})}
+        testID={isElapsed ? `lecture-card-past-${item.id}` : `lecture-card-upcoming-${item.id}`}
       >
         {/* الرقم التسلسلي / مربع التحديد */}
         {selectionMode ? (
@@ -2145,6 +2164,7 @@ const styles = StyleSheet.create({
   // بطاقة محاضرة
   lectureCardNew: { backgroundColor: '#fff', borderRadius: 12, padding: 16, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6', position: 'relative' },
   lectureCardNewSelected: { backgroundColor: '#eef4ff', borderColor: '#cfdcff' },
+  lectureCardElapsed: { backgroundColor: '#f4f5f7', opacity: 0.6 },
   lectureNumWrap: { width: 44 },
   lectureNumBadge: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#eef4ff', alignItems: 'center', justifyContent: 'center' },
   lectureNumText: { fontSize: 14, fontWeight: '700', color: '#2962ff' },
