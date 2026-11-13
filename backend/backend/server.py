@@ -14739,7 +14739,7 @@ async def export_course_monthly_excel(
     thin = Side(style='thin', color='999999')
     cell_border = Border(left=thin, right=thin, top=thin, bottom=thin)
     
-    ws.merge_cells('A1:G1')
+    ws.merge_cells('A1:F1')
     ws['A1'] = 'تقرير الحضور الشهري لمادة'
     ws['A1'].font = Font(bold=True, size=15)
     ws['A1'].alignment = Alignment(horizontal='center')
@@ -14762,13 +14762,19 @@ async def export_course_monthly_excel(
     _info_row(6, [("الشعبة", course.get("section") or "كل الطلبة"), ("عدد الطلبة", len(students_rows))])
     _info_row(7, [("المادة", course.get("name") or ""), ("كود المادة", course.get("code") or "")])
     
-    ws.merge_cells('A9:G9')
+    ws.merge_cells('A9:F9')
     ws['A9'] = f"فترة (من - إلى): {date_from or '—'}  إلى  {date_to or '—'}"
     ws['A9'].font = Font(bold=True, size=11)
     ws['A9'].alignment = Alignment(horizontal='center')
     ws['A9'].fill = PatternFill(start_color='E3F2FD', end_color='E3F2FD', fill_type='solid')
     
-    headers = ['الدفعة', 'رقم الدفعة', 'الرقم الأكاديمي', 'اسم الطالب', 'بعذر', 'بدون عذر', 'حضور']
+    total_present_hours = sum((st.get("present") or 0) for st in students_rows)
+    ws.merge_cells('A10:F10')
+    ws['A10'] = f"مجموع ساعات الحضور: {total_present_hours}"
+    ws['A10'].font = Font(bold=True, size=11, color='1565C0')
+    ws['A10'].alignment = Alignment(horizontal='center')
+    
+    headers = ['الدفعة', 'الرقم الأكاديمي', 'اسم الطالب', 'بعذر', 'بدون عذر', 'حضور']
     header_row = 11
     header_fill = PatternFill(start_color='1565C0', end_color='1565C0', fill_type='solid')
     header_font = Font(bold=True, color='FFFFFF')
@@ -14781,13 +14787,13 @@ async def export_course_monthly_excel(
     
     for i, st in enumerate(students_rows, 1):
         r = header_row + i
-        values = ["", "", st["student_id"], st["full_name"], st["excused"], st["unexcused"], st["present"]]
+        values = ["", st["student_id"], st["full_name"], st["excused"], st["unexcused"], st["present"]]
         for col, v in enumerate(values, 1):
             cell = ws.cell(row=r, column=col, value=v)
             cell.border = cell_border
-            cell.alignment = Alignment(horizontal='right' if col == 4 else 'center')
+            cell.alignment = Alignment(horizontal='right' if col == 3 else 'center')
     
-    for col, w in enumerate([10, 12, 18, 32, 10, 12, 10], 1):
+    for col, w in enumerate([10, 18, 32, 10, 12, 10], 1):
         ws.column_dimensions[get_column_letter(col)].width = w
     
     output = BytesIO()
