@@ -42,6 +42,9 @@ export default function CurriculumScreen() {
   const [generating, setGenerating] = useState(false);
   const [sectionsMap, setSectionsMap] = useState<Record<string, string>>({});
   const [activeSemester, setActiveSemester] = useState<any>(null);
+  // 🆕 كل الفصول (نشطة/قادمة) + الفصل المستهدف فعلياً بالتوليد (افتراضياً = النشط، قابل للتغيير)
+  const [allSemesters, setAllSemesters] = useState<any[]>([]);
+  const [targetSemesterId, setTargetSemesterId] = useState<string>('');
   const [archives, setArchives] = useState<any[]>([]);
   const [showImport, setShowImport] = useState(false);
   // 🆕 الحذف المتعدد
@@ -67,15 +70,18 @@ export default function CurriculumScreen() {
       try {
         const [d, s, f] = await Promise.all([
           api.get('/departments'),
-          api.get('/semesters?status=active').catch(() => ({ data: [] })),
+          api.get('/semesters').catch(() => ({ data: [] })),
           api.get('/faculties').catch(() => ({ data: [] })),
         ]);
         const deptItems = d.data?.items || d.data || [];
         setDepartments(deptItems);
         setFaculties(f.data?.items || f.data || []);
         const sems = s.data?.items || s.data || [];
-        const active = (Array.isArray(sems) ? sems : []).find((x: any) => x.status === 'active') || sems[0];
+        const semsList = Array.isArray(sems) ? sems : [];
+        setAllSemesters(semsList.filter((x: any) => x.status !== 'archived'));
+        const active = semsList.find((x: any) => x.status === 'active') || semsList[0];
         setActiveSemester(active);
+        setTargetSemesterId(active?.id || active?._id || '');
         // 🔧 أزلنا /archives من التحميل الأساسي — يُستدعى فقط عند فتح زر "استيراد من أرشيف"
         // (يمنع 403 ثانوياً لمستخدمين بلا صلاحية الأرشيف)
         if (!params.departmentId && deptItems.length > 0) {
@@ -169,20 +175,22 @@ export default function CurriculumScreen() {
 
   const generateOfferings = async (term?: number) => {
     if (!selectedDept) return;
-    if (!activeSemester) {
-      const msg = 'لا يوجد فصل نشط حالياً';
+    const targetSem = allSemesters.find((s: any) => (s.id || s._id) === targetSemesterId) || activeSemester;
+    if (!targetSem) {
+      const msg = 'لا يوجد فصل مستهدف — أنشئ فصلاً من الإعدادات العامة أولاً';
       if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
       return;
     }
-    const semName = activeSemester.name || activeSemester._id;
+    const semName = targetSem.name || targetSem._id;
+    const isActiveTarget = (targetSem.id || targetSem._id) === (activeSemester?.id || activeSemester?._id);
     const termLabel = term === 1 ? 'الفصل الأول' : term === 2 ? 'الفصل الثاني' : term === 3 ? 'الفصل الصيفي' : 'كل الفصول';
     const ok = Platform.OS === 'web'
-      ? window.confirm(`توليد جلسات (${termLabel}) من خطة هذا القسم للفصل النشط "${semName}"؟`)
+      ? window.confirm(`توليد جلسات (${termLabel}) من خطة هذا القسم لفصل "${semName}"${isActiveTarget ? ' (النشط)' : ' (غير نشط حالياً — آمن تماماً، لن يؤثر على الفصل النشط)'}؟`)
       : true;
     if (!ok) return;
     setGenerating(true);
     try {
-      const params: any = { semester_id: activeSemester.id || activeSemester._id, department_id: selectedDept };
+      const params: any = { semester_id: targetSem.id || targetSem._id, department_id: selectedDept };
       if (term) params.term = term;
       const sectionsPayload: Record<string, number> = {};
       Object.entries(sectionsMap).forEach(([ccid, val]) => {
@@ -654,6 +662,31 @@ export default function CurriculumScreen() {
             {/* شريط الإجراءات */}
             <View style={styles.toolbarCard}>
               <Text style={styles.toolbarTitle}>إجراءات الخطة</Text>
+              {/* 🆕 اختيار الفصل المستهدف بالتوليد (قد يكون غير الفصل النشط لتحضير فصل قادم مسبقاً) */}
+              {canManage && allSemesters.length > 0 && (
+                <View style={styles.targetSemWrap}>
+                  <Text style={styles.targetSemLabel}>الفصل المستهدف بالتوليد</Text>
+                  <View style={styles.deptDropdown}>
+                    <Ionicons name="calendar-outline" size={16} color="#0277bd" style={{ marginHorizontal: 8 }} />
+                    <Picker
+                      selectedValue={targetSemesterId}
+                      onValueChange={(v) => setTargetSemesterId(v)}
+                      style={styles.deptDropdownPicker}
+                      testID="target-semester-picker"
+                    >
+                      {allSemesters.map((s: any) => {
+                        const sid = s.id || s._id;
+                        const isActive = sid === (activeSemester?.id || activeSemester?._id);
+                        return <Picker.Item key={sid} label={`${s.name}${isActive ? ' (نشط)' : ' (غير نشط)'}`} value={sid} />;
+                      })}
+                    </Picker>
+                    <Ionicons name="chevron-down" size={16} color="#8a95a8" style={{ marginHorizontal: 8 }} />
+                  </View>
+                  <Text style={styles.targetSemHint}>
+                    التوليد لفصل غير نشط آمن تماماً — مقرراته منعزلة بالكامل عن الفصل النشط حتى يُفعَّل لاحقاً
+                  </Text>
+                </View>
+              )}
               <View style={styles.toolbarGrid}>
                 {canManage && (
                   <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#e3f2fd' }]} onPress={downloadTemplate} testID="dl-template-btn">
@@ -682,11 +715,13 @@ export default function CurriculumScreen() {
                   <TouchableOpacity
                     style={[styles.toolBtn, { backgroundColor: '#e1f5fe' }]}
                     onPress={() => generateOfferings()}
-                    disabled={generating || !activeSemester || !selectedDept}
+                    disabled={generating || !targetSemesterId || !selectedDept}
                     testID="gen-offerings-btn"
                   >
                     {generating ? <ActivityIndicator size="small" color="#0277bd" /> : <Ionicons name="play-circle" size={18} color="#0277bd" />}
-                    <Text style={[styles.toolBtnText, { color: '#0277bd' }]}>توليد للفصل النشط</Text>
+                    <Text style={[styles.toolBtnText, { color: '#0277bd' }]}>
+                      {targetSemesterId === (activeSemester?.id || activeSemester?._id) ? 'توليد للفصل النشط' : 'توليد للفصل المختار'}
+                    </Text>
                   </TouchableOpacity>
                 )}
                 {canManage && (
@@ -1565,6 +1600,9 @@ const styles = StyleSheet.create({
   toolBtnText: { fontSize: 13, fontWeight: '700' },
   semInfo: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#e3f2fd', padding: 10, borderRadius: 8, marginTop: 12 },
   semInfoText: { color: '#1565c0', fontSize: 12, fontWeight: '600' },
+  targetSemWrap: { marginBottom: 14, backgroundColor: '#f7fbff', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: '#e1f0fa' },
+  targetSemLabel: { fontSize: 12.5, fontWeight: '700', color: '#0277bd', textAlign: 'right', marginBottom: 8 },
+  targetSemHint: { fontSize: 11, color: '#607d8b', textAlign: 'right', marginTop: 6, lineHeight: 16 },
 
   // Grid card
   gridCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },

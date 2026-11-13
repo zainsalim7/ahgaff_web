@@ -386,10 +386,29 @@ export default function CourseLecturesScreen() {
         setServerStats(lecturesRes.data.stats);
       }
       
-      // محاولة جلب تواريخ الفصل من الإعدادات
-      let semStart = settingsRes.data.semester_start_date;
-      let semEnd = settingsRes.data.semester_end_date;
-      let semName = settingsRes.data.current_semester || 'الفصل الحالي';
+      // 🆕 أولوية قصوى: تواريخ الفصل الذي ينتمي إليه هذا المقرر تحديداً (وليس الفصل النشط دائماً)
+      // يضمن توليد محاضرات صحيحة لمقرر محضَّر مسبقاً لفصل قادم (غير نشط بعد) دون تسلل بين الفصلين
+      let semStart: string | undefined, semEnd: string | undefined, semName: string | undefined;
+      const courseSemesterId = courseRes?.data?.semester_id || course?.semester_id;
+      if (page === 1 && courseSemesterId) {
+        try {
+          const allSemsRes = await api.get('/semesters');
+          const allSems = allSemsRes.data?.items || allSemsRes.data || [];
+          const courseSem = (Array.isArray(allSems) ? allSems : []).find((s: any) => (s.id || s._id) === courseSemesterId);
+          if (courseSem) {
+            semStart = courseSem.start_date;
+            semEnd = courseSem.end_date;
+            semName = courseSem.name;
+          }
+        } catch (e) {
+          console.log('Error fetching course semester:', e);
+        }
+      }
+      
+      // محاولة جلب تواريخ الفصل من الإعدادات (fallback إن لم نحصل على تواريخ فصل المقرر مباشرة)
+      semStart = semStart || settingsRes.data.semester_start_date;
+      semEnd = semEnd || settingsRes.data.semester_end_date;
+      semName = semName || settingsRes.data.current_semester || 'الفصل الحالي';
       
       // إذا لم تكن التواريخ متوفرة، جلب من الفصل النشط مباشرة
       if (!semStart || !semEnd) {
