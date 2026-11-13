@@ -78,7 +78,8 @@ export default function CurriculumScreen() {
         setFaculties(f.data?.items || f.data || []);
         const sems = s.data?.items || s.data || [];
         const semsList = Array.isArray(sems) ? sems : [];
-        setAllSemesters(semsList.filter((x: any) => x.status !== 'archived'));
+        // 🆕 أهداف توليد صالحة فقط: النشط + القادم (نستبعد المغلق/المؤرشف لتفادي توليد مقررات لفصل منتهٍ)
+        setAllSemesters(semsList.filter((x: any) => x.status === 'active' || x.status === 'upcoming'));
         const active = semsList.find((x: any) => x.status === 'active') || semsList[0];
         setActiveSemester(active);
         setTargetSemesterId(active?.id || active?._id || '');
@@ -182,10 +183,11 @@ export default function CurriculumScreen() {
       return;
     }
     const semName = targetSem.name || targetSem._id;
+    const semLabel = `${semName}${targetSem.academic_year ? ` (${targetSem.academic_year})` : ''}`;
     const isActiveTarget = (targetSem.id || targetSem._id) === (activeSemester?.id || activeSemester?._id);
     const termLabel = term === 1 ? 'الفصل الأول' : term === 2 ? 'الفصل الثاني' : term === 3 ? 'الفصل الصيفي' : 'كل الفصول';
     const ok = Platform.OS === 'web'
-      ? window.confirm(`توليد جلسات (${termLabel}) من خطة هذا القسم لفصل "${semName}"${isActiveTarget ? ' (النشط)' : ' (غير نشط حالياً — آمن تماماً، لن يؤثر على الفصل النشط)'}؟`)
+      ? window.confirm(`توليد جلسات (${termLabel}) من خطة هذا القسم لفصل "${semLabel}"${isActiveTarget ? ' (النشط)' : ' (غير نشط حالياً — آمن تماماً، لن يؤثر على الفصل النشط)'}؟`)
       : true;
     if (!ok) return;
     setGenerating(true);
@@ -677,14 +679,17 @@ export default function CurriculumScreen() {
                       {allSemesters.map((s: any) => {
                         const sid = s.id || s._id;
                         const isActive = sid === (activeSemester?.id || activeSemester?._id);
-                        return <Picker.Item key={sid} label={`${s.name}${isActive ? ' (نشط)' : ' (غير نشط)'}`} value={sid} />;
+                        const yearSuffix = s.academic_year ? ` ${s.academic_year}` : '';
+                        return <Picker.Item key={sid} label={`${s.name}${yearSuffix} ${isActive ? '(نشط)' : '(غير نشط)'}`} value={sid} />;
                       })}
                     </Picker>
                     <Ionicons name="chevron-down" size={16} color="#8a95a8" style={{ marginHorizontal: 8 }} />
                   </View>
-                  <Text style={styles.targetSemHint}>
-                    التوليد لفصل غير نشط آمن تماماً — مقرراته منعزلة بالكامل عن الفصل النشط حتى يُفعَّل لاحقاً
-                  </Text>
+                  {targetSemesterId !== (activeSemester?.id || activeSemester?._id) && (
+                    <Text style={styles.targetSemHint}>
+                      التوليد لفصل غير نشط آمن تماماً — مقرراته منعزلة بالكامل عن الفصل النشط حتى يُفعَّل لاحقاً
+                    </Text>
+                  )}
                 </View>
               )}
               <View style={styles.toolbarGrid}>

@@ -9461,11 +9461,15 @@ async def create_lecture(
         if group_teacher_id:
             lecture["teacher_id"] = group_teacher_id
 
-    # ربط المحاضرة الجديدة بالفصل الدراسي المُفعَّل
-    active_sem_for_lec = await get_active_semester_with_dates(db)
-    if active_sem_for_lec:
-        lecture["semester_id"] = active_sem_for_lec["id"]
-        lecture["semester_name"] = active_sem_for_lec["name"]
+    # ربط المحاضرة الجديدة بفصل المقرر نفسه (وليس الفصل النشط دائماً) لمنع تسرّب المحاضرات بين الفصول
+    if course.get("semester_id"):
+        lecture["semester_id"] = course["semester_id"]
+        lecture["semester_name"] = course.get("semester_name") or ""
+    else:
+        active_sem_for_lec = await get_active_semester_with_dates(db)
+        if active_sem_for_lec:
+            lecture["semester_id"] = active_sem_for_lec["id"]
+            lecture["semester_name"] = active_sem_for_lec["name"]
 
     try:
         result = await db.lectures.insert_one(lecture)
@@ -9614,6 +9618,9 @@ async def generate_semester_lectures(
             "created_at": get_yemen_time(),
             "created_by": current_user["id"]
         }
+        if course.get("semester_id"):
+            lecture["semester_id"] = course["semester_id"]
+            lecture["semester_name"] = course.get("semester_name") or ""
         try:
             await db.lectures.insert_one(lecture)
             lectures_created += 1
@@ -9988,6 +9995,9 @@ async def generate_semester_lectures_advanced(
                     "created_at": get_yemen_time(),
                     "created_by": current_user["id"]
                 }
+                if course.get("semester_id"):
+                    lecture["semester_id"] = course["semester_id"]
+                    lecture["semester_name"] = course.get("semester_name") or ""
                 if gen_group:
                     lecture["group"] = gen_group
                     lecture["group_name"] = (gen_group_def or {}).get("name") or f"مجموعة {gen_group}"

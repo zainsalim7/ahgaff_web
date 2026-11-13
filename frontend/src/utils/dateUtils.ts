@@ -8,6 +8,23 @@
 export const ADEN_TIMEZONE = 'Asia/Aden';
 export const TIMEZONE_OFFSET = 3; // +3 hours
 
+// 🆕 تطبيع تاريخ الفصل من D-M-YYYY (صيغة قديمة) إلى YYYY-MM-DD (يطابق normalize_semester_date في الباك إند)
+export function normalizeSemesterDate(d?: string | null): string | undefined {
+  if (!d || typeof d !== 'string') return undefined;
+  const s = d.trim();
+  if (s.length === 10 && s[4] === '-' && s[7] === '-') return s;
+  const parts = s.split('-');
+  if (parts.length === 3) {
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const year = parseInt(parts[2], 10);
+    if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+      return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+  }
+  return undefined;
+}
+
 // أسماء الأشهر الميلادية بالعربية
 export const GREGORIAN_MONTHS_AR = [
   'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',

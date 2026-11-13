@@ -29,7 +29,7 @@ import { suggestEndTime } from '../src/utils/timeFormat';
 import { useAuthStore } from '../src/store/authStore';
 import { CourseTabBar } from '../src/components/CourseTabBar';
 import { PERMISSIONS } from '../src/contexts/AuthContext';
-import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR, getAdenTimestamp, getAdenDate } from '../src/utils/dateUtils';
+import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR, getAdenTimestamp, getAdenDate, normalizeSemesterDate } from '../src/utils/dateUtils';
 import { goBack, goHome } from '../src/utils/navigation';
 
 interface Lecture {
@@ -389,6 +389,7 @@ export default function CourseLecturesScreen() {
       // 🆕 أولوية قصوى: تواريخ الفصل الذي ينتمي إليه هذا المقرر تحديداً (وليس الفصل النشط دائماً)
       // يضمن توليد محاضرات صحيحة لمقرر محضَّر مسبقاً لفصل قادم (غير نشط بعد) دون تسلل بين الفصلين
       let semStart: string | undefined, semEnd: string | undefined, semName: string | undefined;
+      let courseSemFound = false;
       const courseSemesterId = courseRes?.data?.semester_id || course?.semester_id;
       if (page === 1 && courseSemesterId) {
         try {
@@ -396,8 +397,10 @@ export default function CourseLecturesScreen() {
           const allSems = allSemsRes.data?.items || allSemsRes.data || [];
           const courseSem = (Array.isArray(allSems) ? allSems : []).find((s: any) => (s.id || s._id) === courseSemesterId);
           if (courseSem) {
-            semStart = courseSem.start_date;
-            semEnd = courseSem.end_date;
+            courseSemFound = true;
+            // تطبيع صيغة التاريخ القديمة D-M-YYYY إلى YYYY-MM-DD التي يقبلها حقل input type=date
+            semStart = normalizeSemesterDate(courseSem.start_date);
+            semEnd = normalizeSemesterDate(courseSem.end_date);
             semName = courseSem.name;
           }
         } catch (e) {
@@ -405,22 +408,24 @@ export default function CourseLecturesScreen() {
         }
       }
       
-      // محاولة جلب تواريخ الفصل من الإعدادات (fallback إن لم نحصل على تواريخ فصل المقرر مباشرة)
-      semStart = semStart || settingsRes.data.semester_start_date;
-      semEnd = semEnd || settingsRes.data.semester_end_date;
-      semName = semName || settingsRes.data.current_semester || 'الفصل الحالي';
-      
-      // إذا لم تكن التواريخ متوفرة، جلب من الفصل النشط مباشرة
-      if (!semStart || !semEnd) {
-        try {
-          const currentSemRes = await api.get('/semesters/current');
-          if (currentSemRes.data) {
-            semStart = semStart || currentSemRes.data.start_date;
-            semEnd = semEnd || currentSemRes.data.end_date;
-            semName = semName || currentSemRes.data.name;
+      // ⚠️ إن وُجد فصل المقرر صراحةً، لا نرجع لتواريخ الإعدادات العامة/الفصل النشط حتى لو كانت تواريخه فارغة
+      // (تجنّباً لرجوع خطر تسرّب تواريخ فصل آخر لمقرر فصل مختلف) — تبقى الحقول فارغة ليملأها المستخدم يدوياً
+      if (!courseSemFound) {
+        semStart = settingsRes.data.semester_start_date;
+        semEnd = settingsRes.data.semester_end_date;
+        semName = settingsRes.data.current_semester || 'الفصل الحالي';
+        
+        if (!semStart || !semEnd) {
+          try {
+            const currentSemRes = await api.get('/semesters/current');
+            if (currentSemRes.data) {
+              semStart = semStart || currentSemRes.data.start_date;
+              semEnd = semEnd || currentSemRes.data.end_date;
+              semName = semName || currentSemRes.data.name;
+            }
+          } catch (e) {
+            console.log('Error fetching current semester:', e);
           }
-        } catch (e) {
-          console.log('Error fetching current semester:', e);
         }
       }
       

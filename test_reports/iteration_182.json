@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the upcoming-semester preparation flow end to end in the UI (admin), plus a small backend isolation test. (1) Settings > الفصول: created 'الفصل الثاني' 2026-2027, term=2, 2026-09-01→2027-01-15 through the UI. It was saved as status=upcoming (badge 'قادم') and the active semester was untouched. Note: the name can only be one of 3 preset buttons, so a free-text name like 'فصل اختبار قادم' is not possible. (2) /curriculum with faculty كلية الشريعة والقانون + dept الشريعة والقانون: 'الفصل المستهدف بالتوليد' (target-semester-picker) appears, lists all non-archived semesters with (نشط)/(غير نشط), and defaults to the active semester. Selecting the upcoming semester changes the button label to 'توليد للفصل المختار'. The confirm dialog names the chosen semester and says '(غير نشط حالياً — آمن تماماً...)'. Result: 'تم إنشاء 2 جلسة، تخطي 0' (FIB102, NAH102), both tagged with the upcoming semester_id. The active semester's course count for the department did not change. Running it again gave 0 created / 2 skipped (idempotent). (3) Switching back to the active semester restores the label 'توليد للفصل النشط'. Generating for the active semester still works: confirm says '(النشط)', result 0 created / 1 skipped, no regression. (4) course-lectures generate modal: for the upcoming-semester course the dates prefill 2026-09-01 / 2027-01-15, which is the course's own semester. This is the key fix and it PASSES. For an active-semester course (MTC1) the dates prefill 2025-12-20 / 2026-05-07, same as before (PASS). (5) Found by code review and confirmed with an API test: the backend still mixes semesters when adding lectures (see critical issues). Cleanup: deleted the test lecture, the 2 generated courses and the test semester (all confirmed 0 left in the DB).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/lectures (backend/backend/server.py ~L9464-9468)", "issue": "A lecture added manually is always tagged with the ACTIVE semester (get_active_semester_with_dates), not the course's own semester_id. Reproduced: a lecture added to course FIB102 of the upcoming semester got semester_id=6a21bee0 (active, 'الفصل الصيفي 2024-2025'). Because GET /api/lectures/{course_id} scopes results by the course's semester, the new lecture does NOT show up on that course's own lectures page. It does count under the active semester instead. Archiving the active semester (POST /semesters/{id}/archive, which runs delete_many({semester_id})) would then delete lectures that belong to the upcoming semester. This is exactly the leakage the user wants to avoid.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/lectures/generate-semester (server.py ~L9978)", "issue": "Lectures created here have NO semester_id at all. weekly-schedule/generate-lectures sets it from the course, so behaviour is inconsistent. The archive flow uses lectures.semester_id first and falls back to course_id only when that returns nothing, so untagged lectures can be skipped. Set lecture['semester_id'] = course['semester_id'] (and semester_name)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "course-lectures generate modal date prefill", "issue": "Legacy semesters store dates as D-M-YYYY (e.g. closed 'الفصل الثاني' 698e5cc5…: '20-12-2025'/'7-5-2026'). The new code passes the raw course-semester dates to <input type=date>, which only accepts ISO dates, so for courses of that semester (e.g. 6aca3346a95d016d773e45e9 FQ101) both date fields are now EMPTY. Before this session they were prefilled from the settings dates. Normalize to YYYY-MM-DD, like the backend's normalize_semester_date, or read the normalized dates the backend already computes in GET /lectures/{course_id}.", "selector": "[data-testid='generate-lectures-modal'] input[type=date]", "priority": "MEDIUM"},
+      {"component": "curriculum target-semester-picker", "issue": "Option labels show only s.name, so two different semesters both read 'الفصل الثاني (غير نشط)': the new 2026-2027 one and the closed 2026-2025 one. The confirm dialog also shows only 'الفصل الثاني'. Users cannot tell which is which. Add academic_year (and status: قادم/منتهي) to the label and to the confirm text.", "selector": "[data-testid='target-semester-picker']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/curriculum إجراءات الخطة", "issues": ["The hint 'التوليد لفصل غير نشط آمن تماماً…' is always shown, even when the active semester is selected. It should appear only when a non-active semester is picked.", "Closed (status=closed) semesters are offered as generation targets. Consider listing only active/upcoming semesters, or marking closed ones clearly.", "The picker shows a double chevron (native select arrow plus an Ionicons chevron), the same as the other pickers."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_upcoming_semester_isolation.py", "/app/test_reports/pytest/pytest_upcoming_sem.xml"],
+  "action_items": [
+    "HIGH: POST /api/lectures must tag the lecture with the course's semester_id/semester_name (fall back to active only if the course has none). This is the remaining cross-semester leakage.",
+    "Set semester_id from the course in POST /api/lectures/generate-semester.",
+    "course-lectures.tsx: normalize the course-semester start/end dates to YYYY-MM-DD before setSemesterSettings (legacy D-M-YYYY dates leave the inputs blank).",
+    "curriculum.tsx: include academic_year/status in picker labels and the confirm message; show the safety hint only for non-active targets; consider hiding closed semesters."
+  ],
+  "critical_code_review_comments": [
+    "course-lectures.tsx fetchData: if the course's semester is found but has null dates, it silently falls back to the active semester's settings dates. That brings back the old risk for upcoming semesters created without dates. Better to leave the fields empty or show a warning in that case.",
+    "curriculum.tsx is 1733 lines and course-lectures.tsx is 3137 lines. Both should be split.",
+    "The semester modal term buttons use a data-testid prop on TouchableOpacity, which does not render on RN Web. Use testID instead (semester-term-btn-* is not selectable)."
+  ],
+  "updated_files": ["/app/backend/tests/test_upcoming_semester_isolation.py"],
+  "success_rate": {"backend": "50% (1/2 isolation tests; manual-lecture semester tagging fails)", "frontend": "100% of the requested scenarios pass (8/8). 2 new medium issues found."},
+  "seed_data_creation": "None kept. Created and then deleted: semester 6af783c2892cc999e575ac37, courses 6af78406892cc999e575ac3b/3c, lecture 6af784eb892cc999e575ac42, plus pytest-created TEST_ semester/courses/lecture (self-cleaned, verified 0 left).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Real backend code is in /app/backend/backend/server.py (/app/backend/server.py is a loader). Server 'today' is ~2026-11-13, so upcoming-semester test dates must be in the future (POST /lectures rejects past dates). RN Picker renders as <select>: use select_option on curriculum-faculty-picker (698e4f9297fef774e66e93a4), curriculum-department-picker (698e500997fef774e66e93a8), target-semester-picker. The course-lectures generate button has no testID (text 'توليد تلقائي'). The modal is [data-testid=generate-lectures-modal]. Active semester 6a21bee0… has null start/end; its dates come from /settings (2025-12-20→2026-05-07). Run: pytest tests/test_upcoming_semester_isolation.py -p no:xdist -o addopts=''.",
+  "rca of the issue": "Lecture leakage: create_lecture uses get_active_semester_with_dates(db) to set semester_id, while list/archive logic scopes lectures by the course's semester. Fix: look up course.semester_id (already loaded as `course`) and use it. Blank dates: legacy semester docs keep non-ISO dates. The backend normalizes them with normalize_semester_date, but the new frontend code reads the raw /semesters values."
+}
