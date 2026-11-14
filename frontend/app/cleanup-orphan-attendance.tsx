@@ -353,6 +353,22 @@ export default function CleanupOrphanAttendanceScreen() {
                         ))}
                       </View>
                     )}
+                    {r.lecture_change_history && r.lecture_change_history.length > 0 ? (
+                      <View style={{ marginTop: 6, borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 6 }} testID={`lecture-change-history-${r.attendance_id}`}>
+                        <Text style={styles.detailLineMuted}>سجل تغييرات هذه المحاضرة (من/إلى/بواسطة/متى):</Text>
+                        {r.lecture_change_history.map((ch: any, idx: number) => (
+                          <Text key={idx} style={styles.detailLineMuted}>
+                            • {ch.action} بواسطة {ch.by_name || '—'} في {ch.at}
+                            {Object.entries(ch.changes || {}).map(([field, fc]: any) => ` — ${field}: ${fc.from} ← ${fc.to}`).join('')}
+                            {ch.reason ? ` — السبب: ${ch.reason}` : ''}
+                          </Text>
+                        ))}
+                      </View>
+                    ) : r.lecture_exists ? (
+                      <Text style={[styles.detailLineMuted, { marginTop: 6 }]} testID={`lecture-change-history-empty-${r.attendance_id}`}>
+                        لا يوجد سجل تغييرات مسجَّل لهذه المحاضرة (لم تُعدَّل عبر شاشة "تعديل محاضرة" العادية — إن كان تاريخها قد تغيّر فعلياً فهذا يعني أن التغيير حدث عبر مسار آخر غير مُسجَّل).
+                      </Text>
+                    ) : null}
                   </View>
                 ))
               )

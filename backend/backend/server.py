@@ -10474,6 +10474,9 @@ async def attendance_lookup(
             "lecture_id": str(lec_id) if lec_id else "__none__",
             "student_id": str(r.get("student_id")),
         }).sort("requested_at", -1).to_list(10)
+        lecture_change_history = await db.lecture_change_log.find({
+            "lecture_id": str(lec_id) if lec_id else "__none__",
+        }).sort("at", 1).to_list(20) if lec_id else []
         c = courses_map.get(str(r.get("course_id", ""))) or {}
         s = students_map.get(str(r.get("student_id", ""))) or {}
         results.append({
@@ -10506,6 +10509,13 @@ async def attendance_lookup(
                 "reviewed_at": str(cr.get("reviewed_at", "")) if cr.get("reviewed_at") else None,
                 "review_notes": cr.get("review_notes"),
             } for cr in change_requests],
+            "lecture_change_history": [{
+                "action": ch.get("action"),
+                "changes": {k: {"from": str(v.get("from")), "to": str(v.get("to"))} for k, v in (ch.get("changes") or {}).items()},
+                "reason": ch.get("reason"),
+                "by_name": ch.get("by_name"),
+                "at": str(ch.get("at", "")),
+            } for ch in lecture_change_history],
         })
 
     return {"students_matched": len(students), "results": results}
