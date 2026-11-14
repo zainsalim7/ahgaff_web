@@ -77,6 +77,8 @@ export default function CleanupOrphanAttendanceScreen() {
   // 🆕 فحص شامل تجريبي (Dry Run) لكل سجلات الحضور الوهمية في الجامعة
   const [ghostScan, setGhostScan] = useState<any | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [fixing, setFixing] = useState(false);
+  const [fixResult, setFixResult] = useState<any | null>(null);
 
   const isAdmin = user?.role === 'admin';
 
@@ -136,12 +138,33 @@ export default function CleanupOrphanAttendanceScreen() {
     try {
       setScanning(true);
       setGhostScan(null);
+      setFixResult(null);
       const r = await api.get('/admin/attendance-diagnostics/ghost-date-scan');
       setGhostScan(r.data);
     } catch (e: any) {
       showAlert('خطأ', e?.response?.data?.detail || 'تعذر إجراء الفحص الشامل');
     } finally {
       setScanning(false);
+    }
+  };
+
+  const runGhostFix = async () => {
+    if (!ghostScan || ghostScan.mismatched_total <= 0) return;
+    const ok = await askConfirm(
+      'تأكيد التصحيح الفعلي',
+      `سيتم تصحيح تاريخ ${ghostScan.mismatched_total} سجل حضور ليطابق تاريخ محاضرته الحقيقي.\n\nلن تتغيّر حالة أي طالب (حاضر/غائب) إطلاقاً — فقط حقل التاريخ.\n\nهذه العملية لا يمكن التراجع عنها. هل أنت متأكد؟`,
+    );
+    if (!ok) return;
+    try {
+      setFixing(true);
+      const r = await api.post('/admin/attendance-diagnostics/ghost-date-fix', null, { params: { confirm: true } });
+      setFixResult(r.data);
+      showAlert('تمت العملية', `تم تصحيح تاريخ ${r.data.fixed} سجل حضور بنجاح`);
+      await runGhostScan();
+    } catch (e: any) {
+      showAlert('خطأ', e?.response?.data?.detail || 'فشل التصحيح');
+    } finally {
+      setFixing(false);
     }
   };
 
@@ -451,6 +474,34 @@ export default function CleanupOrphanAttendanceScreen() {
                         أكثر المقررات تأثراً: {ghostScan.breakdown.top_courses.map((c: any) => `${c.course_name || c.course_id} (${c.count})`).join(' — ')}
                       </Text>
                     )}
+                  </View>
+                )}
+
+                {ghostScan.mismatched_total > 0 && (
+                  <View style={[styles.warningBox, { marginTop: 10 }]}>
+                    <Ionicons name="construct" size={20} color="#e65100" />
+                    <Text style={styles.warningText}>
+                      التصحيح يُعدِّل حقل التاريخ فقط لكل سجل — لن تتغيّر حالة أي طالب (حاضر/غائب) إطلاقاً.
+                    </Text>
+                  </View>
+                )}
+                {ghostScan.mismatched_total > 0 && (
+                  <TouchableOpacity
+                    style={[styles.btn, styles.btnDanger, { marginTop: 10 }, fixing && { opacity: 0.6 }]}
+                    onPress={runGhostFix}
+                    disabled={fixing}
+                    testID="run-ghost-date-fix-btn"
+                  >
+                    {fixing ? <ActivityIndicator color="#fff" /> : <Ionicons name="build" size={18} color="#fff" />}
+                    <Text style={styles.btnText}>
+                      {fixing ? 'جارٍ التصحيح... قد يستغرق دقيقة' : `تنفيذ التصحيح الفعلي الآن (${ghostScan.mismatched_total} سجل)`}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {fixResult && (
+                  <View style={[styles.statCard, { marginTop: 10, backgroundColor: '#e8f5e9' }]} testID="ghost-date-fix-result">
+                    <Text style={[styles.statValue, { color: '#2e7d32' }]}>{fixResult.fixed}</Text>
+                    <Text style={styles.statLabel}>سجل تم تصحيح تاريخه بنجاح</Text>
                   </View>
                 )}
                 {ghostScan.sample.map((m: any) => (

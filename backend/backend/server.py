@@ -19,6 +19,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
+from pymongo import UpdateOne
 import json
 import pandas as pd
 from io import BytesIO
@@ -10518,15 +10519,9 @@ async def attendance_lookup(
 
     return {"students_matched": len(students), "results": results}
 
-@api_router.get("/admin/attendance-diagnostics/ghost-date-scan")
-async def ghost_date_scan(limit_sample: int = 300, current_user: dict = Depends(get_current_user)):
-    """🔎 فحص تجريبي (Dry Run — قراءة فقط، لا تعديل) لكل سجلات الحضور في الجامعة: يقارن تاريخ كل سجل
-    (attendance.date) بتاريخ محاضرته الحقيقي (lecture.date+start_time) ويُبلّغ عن كل اختلاف في اليوم
-    التقويمي — وهي بالضبط حالات «الحضور الوهمي» (تاريخ المحاضرة تغيَّر أو حُضِّرت متأخراً بتاريخ تنفيذ
-    العملية بدل تاريخها الفعلي، قبل إصلاح 14 نوفمبر 2026). لا يُعدِّل أي بيانات."""
-    if current_user.get("role") != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
-
+async def _find_ghost_date_mismatches(db):
+    """مَسح مشترك (يُستخدَم في الفحص التجريبي والتصحيح الفعلي): يُرجِع (scanned_count, mismatched_list)
+    حيث كل عنصر في mismatched يحمل أيضاً lec_dt (datetime فعلي، وليس نصاً فقط) لاستخدامه مباشرة في التصحيح."""
     cursor = db.attendance.find(
         {"lecture_id": {"$exists": True, "$nin": [None, ""]}},
         {"lecture_id": 1, "course_id": 1, "student_id": 1, "status": 1, "date": 1, "method": 1},
@@ -10563,6 +10558,7 @@ async def ghost_date_scan(limit_sample: int = 300, current_user: dict = Depends(
                     "method": r.get("method"),
                     "stored_date": att_date_yemen.strftime("%Y-%m-%d %H:%M"),
                     "lecture_actual_date": lec_dt.strftime("%Y-%m-%d %H:%M"),
+                    "lec_dt": lec_dt,
                     "days_diff": abs((att_date_yemen.date() - lec_dt.date()).days),
                 })
 
@@ -10572,6 +10568,19 @@ async def ghost_date_scan(limit_sample: int = 300, current_user: dict = Depends(
             await _process_batch(batch)
             batch = []
     await _process_batch(batch)
+    return scanned, mismatched
+
+
+@api_router.get("/admin/attendance-diagnostics/ghost-date-scan")
+async def ghost_date_scan(limit_sample: int = 300, current_user: dict = Depends(get_current_user)):
+    """🔎 فحص تجريبي (Dry Run — قراءة فقط، لا تعديل) لكل سجلات الحضور في الجامعة: يقارن تاريخ كل سجل
+    (attendance.date) بتاريخ محاضرته الحقيقي (lecture.date+start_time) ويُبلّغ عن كل اختلاف في اليوم
+    التقويمي — وهي بالضبط حالات «الحضور الوهمي» (تاريخ المحاضرة تغيَّر أو حُضِّرت متأخراً بتاريخ تنفيذ
+    العملية بدل تاريخها الفعلي، قبل إصلاح 14 نوفمبر 2026). لا يُعدِّل أي بيانات."""
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+
+    scanned, mismatched = await _find_ghost_date_mismatches(db)
 
     # 📊 تحليل توزيع الحالات المكتشفة (على كامل القائمة، وليس العيّنة فقط) — يساعد على تمييز:
     # هل السبب عمليات فردية متفرقة (مسجّل/إداري يحضّر محاضرات قديمة بصلاحية) أم حدث جماعي واحد
@@ -10607,6 +10616,7 @@ async def ghost_date_scan(limit_sample: int = 300, current_user: dict = Depends(
     for m in sample:
         m["student_name"] = students_map.get(m.get("student_id"), "")
         m["course_name"] = courses_map.get(m.get("course_id"), "")
+        m.pop("lec_dt", None)
 
     return {
         "dry_run": True,
@@ -10615,6 +10625,48 @@ async def ghost_date_scan(limit_sample: int = 300, current_user: dict = Depends(
         "sample_returned": len(sample),
         "breakdown": breakdown,
         "sample": sample,
+    }
+
+
+@api_router.post("/admin/attendance-diagnostics/ghost-date-fix")
+async def ghost_date_fix(confirm: bool = False, current_user: dict = Depends(get_current_user)):
+    """✍️ تصحيح فعلي (يكتب في قاعدة البيانات): يُصحِّح حقل attendance.date فقط لكل سجل مكتشف بنفس منطق
+    الفحص التجريبي، ليطابق تاريخ ووقت محاضرته الحقيقي (lecture.date+start_time بتوقيت اليمن) — لا يُغيّر
+    status أو أي حقل آخر إطلاقاً. يتطلب confirm=true صراحةً. يُنفَّذ بالدفعات (bulk_write) لتحمّل آلاف
+    السجلات دون بطء."""
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+    if not confirm:
+        raise HTTPException(status_code=400, detail="يتطلب confirm=true صراحةً لتنفيذ التصحيح الفعلي")
+
+    scanned, mismatched = await _find_ghost_date_mismatches(db)
+
+    fixed = 0
+    BATCH_SIZE = 1000
+    for i in range(0, len(mismatched), BATCH_SIZE):
+        chunk = mismatched[i:i + BATCH_SIZE]
+        ops = [
+            UpdateOne({"_id": ObjectId(m["attendance_id"])}, {"$set": {"date": m["lec_dt"], "date_corrected_at": get_yemen_time(), "date_corrected_by": current_user["id"]}})
+            for m in chunk
+        ]
+        if ops:
+            result = await db.attendance.bulk_write(ops, ordered=False)
+            fixed += result.modified_count
+
+    await log_activity(
+        current_user,
+        "ghost_attendance_date_fix",
+        entity_type="attendance",
+        entity_id=None,
+        entity_name="Ghost attendance date repair",
+        details={"scanned_total": scanned, "mismatched_found": len(mismatched), "fixed": fixed},
+    )
+
+    return {
+        "scanned_total": scanned,
+        "mismatched_found": len(mismatched),
+        "fixed": fixed,
+        "message": f"تم تصحيح تاريخ {fixed} سجل حضور ليطابق تاريخ محاضرته الحقيقي",
     }
 
 
