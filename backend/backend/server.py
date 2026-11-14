@@ -10428,11 +10428,11 @@ async def attendance_lookup(
     if current_user.get("role") != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
 
-    q = student_query.strip()
+    q = _re.escape(student_query.strip())
     student_filter = {"$or": [
         {"full_name": {"$regex": q, "$options": "i"}},
-        {"student_id": q},
-        {"reference_number": q},
+        {"student_id": student_query.strip()},
+        {"reference_number": student_query.strip()},
     ]}
     students = await db.students.find(student_filter, {"full_name": 1, "student_id": 1, "reference_number": 1}).to_list(20)
     if not students:
@@ -10445,16 +10445,14 @@ async def attendance_lookup(
     if date_from or date_to:
         date_cond = {}
         if date_from:
-            date_cond["$gte"] = date_from
+            date_cond["$gte"] = yemen_day_utc_bounds(datetime.strptime(date_from, "%Y-%m-%d"))[0]
         if date_to:
-            date_cond["$lte"] = date_to + "T23:59:59"
-        att_filter["$or"] = [
-            {"date": date_cond},
-        ]
+            date_cond["$lte"] = yemen_day_utc_bounds(datetime.strptime(date_to, "%Y-%m-%d"))[1]
+        att_filter["date"] = date_cond
     att_records = await db.attendance.find(att_filter).sort("date", -1).to_list(100)
 
     if course_query:
-        cq = course_query.strip()
+        cq = _re.escape(course_query.strip())
         matching_courses = await db.courses.find({"$or": [
             {"name": {"$regex": cq, "$options": "i"}}, {"code": {"$regex": cq, "$options": "i"}}
         ]}, {"_id": 1}).to_list(50)
@@ -10519,6 +10517,81 @@ async def attendance_lookup(
         })
 
     return {"students_matched": len(students), "results": results}
+
+@api_router.get("/admin/attendance-diagnostics/ghost-date-scan")
+async def ghost_date_scan(limit_sample: int = 300, current_user: dict = Depends(get_current_user)):
+    """🔎 فحص تجريبي (Dry Run — قراءة فقط، لا تعديل) لكل سجلات الحضور في الجامعة: يقارن تاريخ كل سجل
+    (attendance.date) بتاريخ محاضرته الحقيقي (lecture.date+start_time) ويُبلّغ عن كل اختلاف في اليوم
+    التقويمي — وهي بالضبط حالات «الحضور الوهمي» (تاريخ المحاضرة تغيَّر أو حُضِّرت متأخراً بتاريخ تنفيذ
+    العملية بدل تاريخها الفعلي، قبل إصلاح 14 نوفمبر 2026). لا يُعدِّل أي بيانات."""
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+
+    cursor = db.attendance.find(
+        {"lecture_id": {"$exists": True, "$nin": [None, ""]}},
+        {"lecture_id": 1, "course_id": 1, "student_id": 1, "status": 1, "date": 1, "method": 1},
+    )
+    scanned = 0
+    mismatched: list = []
+    batch: list = []
+    BATCH_SIZE = 1000
+
+    async def _process_batch(items: list):
+        nonlocal scanned
+        if not items:
+            return
+        scanned += len(items)
+        lec_ids = list({ObjectId(r["lecture_id"]) for r in items if r.get("lecture_id") and ObjectId.is_valid(r["lecture_id"])})
+        lectures_map = {str(l["_id"]): l async for l in db.lectures.find({"_id": {"$in": lec_ids}}, {"date": 1, "start_time": 1, "course_id": 1})} if lec_ids else {}
+        for r in items:
+            lec = lectures_map.get(str(r.get("lecture_id")))
+            att_date = r.get("date")
+            if not lec or not lec.get("date") or not isinstance(att_date, datetime):
+                continue
+            try:
+                lec_dt = datetime.strptime(f"{lec['date']} {lec.get('start_time', '00:00')}", "%Y-%m-%d %H:%M").replace(tzinfo=YEMEN_TIMEZONE)
+            except Exception:
+                continue
+            att_date_yemen = (att_date.replace(tzinfo=timezone.utc) if att_date.tzinfo is None else att_date).astimezone(YEMEN_TIMEZONE)
+            if att_date_yemen.date() != lec_dt.date():
+                mismatched.append({
+                    "attendance_id": str(r["_id"]),
+                    "student_id": r.get("student_id"),
+                    "course_id": r.get("course_id"),
+                    "lecture_id": r.get("lecture_id"),
+                    "status": r.get("status"),
+                    "method": r.get("method"),
+                    "stored_date": att_date_yemen.strftime("%Y-%m-%d %H:%M"),
+                    "lecture_actual_date": lec_dt.strftime("%Y-%m-%d %H:%M"),
+                    "days_diff": abs((att_date_yemen.date() - lec_dt.date()).days),
+                })
+
+    async for r in cursor:
+        batch.append(r)
+        if len(batch) >= BATCH_SIZE:
+            await _process_batch(batch)
+            batch = []
+    await _process_batch(batch)
+
+    # إثراء العينة المعروضة بأسماء الطلاب/المقررات
+    sample = mismatched[:limit_sample]
+    student_ids = list({m["student_id"] for m in sample if m.get("student_id")})
+    course_ids = list({ObjectId(m["course_id"]) for m in sample if m.get("course_id") and ObjectId.is_valid(m["course_id"])})
+    students_map = {str(s["_id"]): s.get("full_name", "") async for s in db.students.find({"_id": {"$in": [ObjectId(i) for i in student_ids if ObjectId.is_valid(i)]}}, {"full_name": 1})} if student_ids else {}
+    courses_map = {str(c["_id"]): c.get("name", "") async for c in db.courses.find({"_id": {"$in": course_ids}}, {"name": 1})} if course_ids else {}
+    for m in sample:
+        m["student_name"] = students_map.get(m.get("student_id"), "")
+        m["course_name"] = courses_map.get(m.get("course_id"), "")
+
+    return {
+        "dry_run": True,
+        "scanned_total": scanned,
+        "mismatched_total": len(mismatched),
+        "sample_returned": len(sample),
+        "sample": sample,
+    }
+
+
 
 
 @api_router.post("/admin/cleanup-orphan-attendance")
@@ -11812,10 +11885,11 @@ async def record_attendance_session(
                 status_code=400,
                 detail=f"انتهى وقت فتح التحضير (الحد الأقصى للتأخير {max_delay + ATTENDANCE_OPEN_GRACE_MINUTES} دقيقة، حتى الساعة {max_open_time.strftime('%H:%M')})"
             )
-        # تسجيل وقت بدء التحضير الفعلي
+        # تسجيل وقت بدء التحضير الفعلي = وقت المحاضرة نفسه (lecture_start) وليس وقت الضغط الفعلي
+        # (يمنع "محاضرة قديمة تُحضَّر متأخراً" من الظهور كأنها بدأت اليوم وفتح نافذة تعديل جديدة من اليوم)
         await db.lectures.update_one(
             {"_id": ObjectId(session.lecture_id)},
-            {"$set": {"attendance_started_at": check_time.isoformat()}}
+            {"$set": {"attendance_started_at": lecture_start.isoformat()}}
         )
     
     # === نهاية التحقق من القواعد ===

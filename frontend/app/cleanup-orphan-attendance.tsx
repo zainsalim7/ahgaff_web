@@ -74,6 +74,9 @@ export default function CleanupOrphanAttendanceScreen() {
   // 🆕 عرض تفصيلي آمن (قراءة فقط) لكل سجل يتيم: الطالب/المقرر/التاريخ
   const [details, setDetails] = useState<OrphanDetail[] | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
+  // 🆕 فحص شامل تجريبي (Dry Run) لكل سجلات الحضور الوهمية في الجامعة
+  const [ghostScan, setGhostScan] = useState<any | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   const isAdmin = user?.role === 'admin';
 
@@ -126,6 +129,19 @@ export default function CleanupOrphanAttendanceScreen() {
       showAlert('خطأ', e?.response?.data?.detail || 'تعذر البحث');
     } finally {
       setSearching(false);
+    }
+  };
+
+  const runGhostScan = async () => {
+    try {
+      setScanning(true);
+      setGhostScan(null);
+      const r = await api.get('/admin/attendance-diagnostics/ghost-date-scan');
+      setGhostScan(r.data);
+    } catch (e: any) {
+      showAlert('خطأ', e?.response?.data?.detail || 'تعذر إجراء الفحص الشامل');
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -372,6 +388,58 @@ export default function CleanupOrphanAttendanceScreen() {
                   </View>
                 ))
               )
+            )}
+          </View>
+
+          {/* 🆕 فحص شامل تجريبي (Dry Run) لكل سجلات الحضور الوهمية في الجامعة - قراءة فقط */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>فحص شامل للحضور الوهمي في كل الجامعة (تجريبي — Dry Run)</Text>
+            <Text style={styles.emptyText}>
+              يفحص كل سجلات الحضور ويقارن تاريخ كل سجل بتاريخ محاضرته الحقيقي، ويُبلّغ عن كل اختلاف دون
+              حذف أو تعديل أي شيء — لمعرفة الحجم الكامل لعطل "الحضور الوهمي" قبل أي تصحيح فعلي.
+            </Text>
+            <TouchableOpacity
+              style={[styles.btn, styles.btnSecondary, scanning && { opacity: 0.6 }]}
+              onPress={runGhostScan}
+              disabled={scanning}
+              testID="run-ghost-date-scan-btn"
+            >
+              {scanning ? <ActivityIndicator color="#1565c0" /> : <Ionicons name="search-circle" size={18} color="#1565c0" />}
+              <Text style={[styles.btnText, { color: '#1565c0' }]}>
+                {scanning ? 'جارٍ الفحص الشامل... قد يستغرق دقيقة' : 'بدء الفحص الشامل (Dry Run)'}
+              </Text>
+            </TouchableOpacity>
+
+            {ghostScan && (
+              <View style={{ marginTop: 14 }} testID="ghost-date-scan-results">
+                <View style={styles.statsGrid}>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statValue}>{ghostScan.scanned_total}</Text>
+                    <Text style={styles.statLabel}>إجمالي السجلات المفحوصة</Text>
+                  </View>
+                  <View style={[styles.statCard, ghostScan.mismatched_total > 0 && styles.statCardDanger]}>
+                    <Text style={[styles.statValue, ghostScan.mismatched_total > 0 && { color: '#c62828' }]}>
+                      {ghostScan.mismatched_total}
+                    </Text>
+                    <Text style={[styles.statLabel, ghostScan.mismatched_total > 0 && { color: '#c62828' }]}>
+                      سجل حضور وهمي (تاريخ مختلف عن محاضرته)
+                    </Text>
+                  </View>
+                </View>
+                {ghostScan.mismatched_total > 0 && (
+                  <Text style={[styles.emptyText, { marginTop: 6 }]}>
+                    يعرض أدناه عينة من أول {ghostScan.sample_returned} سجلاً من أصل {ghostScan.mismatched_total}. هذا فحص تجريبي فقط — لم يُعدَّل أي سجل.
+                  </Text>
+                )}
+                {ghostScan.sample.map((m: any) => (
+                  <View key={m.attendance_id} style={styles.detailCard} testID={`ghost-scan-row-${m.attendance_id}`}>
+                    <Text style={styles.detailLine}>الطالب: <Text style={styles.detailBold}>{m.student_name || m.student_id}</Text> — المقرر: <Text style={styles.detailBold}>{m.course_name || m.course_id}</Text></Text>
+                    <Text style={styles.detailLine}>الحالة: <Text style={styles.detailBold}>{m.status}</Text> — طريقة: {m.method}</Text>
+                    <Text style={[styles.detailLine, { color: '#c62828' }]}>التاريخ المسجَّل (الوهمي): <Text style={styles.detailBold}>{m.stored_date}</Text></Text>
+                    <Text style={[styles.detailLine, { color: '#2e7d32' }]}>تاريخ المحاضرة الحقيقي: <Text style={styles.detailBold}>{m.lecture_actual_date}</Text> (فرق {m.days_diff} يوماً)</Text>
+                  </View>
+                ))}
+              </View>
             )}
           </View>
 

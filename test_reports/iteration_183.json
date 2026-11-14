@@ -1,0 +1,36 @@
+{
+  "summary": "Tested the ghost-attendance date fix. Backend: 11 of 11 pytest checks pass against the public URL, and each one reads the attendance collection in MongoDB directly. (1) The registrar (with edit_attendance granted temporarily) recorded a 30-day-old lecture that was never opened. attendance.date was saved as the lecture's real date and start time (lecture.date + start_time, Yemen time), not today. created_at is today, and lecture.status became completed. (2) No regression for on-time saves. The admin recorded a lecture that started 2 minutes earlier, then re-edited it inside the edit window. A real teacher (teacher180156, set as course owner) recorded an on-time lecture. Both got 200, date equals the lecture start, and status became completed. The teacher still gets 400 on a 30-day-old lecture, so the time window is still enforced. (3) Offline sync inside the window: 200, and date equals the lecture start, not offline_recorded_at. (4) /attendance/single: date equals the lecture date and time, method is qr, and a duplicate gets 400. (5) Approval flow: the registrar's out-of-window edit created 2 pending requests. The admin approved both. The student who already had a record was updated in place (same _id, status changed, date unchanged). The student with no record got a new record with method approval_change and date equal to the lecture date, not the approval date. (6) /admin/attendance-lookup returns lecture_change_history (action, changes from/to, by_name, reason, at), returns an empty list for a lecture with no log, and returns 403 for non-admins. (7) Course detailed report with a date range, monthly-excel and course excel export all return 200 with valid xlsx files. Frontend: on /cleanup-orphan-attendance, searching a TEST student shows the history block (lecture-change-history-{id}) with from/to/by/reason, and the fallback message (lecture-change-history-empty-{id}) for a lecture with no log. All TEST data was deleted by id, and test_registrar's permissions were restored to ['manage_curriculum'].",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admin/attendance-lookup", "issue": "Existing bug, not from this session: the date_from/date_to filter compares the attendance.date datetime with plain strings ($gte '2026-10-01'). MongoDB does not match across BSON types, so any date filter returns results=[] (confirmed: students_matched=1, results=[]). The frontend does not send these parameters today, so only direct API use is affected. Fix: parse the dates into datetimes (Yemen time) before querying."},
+      {"endpoint": "GET /api/admin/attendance-lookup", "issue": "student_query is passed to $regex without re.escape, so characters such as '(' can cause a 500. Admin-only."},
+      {"endpoint": "POST /api/attendance/session", "issue": "When a registrar or admin with edit_attendance records an old lecture for the first time, lecture.attendance_started_at is still set to check_time (now), not the lecture start. This does not affect attendance.date, but the lecture looks as if attendance started today, and an edit window then reopens from today. Worth knowing; this is outside the requested scope."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/cleanup-orphan-attendance (diagnostic search)", "issues": ["The search button (attendance-lookup-search-btn) is clipped on desktop at 1920px: the label 'بحث' is cut to 'حث', so the button is too narrow.", "'تاريخ سجل الحضور' shows the raw UTC string ('2026-10-17 05:00:00' for an 08:00 Yemen lecture). This could confuse admins during diagnosis; format it in Yemen time.", "Change history shows raw action codes (for example manual_delete) and microsecond timestamps; consider Arabic labels and a formatted date."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_ghost_attendance_date_fix.py", "/app/backend/tests/ui183_lookup_setup.py", "/app/test_reports/pytest/pytest_ghost_attendance.xml"],
+  "action_items": [
+    "The fix only applies to new records. Ghost records already in production still have the wrong date. Consider an admin-only repair tool with a dry run: find attendance records whose date (in Yemen time) differs from their lecture's date, and set them to lecture.date + start_time.",
+    "Optional: fix the attendance-lookup date filter (string compared with datetime) and escape student_query in the regex.",
+    "Optional: widen the lookup search button and format attendance_date in Yemen time."
+  ],
+  "critical_code_review_comments": [
+    "All three write paths (session, single, approval insert) now use the lecture's date and start time with the Yemen timezone. The lecture_start calculation in record_attendance_session already happens before any branch, so there is no risk of an undefined variable.",
+    "_lecture_actual_date and the single-attendance path fall back to now if parsing fails, which is safe.",
+    "Edge case: dates are stored in UTC, so a lecture starting before 03:00 Yemen time would be stored on the previous UTC calendar day. This is unlikely for a university timetable.",
+    "server.py is more than 20k lines, far above the size guideline."
+  ],
+  "updated_files": ["/app/backend/tests/test_ghost_attendance_date_fix.py", "/app/backend/tests/ui183_lookup_setup.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (lookup history and empty state verified)"},
+  "seed_data_creation": "Temporary TEST_ data only: a course, students, lectures, attendance, change requests and one lecture_change_log entry. All were deleted by id after the run (0 remaining confirmed). test_registrar permissions were restored.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The real backend is /app/backend/backend/server.py. Run: cd /app/backend && REACT_APP_BACKEND_URL=<url> python -m pytest tests/test_ghost_attendance_date_fix.py -v. The test creates its own data, adds edit_attendance/record_attendance to test_registrar during the run, and cleans everything up. Admin does not get edit_attendance automatically (TEACHER_ONLY_PERMISSIONS). Server time is about 2026-11-14. For the UI, log in by setting localStorage 'token'/'user' from /api/auth/login. Use tests/ui183_lookup_setup.py setup|cleanup for lookup UI data."
+}
