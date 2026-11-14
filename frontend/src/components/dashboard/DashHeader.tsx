@@ -26,9 +26,10 @@ interface Props {
   canExport?: boolean;
   kicker?: string;
   scopeIcon?: keyof typeof Ionicons.glyphMap;
+  showPeriod?: boolean;
 }
 
-export const DashHeader = ({ userName, scopeLabel, semester, generatedAt, period, onPeriod, exporting, onExport, onRefresh, compact, readOnly, canExport = true, kicker = 'لوحة القيادة', scopeIcon = 'business-outline' }: Props) => {
+export const DashHeader = ({ userName, scopeLabel, semester, generatedAt, period, onPeriod, exporting, onExport, onRefresh, compact, readOnly, canExport = true, kicker = 'لوحة القيادة', scopeIcon = 'business-outline', showPeriod = true }: Props) => {
   const router = useRouter();
   return (
   <View style={styles.hero} testID="dash-header">
@@ -80,18 +81,20 @@ export const DashHeader = ({ userName, scopeLabel, semester, generatedAt, period
         </View>
       </View>
     </View>
-    <View style={styles.periodBar} testID="dash-period-bar">
-      {PERIODS.map((p) => (
-        <TouchableOpacity
-          key={p.key}
-          style={[styles.periodBtn, period === p.key && styles.periodActive]}
-          onPress={() => onPeriod(p.key)}
-          testID={`dash-period-${p.key}`}
-        >
-          <Text style={[styles.periodText, period === p.key && styles.periodTextActive]}>{p.label}</Text>
-        </TouchableOpacity>
-      ))}
-    </View>
+    {showPeriod && (
+      <View style={styles.periodBar} testID="dash-period-bar">
+        {PERIODS.map((p) => (
+          <TouchableOpacity
+            key={p.key}
+            style={[styles.periodBtn, period === p.key && styles.periodActive]}
+            onPress={() => onPeriod(p.key)}
+            testID={`dash-period-${p.key}`}
+          >
+            <Text style={[styles.periodText, period === p.key && styles.periodTextActive]}>{p.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    )}
   </View>
   );
 };

@@ -110,6 +110,10 @@ export const ManagementDashboard = () => {
 
   const onScope = (f: string, d: string) => { setFacultyId(f); setDepartmentId(d); };
 
+  const isHR = view === 'hr';
+  const isModules = view === 'modules';
+  const showHR = !!data?.sections?.hr;
+
   if (loading && !data) {
     return (
       <SafeAreaView style={styles.container}>
@@ -118,13 +122,16 @@ export const ManagementDashboard = () => {
     );
   }
 
-  if (error && !data) {
+  // 🔑 حتى لو فشل تحميل التحليلات الأكاديمية (403 لمستخدم بلا صلاحيات لوحة القيادة)، تبقى الوحدات متاحة
+  // لأنها مبنية فقط على صلاحيات المستخدم المحلية — لا تعتمد على استجابة /dashboard/management
+  if (error && !data && !isModules) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center} testID="dash-error">
           <Ionicons name="cloud-offline-outline" size={48} color="#cbd5e1" />
           <Text style={styles.errText}>{error}</Text>
           <TouchableOpacity style={styles.retry} onPress={() => load()} testID="dash-retry-btn"><Text style={styles.retryText}>إعادة المحاولة</Text></TouchableOpacity>
+          <DashViewTabs view={view} onChange={setView} showHR={false} />
         </View>
       </SafeAreaView>
     );
@@ -132,10 +139,6 @@ export const ManagementDashboard = () => {
 
   const semester = data?.semester?.name ? `${data.semester.name}` : '';
   const twoCol = width >= 1100;
-
-  const isHR = view === 'hr';
-  const isModules = view === 'modules';
-  const showHR = !!data?.sections?.hr;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -159,6 +162,7 @@ export const ManagementDashboard = () => {
           compact={compact}
           readOnly={!!data?.scope?.read_only}
           canExport={!isModules && data?.sections?.export !== false}
+          showPeriod={!isModules}
         />
         <View style={styles.filterRow}>
           {isHR ? (
@@ -170,12 +174,12 @@ export const ManagementDashboard = () => {
           ) : <View />}
           <DashViewTabs view={view} onChange={setView} showHR={showHR} />
         </View>
-        {!!error && <View style={styles.inlineErr} testID="dash-inline-error"><Text style={styles.inlineErrText}>{error}</Text></View>}
+        {!!error && !isModules && <View style={styles.inlineErr} testID="dash-inline-error"><Text style={styles.inlineErrText}>{error}</Text></View>}
         {(loading || hrLoading) && <View style={styles.overlay}><ActivityIndicator color={DASH.navy} /></View>}
         {isHR ? (
           hrData?.hr && <HRDashboardView data={hrData} compact={compact} width={Math.min(width, 1400) - 64} />
         ) : isModules ? (
-          data && <DashModulesGrid numbers={data.numbers} />
+          <DashModulesGrid numbers={data?.numbers} />
         ) : data && (
           <>
             <DashKpis n={data.numbers} periodLabel={data.period_label} compact={compact} />

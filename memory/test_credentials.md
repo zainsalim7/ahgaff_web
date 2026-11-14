@@ -15,6 +15,7 @@
 - custom_permissions: manage_fee_receipts (أُضيفت 2026-09 لاختبار نطاق السندات المالية)
 - 2026-10-06: أُضيفت صلاحيات HR (hr_view/manage_employees, hr_manage_org/leaves/attendance) + **hr_scope=UNITS على «كلية البنات»** لاختبار نطاق الوحدة — يرى موظف واحد (Saeed) فقط. لإلغاء: PUT /api/hr/users/698f71ba5c5620a4449eeb7e/scope {hr_scope:'ALL'}
 - 2026-10-06 (المرحلة ب): custom_permissions += hr_manage_tasks, hr_manage_appraisals (لاختبار نطاق المهام/التقييمات). سكربت الاختبار: `python3 backend/tests/test_hr_scope_stage_b.py`
+- 2026-11-14: ملاحظة اختبار — فُحص /auth/me وتبيّن أن Salim/Saeed ليس لديهما حالياً أي صلاحيات hr_* فعلية (custom_permissions=[])، رغم الملاحظات أعلاه. تبويب "شؤون الموظفين" وبطاقة "شؤون الموظفين" في لوحة الوحدات لن تظهر لهما حتى يُعاد ربط الصلاحيات.
 
 ## Department Head
 - Username: Saeed

@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend testing of the new 'الوحدات' (modules) metric-cards tab on ManagementDashboard. Admin: 3 tabs render, all 18 cards visible, core values match academic KPIs exactly (courses=12, students=91, teachers=15, departments=4), the other 14 cards show '—' with Arabic subtitles, all 18 cards route correctly (faculties goes to /general-settings for admin). Switching tabs makes no extra /dashboard/management calls (only HR tab calls /dashboard/management/hr as before). Saeed: 8 cards filtered by permission, values match KPIs (3/72/3), no hr-employees card because Saeed has no HR perms anymore (checked via /auth/me; test_credentials.md is out of date). Academic and HR tabs show no regression. MAIN ISSUE: test_registrar cannot reach the modules tab at all. /dashboard/management returns 403 for the registrar role, so ManagementDashboard shows the full-screen dash-error and never renders the tabs. When that API response was mocked to 200, the registrar's filtering was correct: courses, students, enrollments, manage-attendance, letters, reports and activity-logs showed, and trash, lecture-swaps and student-excuses stayed hidden. The empty state, checked by mocking permissions to [], renders correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ManagementDashboard / DashModulesGrid", "issue": "The modules grid can only be reached after /dashboard/management succeeds. Users with no dashboard_* section permissions (e.g. test_registrar, role=registrar) get a 403 'ليس لديك صلاحية عرض أي قسم في لوحة القيادة'. The early return `if (error && !data)` then shows the full-screen dash-error, so these users never see the tabs or the modules grid, even though the grid needs only client-side permissions. These are exactly the limited users the permission-filtered grid is meant for.", "selector": "[data-testid='dash-error']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Modules tab (desktop 1920)", "issues": ["Cards are width:'23%' with gap 14, so 4 cards don't fill the row. There is a visible ~55px empty strip on the left of the grid, and the grid doesn't line up with the header/tabs container. Use flex:1 with a basis, or calc widths that account for the gap."]},
+      {"screen": "Modules tab (mobile 390)", "issues": ["Cards are 23% wide with minWidth 190, so they render at about half the screen width, right-aligned with empty space on the left. Use full width or 2 columns on compact screens."]},
+      {"screen": "Modules tab header", "issues": ["The period selector (اليوم/الأسبوع/الشهر) still shows on the modules tab where it has no effect, and changing it refetches /dashboard/management. Consider hiding it when view==='modules'."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "HIGH: Let users without dashboard section permissions still reach the modules tab. Options: on a 403 from /dashboard/management, render the tabs plus DashModulesGrid with numbers undefined (cards show '—', or 0 for core keys) instead of the full-screen error, or default view='modules' for such users.",
+    "Note: when numbers is undefined, the core cards show '—'. If numbers exists but a key is missing, they show 0 (`numbers[key] ?? 0`). Make this consistent.",
+    "Fix the grid width/alignment on desktop and mobile (23% width + minWidth 190).",
+    "Optional: hide the period selector on the modules tab.",
+    "Update /app/memory/test_credentials.md: Saeed currently has NO hr_* permissions (custom_permissions=[]), so the HR tab and the hr-employees card don't show for him."
+  ],
+  "critical_code_review_comments": [
+    "ManagementDashboard.tsx: the early-return error branch hides the whole dashboard, including the permission-only modules tab. This is the root cause of the registrar issue.",
+    "DashModulesGrid: the departments card needs manage/view_departments. department_head (Saeed) lacks them, so his card is hidden even though numbers.departments=1 is returned. This may be intended.",
+    "DashModulesGrid: the faculties card for non-admins has an empty route, and the card does nothing when tapped. There is no visual cue that it isn't clickable.",
+    "Permission filtering mirrors SideMenu and keeps the RBAC fix intact (trash/swaps/excuses stay hidden for registrar)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A", "frontend": "85%"},
+  "seed_data_creation": "None. Playwright route mocking was used only inside the browser (mocked /dashboard/management 200 for test_registrar, mocked permissions [] for the empty state). No data was changed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login form has no testIDs: use input:not([type=password]), input[type=password], get_by_text('تسجيل الدخول').last. The registrar's 403 on /dashboard/management is the key issue to retest. Expected registrar cards: courses, students, enrollments, manage-attendance, letters, reports, activity-logs. Expected Saeed cards: courses, students, teachers, enrollments, manage-attendance, letters, reports, activity-logs.",
+  "rca of the issue": "test_registrar's role lacks the dashboard_* section permissions, so the backend returns 403 'ليس لديك صلاحية عرض أي قسم في لوحة القيادة'. In ManagementDashboard, `if (error && !data) return <dash-error/>` runs before the tabs render, so DashViewTabs and DashModulesGrid never mount. Reproduce: log in as test_registrar/test1234 and the home screen shows only the error and retry button. Fix: render the tabs and the modules grid in the 403/no-data case."
+}

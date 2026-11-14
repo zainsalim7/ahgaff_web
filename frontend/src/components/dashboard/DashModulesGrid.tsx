@@ -84,9 +84,10 @@ export const DashModulesGrid = ({ numbers }: { numbers?: Numbers }) => {
         return (
           <TouchableOpacity
             key={m.id}
-            style={[styles.card, { borderColor: c.border }]}
+            style={[styles.card, { borderColor: c.border }, !m.route && styles.cardDisabled]}
             onPress={() => { if (m.route) router.push(m.route as any); }}
             activeOpacity={m.route ? 0.75 : 1}
+            disabled={!m.route}
             testID={`dash-module-${m.id}`}
           >
             <View style={styles.topRow}>
@@ -109,7 +110,8 @@ export const DashModulesGrid = ({ numbers }: { numbers?: Numbers }) => {
 
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 14 },
-  card: { width: '23%', minWidth: 190, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, padding: 16 },
+  card: { flexGrow: 1, flexBasis: 220, maxWidth: 320, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, padding: 16 },
+  cardDisabled: { opacity: 0.55 },
   topRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   pillText: { fontSize: 10.5, fontWeight: '800' },
