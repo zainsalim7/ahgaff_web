@@ -11837,6 +11837,10 @@ async def record_attendance_session(
             r.status = AttendanceStatus.EXCUSED
             auto_excused += 1
 
+    # 📅 تاريخ سجل الحضور = تاريخ ووقت المحاضرة الفعلي نفسه (lecture_start) وليس check_time (وقت تنفيذ
+    # العملية الفعلي). الاثنان متقاربان جداً في التحضير العادي في وقته، لكن عند تحضير محاضرة قديمة
+    # متأخراً (مسجّل/إداري بصلاحية edit_attendance يتجاوز نافذة الوقت) كان check_time = "اليوم" فيظهر
+    # للطالب "حضور/غياب" بتاريخ لا توجد فيه محاضرة فعلياً — وهذا هو سبب عطل "الحضور الوهمي" المُكتشَف.
     attendance_records = []
     for record in records:
         att_record = {
@@ -11844,7 +11848,7 @@ async def record_attendance_session(
             "course_id": lecture["course_id"],
             "student_id": record.student_id,
             "status": record.status,
-            "date": check_time,
+            "date": lecture_start,
             "recorded_by": current_user["id"],
             "method": "manual",
             "notes": session.notes,
@@ -11945,12 +11949,18 @@ async def record_single_attendance(
     if existing:
         raise HTTPException(status_code=400, detail="تم تسجيل حضور هذا الطالب مسبقاً")
     
+    # 📅 تاريخ سجل الحضور = تاريخ ووقت المحاضرة الفعلي (وليس وقت تنفيذ العملية) — نفس إصلاح /attendance/session
+    try:
+        _lec_dt = datetime.strptime(f"{lecture['date']} {lecture['start_time']}", "%Y-%m-%d %H:%M").replace(tzinfo=YEMEN_TIMEZONE)
+    except Exception:
+        _lec_dt = get_yemen_time()
+
     att_record = {
         "lecture_id": data.lecture_id,
         "course_id": lecture["course_id"],
         "student_id": data.student_id,
         "status": data.status,
-        "date": get_yemen_time(),
+        "date": _lec_dt,
         "recorded_by": current_user["id"],
         "method": data.method,
         "notes": data.notes,

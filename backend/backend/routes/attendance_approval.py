@@ -12,6 +12,21 @@ from bson import ObjectId
 from .deps import get_db, get_current_user, has_permission, log_activity
 from models.permissions import Permission, UserRole
 
+YEMEN_TIMEZONE = timezone(timedelta(hours=3))
+
+
+async def _lecture_actual_date(db, lecture_id: str, fallback: datetime) -> datetime:
+    """تاريخ المحاضرة الفعلي (وليس وقت تنفيذ العملية) — يمنع ظهور 'حضور وهمي' بتاريخ اعتماد الطلب
+    بدل تاريخ المحاضرة الحقيقي عند إنشاء سجل حضور جديد لا يوجد له سجل سابق."""
+    try:
+        lec = await db.lectures.find_one({"_id": ObjectId(lecture_id)})
+        if lec and lec.get("date") and lec.get("start_time"):
+            dt = datetime.strptime(f"{lec['date']} {lec['start_time']}", "%Y-%m-%d %H:%M")
+            return dt.replace(tzinfo=YEMEN_TIMEZONE)
+    except Exception:
+        pass
+    return fallback
+
 router = APIRouter()
 
 
@@ -238,13 +253,15 @@ async def _apply_change_to_attendance(request_doc: dict, current_user: dict):
             }}
         )
     else:
-        # إن لم يوجد سجل حالي، أنشئه
+        # إن لم يوجد سجل حالي، أنشئه — بتاريخ المحاضرة الفعلي (وليس تاريخ اعتماد الطلب)
+        # لمنع ظهور "حضور وهمي" ليوم لا توجد فيه محاضرة فعلياً
+        record_date = await _lecture_actual_date(db, lecture_id, now)
         await db.attendance.insert_one({
             "lecture_id": lecture_id,
             "course_id": request_doc.get("course_id"),
             "student_id": student_id,
             "status": new_status,
-            "date": now,
+            "date": record_date,
             "recorded_by": request_doc.get("requested_by"),
             "method": "approval_change",
             "created_at": now,
