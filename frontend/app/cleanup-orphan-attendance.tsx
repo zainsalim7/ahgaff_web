@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -65,6 +66,10 @@ export default function CleanupOrphanAttendanceScreen() {
   const [loading, setLoading] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
+  // 🆕 بحث تشخيصي عن سجلات طالب محدد (قراءة فقط) - لمعرفة سبب ظهور غياب لمحاضرة غير واضحة
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[] | null>(null);
+  const [searching, setSearching] = useState(false);
   // 🆕 عرض تفصيلي آمن (قراءة فقط) لكل سجل يتيم: الطالب/المقرر/التاريخ
   const [details, setDetails] = useState<OrphanDetail[] | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -104,6 +109,20 @@ export default function CleanupOrphanAttendanceScreen() {
       showAlert('خطأ', e?.response?.data?.detail || 'تعذر جلب التفاصيل');
     } finally {
       setLoadingDetails(false);
+    }
+  };
+
+  const searchStudent = async () => {
+    if (!searchQuery.trim()) return;
+    try {
+      setSearching(true);
+      setSearchResults(null);
+      const r = await api.get('/admin/attendance-lookup', { params: { student_query: searchQuery.trim() } });
+      setSearchResults(r.data.results || []);
+    } catch (e: any) {
+      showAlert('خطأ', e?.response?.data?.detail || 'تعذر البحث');
+    } finally {
+      setSearching(false);
     }
   };
 
@@ -270,6 +289,69 @@ export default function CleanupOrphanAttendanceScreen() {
             </View>
           )}
 
+          {/* 🆕 بحث تشخيصي عن طالب محدد - قراءة فقط، لحالات غياب غير مفهومة لم تُصنَّف كـ"يتيمة" */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>بحث عن سجلات حضور طالب محدد (تشخيص فقط)</Text>
+            <Text style={styles.emptyText}>
+              اكتب اسم الطالب أو رقم القيد — يعرض كل محاضرة مرتبطة بسجلات حضوره مع حالتها الحالية الحقيقية
+              وأي طلب تعديل حضور اعتُمد عليها، دون حذف أو تعديل أي شيء.
+            </Text>
+            <View style={styles.searchRow}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="اسم الطالب أو رقم القيد"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onSubmitEditing={searchStudent}
+                testID="attendance-lookup-input"
+              />
+              <TouchableOpacity
+                style={[styles.btn, styles.btnPrimary, { flex: 0, paddingHorizontal: 18 }, searching && { opacity: 0.6 }]}
+                onPress={searchStudent}
+                disabled={searching}
+                testID="attendance-lookup-search-btn"
+              >
+                {searching ? <ActivityIndicator color="#fff" /> : <Ionicons name="search" size={18} color="#fff" />}
+                <Text style={styles.btnText}>بحث</Text>
+              </TouchableOpacity>
+            </View>
+
+            {searchResults && (
+              searchResults.length === 0 ? (
+                <Text style={styles.emptyText}>لا توجد سجلات حضور لهذا الطالب</Text>
+              ) : (
+                searchResults.map((r: any) => (
+                  <View key={r.attendance_id} style={styles.detailCard} testID={`lookup-result-${r.attendance_id}`}>
+                    <Text style={styles.detailLine}>الطالب: <Text style={styles.detailBold}>{r.student_name}</Text> ({r.student_number})</Text>
+                    <Text style={styles.detailLine}>المقرر: <Text style={styles.detailBold}>{r.course_name}</Text> ({r.course_code})</Text>
+                    <Text style={styles.detailLine}>تاريخ سجل الحضور: <Text style={styles.detailBold}>{r.attendance_date}</Text> — الحالة: <Text style={styles.detailBold}>{r.attendance_status}</Text> — طريقة: {r.method}</Text>
+                    <Text style={[styles.detailLine, { color: r.lecture_exists ? '#2e7d32' : '#c62828' }]}>
+                      المحاضرة المرجعية: {r.lecture_exists ? 'موجودة فعلاً' : 'غير موجودة (محذوفة)'}
+                      {r.lecture_exists && ` — حالتها الآن: ${r.lecture_current_status} — تاريخها الحالي: ${r.lecture_current_date}`}
+                    </Text>
+                    {r.lecture_last_rescheduled_from && (
+                      <Text style={styles.detailLine}>⚠️ أُعيدت جدولة هذه المحاضرة سابقاً من تاريخ: <Text style={styles.detailBold}>{r.lecture_last_rescheduled_from}</Text> بواسطة: {r.lecture_rescheduled_by_name || '—'}</Text>
+                    )}
+                    {r.lecture_cancellation_reason && (
+                      <Text style={styles.detailLine}>سبب الإلغاء المسجَّل: {r.lecture_cancellation_reason}</Text>
+                    )}
+                    {r.change_requests.length > 0 && (
+                      <View style={{ marginTop: 6, borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 6 }}>
+                        <Text style={styles.detailLineMuted}>طلبات تعديل حضور مرتبطة:</Text>
+                        {r.change_requests.map((cr: any) => (
+                          <Text key={cr.id} style={styles.detailLineMuted}>
+                            • طلب بواسطة {cr.requested_by_name} ({cr.old_status || '—'} ← {cr.new_status}) — الحالة: {cr.status}
+                            {cr.reviewed_by_name ? ` — اعتمدها: ${cr.reviewed_by_name} في ${cr.reviewed_at}` : ''}
+                          </Text>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                ))
+              )
+            )}
+          </View>
+
           {/* Action area */}
           {preview && (
             <View style={styles.section}>
@@ -421,7 +503,10 @@ const styles = StyleSheet.create({
   },
   btnDanger: { backgroundColor: '#c62828' },
   btnSecondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#1565c0' },
+  btnPrimary: { backgroundColor: '#1565c0' },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  searchRow: { flexDirection: 'row-reverse', gap: 10, marginTop: 12, marginBottom: 14 },
+  searchInput: { flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, textAlign: 'right' },
   resultBox: {
     backgroundColor: '#fff',
     padding: 14,

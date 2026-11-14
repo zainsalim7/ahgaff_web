@@ -10399,7 +10399,7 @@ async def list_orphan_attendance_details(current_user: dict = Depends(get_curren
     student_ids = list({ObjectId(o["student_id"]) for o in orphans if o["student_id"] and ObjectId.is_valid(o["student_id"])})
     user_ids = list({ObjectId(o["recorded_by"]) for o in orphans if o["recorded_by"] and ObjectId.is_valid(o["recorded_by"])})
     courses_map = {str(c["_id"]): c async for c in db.courses.find({"_id": {"$in": course_ids}}, {"name": 1, "code": 1})} if course_ids else {}
-    students_map = {str(s["_id"]): s async for s in db.students.find({"_id": {"$in": student_ids}}, {"full_name": 1, "academic_id": 1})} if student_ids else {}
+    students_map = {str(s["_id"]): s async for s in db.students.find({"_id": {"$in": student_ids}}, {"full_name": 1, "student_number": 1, "reference_number": 1})} if student_ids else {}
     users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": user_ids}}, {"name": 1, "full_name": 1})} if user_ids else {}
 
     for o in orphans:
@@ -10409,10 +10409,105 @@ async def list_orphan_attendance_details(current_user: dict = Depends(get_curren
         o["course_name"] = c.get("name") or ""
         o["course_code"] = c.get("code") or ""
         o["student_name"] = s.get("full_name") or ""
-        o["student_academic_id"] = s.get("academic_id") or ""
+        o["student_academic_id"] = s.get("student_number") or s.get("reference_number") or ""
         o["recorded_by_name"] = u.get("name") or u.get("full_name") or ""
 
     return {"count": len(orphans), "orphans": orphans}
+
+
+@api_router.get("/admin/attendance-lookup")
+async def attendance_lookup(
+    student_query: str,
+    course_query: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """🔎 بحث تشخيصي آمن (قراءة فقط) عن سجلات حضور طالب معيّن مع كامل بيانات المحاضرة المرجعية الحالية
+    وأي طلبات اعتماد تعديل حضور مرتبطة — لتشخيص حالات غياب تظهر لمحاضرة غير واضحة المصدر"""
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+
+    q = student_query.strip()
+    student_filter = {"$or": [
+        {"full_name": {"$regex": q, "$options": "i"}},
+        {"student_number": q},
+        {"reference_number": q},
+    ]}
+    students = await db.students.find(student_filter, {"full_name": 1, "student_number": 1, "reference_number": 1}).to_list(20)
+    if not students:
+        return {"students_matched": 0, "results": []}
+    student_ids = [str(s["_id"]) for s in students]
+    students_map = {str(s["_id"]): s for s in students}
+
+    att_filter: dict = {"student_id": {"$in": student_ids}}
+    if date_from or date_to:
+        date_cond = {}
+        if date_from:
+            date_cond["$gte"] = date_from
+        if date_to:
+            date_cond["$lte"] = date_to + "T23:59:59"
+        att_filter["$or"] = [
+            {"date": date_cond},
+        ]
+    att_records = await db.attendance.find(att_filter).sort("date", -1).to_list(100)
+
+    if course_query:
+        cq = course_query.strip()
+        matching_courses = await db.courses.find({"$or": [
+            {"name": {"$regex": cq, "$options": "i"}}, {"code": {"$regex": cq, "$options": "i"}}
+        ]}, {"_id": 1}).to_list(50)
+        allowed_course_ids = {str(c["_id"]) for c in matching_courses}
+        att_records = [r for r in att_records if str(r.get("course_id", "")) in allowed_course_ids]
+
+    course_ids = list({ObjectId(r["course_id"]) for r in att_records if r.get("course_id") and ObjectId.is_valid(r["course_id"])})
+    courses_map = {str(c["_id"]): c async for c in db.courses.find({"_id": {"$in": course_ids}})} if course_ids else {}
+
+    results = []
+    for r in att_records:
+        lec_id = r.get("lecture_id")
+        lecture_doc = None
+        if lec_id and ObjectId.is_valid(str(lec_id)):
+            lecture_doc = await db.lectures.find_one({"_id": ObjectId(str(lec_id))})
+        change_requests = await db.attendance_change_requests.find({
+            "lecture_id": str(lec_id) if lec_id else "__none__",
+            "student_id": str(r.get("student_id")),
+        }).sort("requested_at", -1).to_list(10)
+        c = courses_map.get(str(r.get("course_id", ""))) or {}
+        s = students_map.get(str(r.get("student_id", ""))) or {}
+        results.append({
+            "attendance_id": str(r["_id"]),
+            "attendance_date": str(r.get("date", "")),
+            "attendance_status": r.get("status"),
+            "method": r.get("method"),
+            "created_at": str(r.get("created_at", "")),
+            "student_name": s.get("full_name", ""),
+            "student_number": s.get("student_number", ""),
+            "course_name": c.get("name", ""),
+            "course_code": c.get("code", ""),
+            "lecture_id": str(lec_id) if lec_id else None,
+            "lecture_exists": lecture_doc is not None,
+            "lecture_current_status": lecture_doc.get("status") if lecture_doc else None,
+            "lecture_current_date": str(lecture_doc.get("date")) if lecture_doc else None,
+            "lecture_original_date": lecture_doc.get("original_date") if lecture_doc else None,
+            "lecture_last_rescheduled_from": lecture_doc.get("last_rescheduled_from") if lecture_doc else None,
+            "lecture_rescheduled_by_name": lecture_doc.get("rescheduled_by_name") if lecture_doc else None,
+            "lecture_cancellation_reason": lecture_doc.get("cancellation_reason") if lecture_doc else None,
+            "change_requests": [{
+                "id": str(cr["_id"]),
+                "requested_at": str(cr.get("requested_at", "")),
+                "requested_by_name": cr.get("requested_by_name"),
+                "old_status": cr.get("old_status"),
+                "new_status": cr.get("new_status"),
+                "reason": cr.get("reason"),
+                "status": cr.get("status"),
+                "reviewed_by_name": cr.get("reviewed_by_name"),
+                "reviewed_at": str(cr.get("reviewed_at", "")) if cr.get("reviewed_at") else None,
+                "review_notes": cr.get("review_notes"),
+            } for cr in change_requests],
+        })
+
+    return {"students_matched": len(students), "results": results}
 
 
 @api_router.post("/admin/cleanup-orphan-attendance")
