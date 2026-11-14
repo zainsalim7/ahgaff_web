@@ -10399,7 +10399,7 @@ async def list_orphan_attendance_details(current_user: dict = Depends(get_curren
     student_ids = list({ObjectId(o["student_id"]) for o in orphans if o["student_id"] and ObjectId.is_valid(o["student_id"])})
     user_ids = list({ObjectId(o["recorded_by"]) for o in orphans if o["recorded_by"] and ObjectId.is_valid(o["recorded_by"])})
     courses_map = {str(c["_id"]): c async for c in db.courses.find({"_id": {"$in": course_ids}}, {"name": 1, "code": 1})} if course_ids else {}
-    students_map = {str(s["_id"]): s async for s in db.students.find({"_id": {"$in": student_ids}}, {"full_name": 1, "student_number": 1, "reference_number": 1})} if student_ids else {}
+    students_map = {str(s["_id"]): s async for s in db.students.find({"_id": {"$in": student_ids}}, {"full_name": 1, "student_id": 1, "reference_number": 1})} if student_ids else {}
     users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": user_ids}}, {"name": 1, "full_name": 1})} if user_ids else {}
 
     for o in orphans:
@@ -10409,7 +10409,7 @@ async def list_orphan_attendance_details(current_user: dict = Depends(get_curren
         o["course_name"] = c.get("name") or ""
         o["course_code"] = c.get("code") or ""
         o["student_name"] = s.get("full_name") or ""
-        o["student_academic_id"] = s.get("student_number") or s.get("reference_number") or ""
+        o["student_academic_id"] = s.get("student_id") or s.get("reference_number") or ""
         o["recorded_by_name"] = u.get("name") or u.get("full_name") or ""
 
     return {"count": len(orphans), "orphans": orphans}
@@ -10431,12 +10431,13 @@ async def attendance_lookup(
     q = student_query.strip()
     student_filter = {"$or": [
         {"full_name": {"$regex": q, "$options": "i"}},
-        {"student_number": q},
+        {"student_id": q},
         {"reference_number": q},
     ]}
-    students = await db.students.find(student_filter, {"full_name": 1, "student_number": 1, "reference_number": 1}).to_list(20)
+    students = await db.students.find(student_filter, {"full_name": 1, "student_id": 1, "reference_number": 1}).to_list(20)
     if not students:
         return {"students_matched": 0, "results": []}
+    # معرّف الطالب داخل سجلات الحضور دائماً هو str(student._id) - وليس رقم القيد (student_id هو اسم الحقل فقط على مستند الطالب نفسه)
     student_ids = [str(s["_id"]) for s in students]
     students_map = {str(s["_id"]): s for s in students}
 
@@ -10482,7 +10483,7 @@ async def attendance_lookup(
             "method": r.get("method"),
             "created_at": str(r.get("created_at", "")),
             "student_name": s.get("full_name", ""),
-            "student_number": s.get("student_number", ""),
+            "student_number": s.get("student_id", ""),
             "course_name": c.get("name", ""),
             "course_code": c.get("code", ""),
             "lecture_id": str(lec_id) if lec_id else None,

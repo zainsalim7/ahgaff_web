@@ -69,6 +69,7 @@ export default function CleanupOrphanAttendanceScreen() {
   // 🆕 بحث تشخيصي عن سجلات طالب محدد (قراءة فقط) - لمعرفة سبب ظهور غياب لمحاضرة غير واضحة
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[] | null>(null);
+  const [studentsMatched, setStudentsMatched] = useState<number | null>(null);
   const [searching, setSearching] = useState(false);
   // 🆕 عرض تفصيلي آمن (قراءة فقط) لكل سجل يتيم: الطالب/المقرر/التاريخ
   const [details, setDetails] = useState<OrphanDetail[] | null>(null);
@@ -117,7 +118,9 @@ export default function CleanupOrphanAttendanceScreen() {
     try {
       setSearching(true);
       setSearchResults(null);
+      setStudentsMatched(null);
       const r = await api.get('/admin/attendance-lookup', { params: { student_query: searchQuery.trim() } });
+      setStudentsMatched(r.data.students_matched ?? 0);
       setSearchResults(r.data.results || []);
     } catch (e: any) {
       showAlert('خطأ', e?.response?.data?.detail || 'تعذر البحث');
@@ -318,7 +321,11 @@ export default function CleanupOrphanAttendanceScreen() {
 
             {searchResults && (
               searchResults.length === 0 ? (
-                <Text style={styles.emptyText}>لا توجد سجلات حضور لهذا الطالب</Text>
+                <Text style={styles.emptyText}>
+                  {studentsMatched === 0
+                    ? 'لم يتم العثور على أي طالب بهذا الاسم/الرقم — تحقق من الإملاء أو جرّب رقم القيد مباشرة'
+                    : 'تم العثور على الطالب، لكن لا توجد له أي سجلات حضور إطلاقاً'}
+                </Text>
               ) : (
                 searchResults.map((r: any) => (
                   <View key={r.attendance_id} style={styles.detailCard} testID={`lookup-result-${r.attendance_id}`}>
