@@ -25,6 +25,24 @@ interface PreviewData {
   needs_cleanup: boolean;
 }
 
+interface OrphanDetail {
+  attendance_id: string;
+  lecture_id: string | null;
+  course_id: string;
+  student_id: string;
+  date: string;
+  status: string;
+  method: string;
+  created_at: string;
+  recorded_by: string;
+  orphan_type: string;
+  course_name: string;
+  course_code: string;
+  student_name: string;
+  student_academic_id: string;
+  recorded_by_name: string;
+}
+
 const showAlert = (title: string, msg: string) => {
   if (Platform.OS === 'web') window.alert(`${title}\n\n${msg}`);
   else Alert.alert(title, msg);
@@ -47,6 +65,9 @@ export default function CleanupOrphanAttendanceScreen() {
   const [loading, setLoading] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
+  // 🆕 عرض تفصيلي آمن (قراءة فقط) لكل سجل يتيم: الطالب/المقرر/التاريخ
+  const [details, setDetails] = useState<OrphanDetail[] | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   const isAdmin = user?.role === 'admin';
 
@@ -71,6 +92,18 @@ export default function CleanupOrphanAttendanceScreen() {
       showAlert('خطأ', e?.response?.data?.detail || 'تعذر فحص البيانات');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDetails = async () => {
+    try {
+      setLoadingDetails(true);
+      const r = await api.get('/admin/cleanup-orphan-attendance/details');
+      setDetails(r.data.orphans || []);
+    } catch (e: any) {
+      showAlert('خطأ', e?.response?.data?.detail || 'تعذر جلب التفاصيل');
+    } finally {
+      setLoadingDetails(false);
     }
   };
 
@@ -201,7 +234,41 @@ export default function CleanupOrphanAttendanceScreen() {
                 إعادة الفحص
               </Text>
             </TouchableOpacity>
+
+            {preview && preview.orphans_count > 0 && (
+              <TouchableOpacity
+                style={[styles.btn, styles.btnSecondary, { marginTop: 10 }, loadingDetails && { opacity: 0.6 }]}
+                onPress={loadDetails}
+                disabled={loadingDetails}
+                testID="load-orphan-details-btn"
+              >
+                {loadingDetails ? <ActivityIndicator color="#1565c0" /> : <Ionicons name="list" size={18} color="#1565c0" />}
+                <Text style={[styles.btnText, { color: '#1565c0' }]}>عرض تفاصيل السجلات اليتيمة (قراءة فقط)</Text>
+              </TouchableOpacity>
+            )}
           </View>
+
+          {/* 🆕 قائمة تفصيلية بالسجلات اليتيمة - عرض فقط، لا تعديل */}
+          {details && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>تفاصيل السجلات اليتيمة ({details.length})</Text>
+              {details.length === 0 ? (
+                <Text style={styles.emptyText}>لا توجد تفاصيل لعرضها</Text>
+              ) : (
+                details.map((o) => (
+                  <View key={o.attendance_id} style={styles.detailCard} testID={`orphan-detail-${o.attendance_id}`}>
+                    <Text style={styles.detailLine}>الطالب: <Text style={styles.detailBold}>{o.student_name || o.student_id}</Text> {o.student_academic_id ? `(${o.student_academic_id})` : ''}</Text>
+                    <Text style={styles.detailLine}>المقرر: <Text style={styles.detailBold}>{o.course_name || o.course_id}</Text> {o.course_code ? `(${o.course_code})` : ''}</Text>
+                    <Text style={styles.detailLine}>التاريخ: <Text style={styles.detailBold}>{o.date}</Text> — الحالة: <Text style={styles.detailBold}>{o.status}</Text></Text>
+                    <Text style={styles.detailLine}>نوع اليُتم: <Text style={[styles.detailBold, { color: '#c62828' }]}>{o.orphan_type}</Text></Text>
+                    <Text style={styles.detailLine}>سُجِّل بواسطة: {o.recorded_by_name || o.recorded_by || '—'} — طريقة: {o.method || '—'}</Text>
+                    <Text style={styles.detailLine}>تاريخ الإنشاء: {o.created_at || '—'}</Text>
+                    <Text style={styles.detailLineMuted}>lecture_id: {o.lecture_id || '(بدون)'}</Text>
+                  </View>
+                ))
+              )}
+            </View>
+          )}
 
           {/* Action area */}
           {preview && (
@@ -363,4 +430,8 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   resultLine: { fontSize: 13, color: '#333', marginBottom: 4, textAlign: 'right' },
+  detailCard: { backgroundColor: '#fff', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e0e0e0', marginBottom: 10 },
+  detailLine: { fontSize: 12.5, color: '#444', marginBottom: 4, textAlign: 'right' },
+  detailBold: { fontWeight: '800', color: '#1a1a1a' },
+  detailLineMuted: { fontSize: 10.5, color: '#999', textAlign: 'right', marginTop: 2 },
 });

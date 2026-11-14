@@ -10349,6 +10349,72 @@ async def preview_orphan_attendance(current_user: dict = Depends(get_current_use
     }
 
 
+@api_router.get("/admin/cleanup-orphan-attendance/details")
+async def list_orphan_attendance_details(current_user: dict = Depends(get_current_user)):
+    """عرض تفصيلي (آمن - لا يُغيّر شيئاً) لسجلات الحضور اليتيمة: الطالب، المقرر، التاريخ، ونوع اليُتم"""
+    if not has_permission(current_user, "system_diagnostics") and (current_user.get("role") != UserRole.ADMIN):
+        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+
+    active_lecture_ids = set()
+    active_course_date_map = set()
+    async for lec in db.lectures.find(
+        {"status": {"$in": ACTIVE_LECTURE_STATUSES}},
+        {"_id": 1, "course_id": 1, "date": 1},
+    ):
+        active_lecture_ids.add(str(lec["_id"]))
+        cid = str(lec.get("course_id", ""))
+        d = lec.get("date", "")
+        if cid and d:
+            active_course_date_map.add((cid, str(d)))
+
+    all_lecture_ids = set()
+    cancelled_lecture_ids = set()
+    async for lec in db.lectures.find({}, {"_id": 1, "status": 1}):
+        lid = str(lec["_id"])
+        all_lecture_ids.add(lid)
+        if lec.get("status") not in ACTIVE_LECTURE_STATUSES:
+            cancelled_lecture_ids.add(lid)
+
+    orphans = []
+    async for r in db.attendance.find({}, {"_id": 1, "lecture_id": 1, "course_id": 1, "student_id": 1, "date": 1, "status": 1, "method": 1, "created_at": 1, "recorded_by": 1}):
+        lec_id = r.get("lecture_id")
+        orphan_type = None
+        if lec_id:
+            sid = str(lec_id)
+            if sid in cancelled_lecture_ids:
+                orphan_type = "ملغاة/غير نشطة"
+            elif sid not in all_lecture_ids:
+                orphan_type = "محذوفة كلياً"
+        else:
+            cid = str(r.get("course_id", ""))
+            d = r.get("date", "")
+            d_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else (str(d)[:10] if d else "")
+            if not (cid and d_str and (cid, d_str) in active_course_date_map):
+                orphan_type = "بدون lecture_id"
+        if orphan_type:
+            orphans.append({"attendance_id": str(r["_id"]), "lecture_id": str(lec_id) if lec_id else None, "course_id": str(r.get("course_id", "")), "student_id": str(r.get("student_id", "")), "date": str(r.get("date", "")), "status": r.get("status"), "method": r.get("method"), "created_at": str(r.get("created_at", "")), "recorded_by": str(r.get("recorded_by", "")), "orphan_type": orphan_type})
+
+    orphans = orphans[:200]
+    course_ids = list({ObjectId(o["course_id"]) for o in orphans if o["course_id"] and ObjectId.is_valid(o["course_id"])})
+    student_ids = list({ObjectId(o["student_id"]) for o in orphans if o["student_id"] and ObjectId.is_valid(o["student_id"])})
+    user_ids = list({ObjectId(o["recorded_by"]) for o in orphans if o["recorded_by"] and ObjectId.is_valid(o["recorded_by"])})
+    courses_map = {str(c["_id"]): c async for c in db.courses.find({"_id": {"$in": course_ids}}, {"name": 1, "code": 1})} if course_ids else {}
+    students_map = {str(s["_id"]): s async for s in db.students.find({"_id": {"$in": student_ids}}, {"full_name": 1, "academic_id": 1})} if student_ids else {}
+    users_map = {str(u["_id"]): u async for u in db.users.find({"_id": {"$in": user_ids}}, {"name": 1, "full_name": 1})} if user_ids else {}
+
+    for o in orphans:
+        c = courses_map.get(o["course_id"]) or {}
+        s = students_map.get(o["student_id"]) or {}
+        u = users_map.get(o["recorded_by"]) or {}
+        o["course_name"] = c.get("name") or ""
+        o["course_code"] = c.get("code") or ""
+        o["student_name"] = s.get("full_name") or ""
+        o["student_academic_id"] = s.get("academic_id") or ""
+        o["recorded_by_name"] = u.get("name") or u.get("full_name") or ""
+
+    return {"count": len(orphans), "orphans": orphans}
+
+
 @api_router.post("/admin/cleanup-orphan-attendance")
 async def cleanup_orphan_attendance(current_user: dict = Depends(get_current_user)):
     """
