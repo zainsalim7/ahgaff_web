@@ -3,14 +3,14 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { DASH } from './dashTheme';
 
-export type DashView = 'academic' | 'hr';
+export type DashView = 'academic' | 'hr' | 'modules';
 
 export const DashViewTabs = ({ view, onChange, showHR }: { view: DashView; onChange: (v: DashView) => void; showHR: boolean }) => {
   const tabs: { key: DashView; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
     { key: 'academic', label: 'الأداء الأكاديمي', icon: 'school' },
     ...(showHR ? [{ key: 'hr' as DashView, label: 'شؤون الموظفين', icon: 'people-circle' as const }] : []),
+    { key: 'modules', label: 'الوحدات', icon: 'grid' },
   ];
-  if (tabs.length < 2) return null;
   return (
     <View style={styles.wrap} testID="dash-view-tabs">
       {tabs.map((t) => {

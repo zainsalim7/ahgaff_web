@@ -20,6 +20,7 @@ import { DashRooms } from './DashRooms';
 import { DashViewTabs, DashView } from './DashViewTabs';
 import { DashUnitFilter } from './DashUnitFilter';
 import { HRDashboardView } from './HRDashboardView';
+import { DashModulesGrid } from './DashModulesGrid';
 
 type Period = 'day' | 'week' | 'month';
 
@@ -133,6 +134,7 @@ export const ManagementDashboard = () => {
   const twoCol = width >= 1100;
 
   const isHR = view === 'hr';
+  const isModules = view === 'modules';
   const showHR = !!data?.sections?.hr;
 
   return (
@@ -144,10 +146,10 @@ export const ManagementDashboard = () => {
       >
         <DashHeader
           userName={user?.full_name}
-          kicker={isHR ? 'لوحة القيادة — شؤون الموظفين' : 'لوحة القيادة'}
-          scopeIcon={isHR ? 'people-circle-outline' : 'business-outline'}
-          scopeLabel={isHR ? hrData?.hr?.scope?.label || 'كل الوحدات التنظيمية' : data?.scope?.label || ''}
-          semester={isHR ? '' : semester}
+          kicker={isHR ? 'لوحة القيادة — شؤون الموظفين' : isModules ? 'لوحة القيادة — الوحدات' : 'لوحة القيادة'}
+          scopeIcon={isHR ? 'people-circle-outline' : isModules ? 'grid-outline' : 'business-outline'}
+          scopeLabel={isHR ? hrData?.hr?.scope?.label || 'كل الوحدات التنظيمية' : isModules ? 'الوحدات المتاحة ضمن صلاحياتك' : data?.scope?.label || ''}
+          semester={isHR || isModules ? '' : semester}
           generatedAt={(isHR ? hrData?.generated_at : data?.generated_at) || ''}
           period={period}
           onPeriod={setPeriod}
@@ -156,11 +158,13 @@ export const ManagementDashboard = () => {
           onRefresh={() => (isHR ? loadHR() : load(true))}
           compact={compact}
           readOnly={!!data?.scope?.read_only}
-          canExport={data?.sections?.export !== false}
+          canExport={!isModules && data?.sections?.export !== false}
         />
         <View style={styles.filterRow}>
           {isHR ? (
             <DashUnitFilter units={hrData?.units || []} value={orgUnitId} onChange={setOrgUnitId} />
+          ) : isModules ? (
+            <View />
           ) : data?.scope?.can_filter ? (
             <DashScopeFilter faculties={data.scope.faculties} departments={data.scope.departments} facultyId={facultyId} departmentId={departmentId} onChange={onScope} />
           ) : <View />}
@@ -170,6 +174,8 @@ export const ManagementDashboard = () => {
         {(loading || hrLoading) && <View style={styles.overlay}><ActivityIndicator color={DASH.navy} /></View>}
         {isHR ? (
           hrData?.hr && <HRDashboardView data={hrData} compact={compact} width={Math.min(width, 1400) - 64} />
+        ) : isModules ? (
+          data && <DashModulesGrid numbers={data.numbers} />
         ) : data && (
           <>
             <DashKpis n={data.numbers} periodLabel={data.period_label} compact={compact} />

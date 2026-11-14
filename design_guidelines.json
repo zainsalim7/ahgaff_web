@@ -1,250 +1,85 @@
 {
-  "theme": "light",
-  "archetype": "Swiss & High-Contrast (Dashboard Professional)",
+  "theme": "Swiss & High-Contrast Dashboard Professional (Light Theme)",
+  "language": "Arabic (RTL)",
   "typography": {
-    "font_family": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    "sizes": {
-      "h1": 24,
-      "h2": 18,
-      "h3": 16,
-      "body": 14,
-      "small": 12
-    },
-    "weights": {
-      "regular": "400",
-      "medium": "500",
-      "bold": "600",
-      "heavy": "700"
+    "primary_font": "Tajawal, Cairo, or IBM Plex Sans Arabic",
+    "headings": "Bold (700) or ExtraBold (800) with tight tracking (tracking-tight). Use dark slate (#0F172A).",
+    "body": "Medium (500) for standard readability, text-slate-600.",
+    "hierarchy": {
+      "h1": "text-3xl md:text-4xl font-bold mb-6 text-slate-900",
+      "h2": "text-xl md:text-2xl font-bold mb-4 text-slate-800",
+      "card_title": "text-lg font-bold text-slate-900",
+      "card_metric": "text-3xl font-black text-blue-600 mt-2",
+      "card_subtitle": "text-sm text-slate-500"
     }
   },
   "colors": {
-    "primary": {
-      "main": "#2563EB",
-      "hover": "#1D4ED8",
-      "light": "#EFF6FF"
-    },
-    "surface": {
-      "background": "#F8FAFC",
-      "card": "#FFFFFF",
-      "backdrop": "rgba(15, 23, 42, 0.6)"
-    },
-    "text": {
-      "primary": "#0F172A",
-      "secondary": "#64748B",
-      "tertiary": "#94A3B8"
-    },
-    "border": {
-      "light": "#E2E8F0",
-      "focus": "#2563EB"
-    },
-    "status": {
-      "success": "#10B981",
-      "error": "#EF4444"
+    "background": "#F8FAFC",
+    "surface": "#FFFFFF",
+    "primary": "#2563EB",
+    "primary_hover": "#1D4ED8",
+    "text_main": "#0F172A",
+    "text_muted": "#64748B",
+    "border": "#E2E8F0",
+    "categories": {
+      "academic": "bg-blue-50 text-blue-600 border-blue-200",
+      "administrative": "bg-emerald-50 text-emerald-600 border-emerald-200",
+      "reports": "bg-purple-50 text-purple-600 border-purple-200",
+      "system": "bg-orange-50 text-orange-600 border-orange-200"
     }
   },
-  "layouts": {
-    "modal_backdrop": {
-      "flex": 1,
-      "justifyContent": "center",
-      "alignItems": "center",
-      "backgroundColor": "rgba(15, 23, 42, 0.6)",
-      "padding": 24
+  "visual_enhancers": {
+    "borders": "1px solid border-slate-200/60. Always crispy.",
+    "shadows": "Default: shadow-sm. Hover: shadow-md shadow-slate-200/50.",
+    "radius": "rounded-xl or rounded-2xl for a friendly yet professional app feel.",
+    "hover_states": "Group hover effects to transition border color to primary and slight translateY (-translate-y-1). Duration 200ms ease-out."
+  },
+  "concepts_to_build": [
+    {
+      "id": "concept_1",
+      "name": "Bento Grid (شبكة بينتو غير المتماثلة)",
+      "description": "Asymmetrical grid where high-priority modules (Students, Courses) take up more space (col-span-2 row-span-2). Creates visual hierarchy and tension.",
+      "layout_classes": "grid grid-cols-1 md:grid-cols-4 gap-4 auto-rows-[160px]",
+      "card_style": "Solid white, 1px border. Large icons. Important cards have bottom-aligned text, smaller cards are centered."
     },
-    "modal_card": {
-      "width": "100%",
-      "maxWidth": 800,
-      "backgroundColor": "#FFFFFF",
-      "borderRadius": 16,
-      "maxHeight": "90%",
-      "overflow": "hidden",
-      "shadowColor": "#000",
-      "shadowOffset": { "width": 0, "height": 8 },
-      "shadowOpacity": 0.15,
-      "shadowRadius": 24,
-      "elevation": 10
+    {
+      "id": "concept_2",
+      "name": "Metric-Driven Cards (البطاقات التحليلية والتفاعلية)",
+      "description": "Dense grid where each card acts as a shortcut AND a live metric display (e.g., '1,200 Students'). Highly functional for admins.",
+      "layout_classes": "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "card_style": "White surface, neumorphic subtle shadow. Top row: Icon & Status. Bottom row: Title & Big Metric."
     },
-    "modal_header": {
-      "flexDirection": "row",
-      "justifyContent": "space-between",
-      "alignItems": "center",
-      "paddingHorizontal": 24,
-      "paddingVertical": 20,
-      "borderBottomWidth": 1,
-      "borderBottomColor": "#E2E8F0"
+    {
+      "id": "concept_3",
+      "name": "Categorized Swimlanes (مسارات أفقية حسب الفئة)",
+      "description": "Modules are grouped by category (Academic, Administrative, Reports). Each category is a horizontal scrollable list, avoiding grid overload.",
+      "layout_classes": "flex flex-col gap-8 (parent), flex overflow-x-auto gap-4 pb-4 (swimlane)",
+      "card_style": "Compact cards (w-64 shrink-0). Color-coded borders/backgrounds based on category."
     },
-    "modal_body": {
-      "padding": 24,
-      "gap": 20
-    },
-    "modal_footer": {
-      "flexDirection": "row",
-      "justifyContent": "flex-end",
-      "alignItems": "center",
-      "paddingHorizontal": 24,
-      "paddingVertical": 16,
-      "borderTopWidth": 1,
-      "borderTopColor": "#E2E8F0",
-      "backgroundColor": "#F8FAFC"
+    {
+      "id": "concept_4",
+      "name": "App Icon Grid (شبكة التطبيقات المبسطة)",
+      "description": "Inspired by iOS/macOS home screens. Perfect square cards, huge centered icons, minimalistic text. Highly touch-friendly.",
+      "layout_classes": "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6",
+      "card_style": "Aspect-square. backdrop-blur-md bg-white/70. Centered content. Icon is wrapped in a soft colored circle."
     }
-  },
-  "components": {
-    "inputs": {
-      "container": {
-        "marginBottom": 16
-      },
-      "label": {
-        "fontSize": 14,
-        "fontWeight": "600",
-        "color": "#0F172A",
-        "marginBottom": 8,
-        "textAlign": "left"
-      },
-      "text_input": {
-        "height": 48,
-        "borderWidth": 1,
-        "borderColor": "#CBD5E1",
-        "borderRadius": 8,
-        "paddingHorizontal": 16,
-        "fontSize": 14,
-        "color": "#0F172A",
-        "backgroundColor": "#FFFFFF"
-      },
-      "text_area": {
-        "minHeight": 100,
-        "borderWidth": 1,
-        "borderColor": "#CBD5E1",
-        "borderRadius": 8,
-        "paddingHorizontal": 16,
-        "paddingVertical": 12,
-        "fontSize": 14,
-        "color": "#0F172A",
-        "backgroundColor": "#FFFFFF",
-        "textAlignVertical": "top"
-      }
-    },
-    "permissions_toolbar": {
-      "container": {
-        "flexDirection": "row",
-        "flexWrap": "wrap",
-        "alignItems": "center",
-        "justifyContent": "space-between",
-        "backgroundColor": "#F8FAFC",
-        "padding": 16,
-        "borderRadius": 12,
-        "borderWidth": 1,
-        "borderColor": "#E2E8F0",
-        "marginBottom": 16,
-        "gap": 16
-      },
-      "search_bar": {
-        "flex": 1,
-        "minWidth": 200,
-        "height": 40,
-        "backgroundColor": "#FFFFFF",
-        "borderWidth": 1,
-        "borderColor": "#CBD5E1",
-        "borderRadius": 8,
-        "paddingHorizontal": 12,
-        "fontSize": 14
-      },
-      "filters_container": {
-        "flexDirection": "row",
-        "flexWrap": "wrap",
-        "gap": 8,
-        "alignItems": "center"
-      },
-      "chip": {
-        "paddingHorizontal": 12,
-        "paddingVertical": 6,
-        "backgroundColor": "#F1F5F9",
-        "borderRadius": 9999,
-        "borderWidth": 1,
-        "borderColor": "#E2E8F0"
-      },
-      "chip_active": {
-        "backgroundColor": "#EFF6FF",
-        "borderColor": "#BFDBFE"
-      },
-      "chip_text": {
-        "fontSize": 12,
-        "fontWeight": "500",
-        "color": "#475569"
-      },
-      "chip_text_active": {
-        "color": "#2563EB",
-        "fontWeight": "600"
-      },
-      "counter_badge": {
-        "flexDirection": "row",
-        "alignItems": "center",
-        "backgroundColor": "#F1F5F9",
-        "paddingHorizontal": 12,
-        "paddingVertical": 6,
-        "borderRadius": 8
-      },
-      "counter_text": {
-        "fontSize": 13,
-        "fontWeight": "600",
-        "color": "#334155"
-      }
-    },
-    "buttons": {
-      "primary": {
-        "backgroundColor": "#2563EB",
-        "paddingHorizontal": 24,
-        "paddingVertical": 12,
-        "borderRadius": 8,
-        "alignItems": "center",
-        "justifyContent": "center"
-      },
-      "primary_text": {
-        "color": "#FFFFFF",
-        "fontSize": 14,
-        "fontWeight": "600"
-      },
-      "secondary": {
-        "backgroundColor": "#FFFFFF",
-        "paddingHorizontal": 24,
-        "paddingVertical": 12,
-        "borderRadius": 8,
-        "borderWidth": 1,
-        "borderColor": "#CBD5E1",
-        "alignItems": "center",
-        "justifyContent": "center",
-        "marginEnd": 12
-      },
-      "secondary_text": {
-        "color": "#475569",
-        "fontSize": 14,
-        "fontWeight": "600"
-      }
-    }
-  },
-  "accessibility_and_rtl": {
-    "rtl_guidelines": "Ensure full RTL compatibility for Arabic layout. Use React Native's directional properties like 'marginStart', 'marginEnd', 'paddingStart', 'paddingEnd' instead of 'marginLeft'/'marginRight'. Flex direction 'row' automatically flips in RTL, so structure items logically.",
-    "data_testid": "PRESERVE ALL existing data-testid attributes exactly as they are."
-  },
-  "component_path": "/app/frontend/src/components/advanced-access/AdvRolesManager.js",
-  "instructions_to_main_agent": [
-    "Locate the Modal component inside AdvRolesManager.js.",
-    "Change the root style of the Modal content to use the 'modal_backdrop' layout (flex: 1, justifyContent: 'center', backgroundColor: 'rgba(...)') to ensure it overlays the desktop screen properly and dims the background.",
-    "Wrap the modal's inner content in a View with the 'modal_card' layout (maxWidth: 800, width: '100%', borderRadius: 16, backgroundColor: '#FFF', shadow). This fixes the edge-to-edge full bleed issue.",
-    "Refactor the 'Role Name' and 'Description' inputs. Apply fixed standard heights (e.g., 48px for name, minHeight 100px for description) with clear borders and subtle border-radius to replace the current massive full-width boxes.",
-    "Redesign the permissions top bar (Search, Filters, Counter). Group them into a cohesive 'permissions_toolbar' layout (flexWrap, gap, subtle background like #F8FAFC with a border).",
-    "Style the quick filters as pill-shaped 'chips' (borderRadius: 9999). Add active/inactive states visually.",
-    "Style the 'Selected: X/Y' counter as a neat badge next to the filters.",
-    "Ensure the Save and Cancel buttons are anchored at the bottom inside a 'modal_footer' with a distinct background (e.g., #F8FAFC) and top border.",
-    "DO NOT modify the internal grid logic of AdvPermissionPicker; only integrate smoothly with its top bounding area.",
-    "Verify that no 'data-testid' is removed or renamed."
   ],
-  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
-    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
-    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
-    "Create depth through layered design elements with hierarchy (use proper React Native elevation/shadows).",
-    "You MUST NOT center align text globally. This disrupts the human natural reading flow of text.",
-    "Always use modern button styles like pill-shaped, or sharp buttons with color relevant to the app style.",
-    "NEVER use AI assistant Emoji characters like 🤖🧠💭💡🔮🎯 etc. for icons.",
-    "Ensure inputs and actionable items have clear boundaries and focus indicators.",
-    "Use logical spacing (multiples of 4 or 8) for padding and margins to maintain rhythm."
+  "instructions_to_main_agent": [
+    "CRITICAL: The user explicitly requested to 'Suggest 3-4 concepts/shapes to choose from before building the actual logic'.",
+    "DO NOT build the final application logic or API integrations. Instead, build a React 'Showcase / Gallery' component that presents these 4 dashboard concepts beautifully on one page.",
+    "Use a Tabs component (from shadcn/ui) or stacked sections so the user can switch between Concept 1, Concept 2, Concept 3, and Concept 4 to evaluate them.",
+    "Use dummy Arabic data for the permissions (المقررات، الطلاب، المعلمين، الخطة الدراسية، تبادل المحاضرات، أعذار الطلاب، سلة المحذوفات).",
+    "Ensure `dir=\"rtl\"` is applied either on the main container or html tag. Use Tailwind logical properties if possible (e.g., `ms-4`, `pe-2`) or ensure correct Arabic alignment.",
+    "Use `lucide-react` for icons (Users, BookOpen, GraduationCap, Calendar, FileText, Settings, Trash2).",
+    "Make it fully responsive so the user can test how concepts look on mobile vs desktop.",
+    "Include a title for the showcase page (مثال: 'مقترحات تصميم لوحة تحكم الصلاحيات') and a brief Arabic description for each concept."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Do not use generic 'AI slop' aesthetics. Make the cards feel premium with exact padding, crisp borders, and refined text hierarchy.",
+    "DO NOT use a transparent background over elements that have scrolling content under them. If headers/navs exist, give them solid or high-opacity glass backgrounds.",
+    "DO NOT apply `transition-all` blindly. Target specific properties (e.g., `transition-transform transition-colors`).",
+    "All interactive elements MUST include a `data-testid` attribute (e.g., `data-testid=\"concept-tab-1\"`).",
+    "For RTL, alignment of icons and text is critical. If an icon is next to text, the icon should be on the right, and text on the left of the icon. Check flex directions.",
+    "Use Tailwind CSS strictly for styling. If using Shadcn UI, adapt them to the Arabic RTL context."
   ]
 }
