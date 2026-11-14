@@ -23,7 +23,6 @@ EXCUSE_TYPES = {"sick": "مرضي", "family": "ظرف عائلي", "official": "
 ROUTES = {"registration": "التسجيل", "dean": "عميد الكلية", "board": "مجلس الكلية"}
 STATUS = {"pending": "قيد المراجعة", "approved": "معتمد", "rejected": "مرفوض", "needs_info": "مطلوب استكمال", "cancelled": "ملغى"}
 ROUTE_ROLES = {"registration": {UserRole.REGISTRAR, UserRole.REGISTRATION_MANAGER}, "dean": {UserRole.DEAN}, "board": {UserRole.DEAN}}
-VIEW_ROLES = {UserRole.ADMIN, UserRole.DEAN, UserRole.REGISTRAR, UserRole.REGISTRATION_MANAGER, UserRole.DEPARTMENT_HEAD}
 
 
 def _now():
@@ -62,18 +61,20 @@ def _user_department_ids(user: dict) -> List[str]:
 
 
 def _can_manage(user: dict) -> bool:
-    return user["role"] in VIEW_ROLES or has_permission(user, Permission.MANAGE_STUDENT_EXCUSES)
+    return has_permission(user, Permission.MANAGE_STUDENT_EXCUSES)
 
 
 def _can_decide(user: dict, doc: dict) -> bool:
     if user["role"] == UserRole.ADMIN:
         return True
+    if not _can_manage(user):
+        return False
     if not _in_scope(user, doc):
         return False
     if user["role"] in (UserRole.DEAN, UserRole.REGISTRAR, UserRole.REGISTRATION_MANAGER, UserRole.DEPARTMENT_HEAD):
         return user["role"] in ROUTE_ROLES.get(doc["route"], set())
     # موظف بصلاحية مخصصة = يعمل بصفة التسجيل
-    return has_permission(user, Permission.MANAGE_STUDENT_EXCUSES) and doc["route"] == "registration"
+    return doc["route"] == "registration"
 
 
 def _in_scope(user: dict, doc: dict) -> bool:
@@ -90,6 +91,8 @@ def _can_forward(user: dict, doc: dict) -> bool:
         return False
     if user["role"] == UserRole.ADMIN:
         return True
+    if not _can_manage(user):
+        return False
     if user["role"] not in (UserRole.REGISTRAR, UserRole.REGISTRATION_MANAGER):
         return False
     return _in_scope(user, doc)

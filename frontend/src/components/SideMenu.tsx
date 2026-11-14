@@ -125,8 +125,8 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.REPORT_TEACHER_WORKLOAD
   ]},
   { id: 'absence-justifications', label: 'تبرير غياب الأساتذة 🩺', icon: 'medkit', path: '/absence-justifications', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
-  { id: 'lecture-swaps', label: 'تبادل / إنابة المحاضرات 🔁', icon: 'swap-horizontal', path: '/lecture-swaps', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head', 'registrar', 'registration_manager'] },
-  { id: 'student-excuses', label: 'أعذار غياب الطلاب 📄', icon: 'document-attach', path: '/student-excuses', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head', 'registrar', 'registration_manager'] },
+  { id: 'lecture-swaps', label: 'تبادل / إنابة المحاضرات 🔁', icon: 'swap-horizontal', path: '/lecture-swaps', category: 'academic', permissions: [PERMISSIONS.MANAGE_LECTURE_SWAPS] },
+  { id: 'student-excuses', label: 'أعذار غياب الطلاب 📄', icon: 'document-attach', path: '/student-excuses', category: 'academic', permissions: [PERMISSIONS.MANAGE_STUDENT_EXCUSES] },
   { id: 'attendance-locations', label: 'مواقع تحضير المحاضرات 📍', icon: 'location', path: '/attendance-locations', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
   { id: 'reports', label: 'جميع التقارير', icon: 'document-text', path: '/reports', category: 'academic', permissions: [
     PERMISSIONS.VIEW_REPORTS, PERMISSIONS.EXPORT_REPORTS

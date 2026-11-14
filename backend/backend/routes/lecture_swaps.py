@@ -6,13 +6,12 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .deps import get_db, get_current_user, log_activity
+from .deps import get_db, get_current_user, log_activity, has_permission
 from .hr_common import notify_users
-from models.permissions import UserRole
+from models.permissions import UserRole, Permission
 
 router = APIRouter(prefix="/lecture-swaps", tags=["تبادل المحاضرات"])
 DEFAULTS = {"enabled": True, "allow_cover": True, "notify_students": True}
-OPERATOR_ROLES = {UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD, UserRole.REGISTRAR, UserRole.REGISTRATION_MANAGER}
 
 
 def _now():
@@ -39,8 +38,8 @@ async def get_settings(db) -> dict:
 
 
 def _require_operator(user: dict):
-    if user["role"] not in OPERATOR_ROLES:
-        raise HTTPException(status_code=403, detail="تبادل/إنابة المحاضرات عملية إدارية (التسجيل / رئيس القسم / العميد)")
+    if not has_permission(user, Permission.MANAGE_LECTURE_SWAPS):
+        raise HTTPException(status_code=403, detail="تبادل/إنابة المحاضرات تتطلب صلاحية مخصصة (تبادل/إنابة المحاضرات)")
 
 
 def _scope_query(user: dict, fac_key="faculty_id", dep_key="department_id") -> dict:

@@ -19492,7 +19492,7 @@ async def record_page_view(
 @api_router.get("/trash")
 async def get_trash_items(current_user: dict = Depends(get_current_user)):
     """عرض جميع العناصر في سلة المحذوفات"""
-    if not has_permission(current_user, "manage_trash") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers")):
+    if not has_permission(current_user, "manage_trash"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     now = get_yemen_time()
@@ -19521,7 +19521,7 @@ async def get_trash_items(current_user: dict = Depends(get_current_user)):
 @api_router.post("/trash/{trash_id}/restore")
 async def restore_trash_item(trash_id: str, current_user: dict = Depends(get_current_user)):
     """استعادة عنصر من سلة المحذوفات"""
-    if not has_permission(current_user, "manage_trash") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers")):
+    if not has_permission(current_user, "manage_trash"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     trash_item = await db.trash.find_one({"_id": ObjectId(trash_id)})
@@ -19538,7 +19538,7 @@ async def restore_trash_item(trash_id: str, current_user: dict = Depends(get_cur
 @api_router.delete("/trash/{trash_id}")
 async def permanent_delete_trash_item(trash_id: str, current_user: dict = Depends(get_current_user)):
     """حذف نهائي لعنصر من سلة المحذوفات"""
-    if not has_permission(current_user, "purge_trash") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers")):
+    if not has_permission(current_user, "purge_trash"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     result = await db.trash.delete_one({"_id": ObjectId(trash_id)})
@@ -19550,7 +19550,7 @@ async def permanent_delete_trash_item(trash_id: str, current_user: dict = Depend
 @api_router.delete("/trash")
 async def clear_all_trash(current_user: dict = Depends(get_current_user)):
     """تفريغ سلة المحذوفات بالكامل"""
-    if not has_permission(current_user, "purge_trash") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers")):
+    if not has_permission(current_user, "purge_trash"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     result = await db.trash.delete_many({})
