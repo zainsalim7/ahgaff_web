@@ -10573,6 +10573,31 @@ async def ghost_date_scan(limit_sample: int = 300, current_user: dict = Depends(
             batch = []
     await _process_batch(batch)
 
+    # 📊 تحليل توزيع الحالات المكتشفة (على كامل القائمة، وليس العيّنة فقط) — يساعد على تمييز:
+    # هل السبب عمليات فردية متفرقة (مسجّل/إداري يحضّر محاضرات قديمة بصلاحية) أم حدث جماعي واحد
+    # (مثال: كل السجلات تتركّز في نفس "التاريخ المسجَّل" أو نفس المقرر، مما يدل على عملية جماعية سابقة)
+    from collections import Counter
+    method_counter = Counter(m.get("method") or "غير محدد" for m in mismatched)
+    stored_date_counter = Counter(m["stored_date"][:10] for m in mismatched)
+    course_counter = Counter(m.get("course_id") for m in mismatched if m.get("course_id"))
+    days_buckets = Counter()
+    for m in mismatched:
+        d = m["days_diff"]
+        bucket = "0-1 يوم (قد يكون فرق منطقة زمنية/قرب منتصف الليل)" if d <= 1 else \
+                 "2-7 أيام" if d <= 7 else \
+                 "8-30 يوماً" if d <= 30 else "أكثر من 30 يوماً"
+        days_buckets[bucket] += 1
+
+    top_course_ids = [ObjectId(c) for c, _ in course_counter.most_common(10) if ObjectId.is_valid(c)]
+    top_courses_map = {str(c["_id"]): c.get("name", "") async for c in db.courses.find({"_id": {"$in": top_course_ids}}, {"name": 1})} if top_course_ids else {}
+
+    breakdown = {
+        "by_method": dict(method_counter),
+        "by_days_diff_bucket": dict(days_buckets),
+        "top_stored_dates": [{"date": d, "count": n} for d, n in stored_date_counter.most_common(10)],
+        "top_courses": [{"course_id": c, "course_name": top_courses_map.get(c, ""), "count": n} for c, n in course_counter.most_common(10)],
+    }
+
     # إثراء العينة المعروضة بأسماء الطلاب/المقررات
     sample = mismatched[:limit_sample]
     student_ids = list({m["student_id"] for m in sample if m.get("student_id")})
@@ -10588,6 +10613,7 @@ async def ghost_date_scan(limit_sample: int = 300, current_user: dict = Depends(
         "scanned_total": scanned,
         "mismatched_total": len(mismatched),
         "sample_returned": len(sample),
+        "breakdown": breakdown,
         "sample": sample,
     }
 

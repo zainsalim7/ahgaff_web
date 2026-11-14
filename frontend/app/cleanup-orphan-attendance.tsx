@@ -431,6 +431,28 @@ export default function CleanupOrphanAttendanceScreen() {
                     يعرض أدناه عينة من أول {ghostScan.sample_returned} سجلاً من أصل {ghostScan.mismatched_total}. هذا فحص تجريبي فقط — لم يُعدَّل أي سجل.
                   </Text>
                 )}
+                {ghostScan.breakdown && ghostScan.mismatched_total > 0 && (
+                  <View style={styles.detailCard} testID="ghost-scan-breakdown">
+                    <Text style={[styles.detailLine, styles.detailBold]}>تحليل التوزيع (لمعرفة السبب الأرجح):</Text>
+                    <Text style={styles.detailLineMuted}>
+                      حسب الطريقة (method): {Object.entries(ghostScan.breakdown.by_method).map(([k, v]: any) => `${k}: ${v}`).join(' — ')}
+                    </Text>
+                    <Text style={styles.detailLineMuted}>
+                      حسب فرق الأيام: {Object.entries(ghostScan.breakdown.by_days_diff_bucket).map(([k, v]: any) => `${k}: ${v}`).join(' — ')}
+                    </Text>
+                    {ghostScan.breakdown.top_stored_dates?.length > 0 && (
+                      <Text style={styles.detailLineMuted}>
+                        أكثر "تواريخ مسجَّلة وهمياً" تكراراً: {ghostScan.breakdown.top_stored_dates.map((d: any) => `${d.date} (${d.count})`).join(' — ')}
+                        {'  '}← إن تركّز العدد الأكبر في تاريخ واحد أو قلة تواريخ، فالسبب الأرجح عملية جماعية واحدة (مثل أداة إدارية نُفِّذت في ذلك اليوم)، وليس آلاف الحالات الفردية المتفرقة.
+                      </Text>
+                    )}
+                    {ghostScan.breakdown.top_courses?.length > 0 && (
+                      <Text style={styles.detailLineMuted}>
+                        أكثر المقررات تأثراً: {ghostScan.breakdown.top_courses.map((c: any) => `${c.course_name || c.course_id} (${c.count})`).join(' — ')}
+                      </Text>
+                    )}
+                  </View>
+                )}
                 {ghostScan.sample.map((m: any) => (
                   <View key={m.attendance_id} style={styles.detailCard} testID={`ghost-scan-row-${m.attendance_id}`}>
                     <Text style={styles.detailLine}>الطالب: <Text style={styles.detailBold}>{m.student_name || m.student_id}</Text> — المقرر: <Text style={styles.detailBold}>{m.course_name || m.course_id}</Text></Text>
