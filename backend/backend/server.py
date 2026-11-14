@@ -19811,6 +19811,7 @@ async def _startup_db_tasks():
         ("sync_default_roles", sync_default_roles),
         ("restore_lecture_permissions_v1", restore_lecture_permissions_v1),
         ("cleanup_orphan_permissions", cleanup_orphan_permissions),
+        ("revoke_default_student_excuses_permission_v1", revoke_default_student_excuses_permission_v1),
         ("migrate_broken_user_roles", migrate_broken_user_roles),
         ("backfill_offline_override_attendance_started_at", backfill_offline_override_attendance_started_at),
         ("backfill_teacher_record_links", backfill_teacher_record_links),
@@ -20164,6 +20165,22 @@ async def cleanup_orphan_permissions():
             logging.info("Orphan permissions cleanup: no orphans found.")
     except Exception as e:
         logging.error(f"Orphan permissions cleanup failed (non-critical): {e}")
+
+
+async def revoke_default_student_excuses_permission_v1():
+    """🔒 ترحيل لمرة واحدة (14 نوفمبر 2026): إزالة صلاحية manage_student_excuses من مستندات أدوار
+    المسجّل/العميد/مدير التسجيل الافتراضية — بطلب صريح من المستخدم لتصبح صلاحية مستقلة تُمنح لكل شخص
+    على حدة من لوحة الإدارة، بدل أن تكون افتراضية لكل من يحمل هذه الأدوار. idempotent (آمنة التكرار)."""
+    try:
+        fixed = 0
+        for key in ("registrar", "dean", "registration_manager"):
+            r = await db.roles.update_one({"system_key": key}, {"$pull": {"permissions": "manage_student_excuses"}})
+            if r.modified_count:
+                fixed += 1
+        if fixed:
+            logging.info(f"✅ revoke_default_student_excuses_permission_v1: fixed {fixed} role doc(s).")
+    except Exception as e:
+        logging.error(f"revoke_default_student_excuses_permission_v1 failed (non-critical): {e}")
 
 
 async def cleanup_duplicate_roles_internal():

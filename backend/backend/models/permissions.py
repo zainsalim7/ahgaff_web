@@ -569,7 +569,7 @@ FULL_PERMISSION_MAPPING = {
         Permission.ADD_LECTURE, Permission.EDIT_LECTURE, Permission.DELETE_LECTURE,
         Permission.OVERRIDE_LECTURE_STATUS, Permission.RESCHEDULE_LECTURE,
         Permission.GENERATE_LECTURES, Permission.COURSES_CLONE_SECTION, Permission.ENROLLMENTS_AUTO,
-        Permission.MANAGE_SEMESTERS, Permission.MANAGE_ACADEMIC_YEARS, Permission.MANAGE_SCHEDULE, Permission.MANAGE_TRASH,
+        Permission.MANAGE_SEMESTERS, Permission.MANAGE_ACADEMIC_YEARS, Permission.MANAGE_SCHEDULE,
     ],
     Permission.MANAGE_STUDENTS: [
         Permission.VIEW_STUDENTS, Permission.ADD_STUDENT, 

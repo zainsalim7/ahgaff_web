@@ -1,0 +1,40 @@
+{
+  "summary": "Tested the explicit-permission gates for lecture-swaps, student-excuses and trash (backend pytest with 16 tests: 14 pass, 2 fail) plus a light UI check of the side menu and the permissions screen. Lecture-swaps gating works: 403 without manage_lecture_swaps on all GET/POST/cancel endpoints, 200 with it, faculty scope kept, POST validation runs after the gate, and settings PUT is still admin-only. Student-excuses works: list is gated, /my works for students, and _can_decide/_can_forward return false without the permission (unit test). Admin bypass is fine. The trash fix is INCOMPLETE: FULL_PERMISSION_MAPPING[manage_courses] still expands to manage_trash, so any user with manage_courses (including the dean and department_head roles) can still GET/restore trash.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/trash, POST /api/trash/{id}/restore", "issue": "manage_courses still grants manage_trash. models/permissions.py line 572: FULL_PERMISSION_MAPPING[Permission.MANAGE_COURSES] includes Permission.MANAGE_TRASH, and get_user_permissions expands it. Verified live: test_registrar with permissions=['manage_courses'] gets 200 on GET /api/trash. Salim (dean) and Saeed (department_head) both get 200. The dean and department_head role docs in db.roles contain manage_courses, so every dean and department head still has trash view/restore. The login response expands it the same way (routes/auth.py line 210), so the sidebar 'سلة المحذوفات' item also shows for them.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/auth/login, GET /api/auth/me", "issue": "Mismatch between the frontend and backend permission sources. routes/auth.py lines 185-201 only use the user's direct `permissions` field when the role permissions are empty. build_user_context (deps.py line 324), used by get_current_user, always merges user.permissions. Result: a permission stored in user.permissions (e.g. manage_lecture_swaps set directly in the DB, or through the manage-users edit PUT /users/{id}) works in the backend (200) but is NOT in the login/me permissions, so the SideMenu hides 'تبادل / إنابة المحاضرات'. Verified live. Granting through custom_permissions (the /permissions screen) works end-to-end."},
+      {"endpoint": "GET /api/student-excuses", "issue": "Possibly not 'empty for everyone': db.roles docs for registrar, dean and registration_manager include manage_student_excuses. So every user with those roles still gets 200 with no explicit grant (test_registrar's own permissions field is only ['manage_curriculum']; access comes from the role doc). The department_head role doesn't include it, so Saeed gets 403. Confirm with the user whether this is intended."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Grant manage_lecture_swaps through user.permissions (DB / manage-users edit)", "issue": "The sidebar item stays hidden because /auth/login and /auth/me drop the direct permissions field when the role has permissions. It does appear when granted through custom_permissions (/permissions screen).", "affected_selectors": ["SideMenu lecture-swaps item"]}
+    ],
+    "design_issues": [
+      {"screen": "/lecture-swaps", "issues": ["The top header title shows the raw route name 'lecture-swaps' instead of an Arabic title"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_perm_gates_swaps_excuses_trash_iter184.py", "/app/test_reports/pytest/iter184.xml"],
+  "action_items": [
+    "HIGH: Remove Permission.MANAGE_TRASH from FULL_PERMISSION_MAPPING[Permission.MANAGE_COURSES] in backend/backend/models/permissions.py (line 572). Also check that no other mapping expands to manage_trash/purge_trash. Then re-run tests TestTrash::test_manage_courses_only_403 and test_dean_head_trash_403.",
+    "MEDIUM: Make routes/auth.py login and /me merge user.get('permissions') the same way build_user_context does, so the frontend sidebar matches the backend. Otherwise, grants written to user.permissions don't show in the UI.",
+    "Confirm with the user whether role docs (registrar, dean, registration_manager) keeping manage_student_excuses is acceptable under 'start with empty permissions for everyone'.",
+    "Minor: add a proper Arabic header title for the /lecture-swaps route."
+  ],
+  "critical_code_review_comments": [
+    "has_permission (server.py and deps.py) expands FULL_PERMISSION_MAPPING, so removing explicit OR-bypasses in the routes isn't enough; implicit bypasses through the mapping must be audited too.",
+    "There are three different permission builders (auth.py login/me, deps.build_user_context, server.get_current_user) with different merge rules. Consolidate them into one."
+  ],
+  "updated_files": ["/app/backend/tests/test_perm_gates_swaps_excuses_trash_iter184.py"],
+  "success_rate": {"backend": "87.5% (14/16)", "frontend": "75% (sidebar hide/show via custom_permissions OK; permission toggle under 'الحضور' OK; direct-permissions path not shown in UI)"},
+  "test_credentials": "admin/admin123, test_registrar/test1234, Salim/test1234, Saeed/test1234, student 1001/test1234",
+  "seed_data_creation": "None. test_registrar.permissions was temporarily changed during the tests and restored to its original ['manage_curriculum']; custom_permissions was removed (it was originally absent). No trash items were deleted or restored (fake ids only). DELETE /api/trash (clear all) was only tested for the 403 case.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "The actual backend is /app/backend/backend/ (the top-level server.py is a loader). The test file toggles test_registrar.permissions through pymongo and restores it on teardown; run it with -p no:xdist. test_registrar gets manage_student_excuses from its registrar role doc (role_id 698c93119a944c07ac7f80c5), not from the user field.",
+  "rca of the issue": "Trash leak: FULL_PERMISSION_MAPPING maps manage_courses to sub-permissions that include manage_trash, so has_permission('manage_trash') is true for anyone with manage_courses. Reproduce: set users.permissions=['manage_courses'] on test_registrar, then GET /api/trash returns 200. Fix: drop MANAGE_TRASH from that mapping."
+}
