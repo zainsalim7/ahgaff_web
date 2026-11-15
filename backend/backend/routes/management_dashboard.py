@@ -646,7 +646,14 @@ async def get_modules_prefs(current_user: dict = Depends(get_current_user)):
 @router.put("/dashboard/modules-prefs")
 async def update_modules_prefs(payload: ModulesPrefsUpdate, current_user: dict = Depends(get_current_user)):
     db = get_db()
-    hidden_tasks = [str(x) for x in payload.hidden_tasks]
+    seen = set()
+    hidden_tasks = []
+    for x in payload.hidden_tasks:
+        x = str(x)
+        if x and x not in seen:
+            seen.add(x)
+            hidden_tasks.append(x)
+    hidden_tasks = hidden_tasks[:200]
     await db.users.update_one({"_id": ObjectId(current_user["id"])}, {"$set": {"dashboard_hidden_tasks": hidden_tasks}})
     return {"hidden_tasks": hidden_tasks}
 

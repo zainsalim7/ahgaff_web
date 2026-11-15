@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend test of the new 'مهام إضافية' tiles (DashExtraTasksGrid) and the new default 'الوحدات' tab. Every requested flow passed. Admin lands on the modules tab right after login. The modules grid shows 12/91/15/4 for courses/students/teachers/departments. The extra-tasks grid has 45 tiles and shows '45 من أصل 45'. Customize mode works: the button turns green and reads 'تم', and 45 X badges appear. Hiding qr-scanner and batch-print removed both tiles, changed the count to 43/45 and showed the tray with 2 restore chips. After a full page.reload() both stayed hidden (43/45), so the server-side persistence works. Restoring both brought the count back to 45/45 and the tray went away. Leaving edit mode brings back the 'تخصيص' label and removes the badges. Tile navigation works: view-calendar -> /calendar, statements-log -> /statements-log, report-daily -> /report-daily. test_registrar sees 25 tiles and none of the adminOnly ones or permissions-tree. All alwaysVisible items are there. The registrar's hide of letter-new survived a reload while admin's prefs stayed [] (checked via API), so the prefs are per-account. Both accounts were reset to hidden_tasks=[]. Light regression: tabs academic/hr/modules switch correctly and the modules grid only shows on the modules tab. The registrar gets tabs academic and modules, with '—' values; this is expected from the iteration_185 fix because /dashboard/management returns 403 for the registrar. The mobile layout at 390px is fine: 3 tiles per row, and the X badges are not clipped.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/dashboard/modules-prefs", "issue": "No dedupe and no length/size limit on hidden_tasks, and the ids are not checked against known task ids. A client can store any list, e.g. very large arrays or duplicates."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Desktop extra-tasks grid (1920px)", "issues": ["Tiles have a fixed width (108px) and are right-aligned with row-reverse wrap, so the last row is ragged and there is a gap on the left. The modules cards above span the full width. This is minor and cosmetic."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: DashExtraTasksGrid.persist swallows PUT errors silently (catch {}). The UI then shows the task as hidden even though it was not saved, and it reappears on reload. Revert the state or show a toast on failure.",
+    "Optional: hideTask/restoreTask build the new list from the hiddenIds closure. Use the functional setState form, or dedupe, so fast repeated clicks don't drop updates or add duplicates.",
+    "Optional: dedupe and cap hidden_tasks in PUT /dashboard/modules-prefs.",
+    "SECURITY (pre-existing, outside this feature): localStorage holds the user's plaintext password ({\"username\":\"test_registrar\",\"password\":\"test1234\",...}). Remove the password from persisted storage."
+  ],
+  "critical_code_review_comments": [
+    "persist() catches and ignores API failures, so the optimistic UI drifts from server state.",
+    "The hide/restore closure over hiddenIds can produce stale state on quick double clicks.",
+    "The plaintext password stored in localStorage (auth store persistence) is a security risk.",
+    "The visibleTasks filter gives roles[] priority over admin. This is fine now because the roles lists include 'admin', but a future roles entry without 'admin' would hide the task from admin."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only; prefs endpoint spot-checked: GET/PUT OK, 403 without auth, 422 for bad payload)", "frontend": "100%"},
+  "seed_data_creation": "None. Admin and test_registrar dashboard_hidden_tasks were both reset to [] after testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login form has no testIDs: use input:not([type=password]), input[type=password], get_by_text('تسجيل الدخول').last. There are 45 EXTRA_TASKS in total. Admin sees 45. test_registrar sees 25: manage-study-plan, teacher-courses, student-references, student-statuses, view-calendar, availability-report, verify-report, 11 report-* items, fee-receipts, grades, statements-log, letter-new, photo-approvals, batch-print, card-settings. Prefs are in users.dashboard_hidden_tasks. Always reset them to [] after testing."
+}

@@ -95,12 +95,19 @@ export const DashExtraTasksGrid = () => {
   }, []);
 
   const persist = async (next: string[]) => {
+    const prev = hiddenIds;
     setHiddenIds(next);
     setSaving(true);
-    try { await dashboardAPI.updateModulesPrefs(next); } catch {} finally { setSaving(false); }
+    try {
+      await dashboardAPI.updateModulesPrefs(next);
+    } catch {
+      setHiddenIds(prev);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const hideTask = (id: string) => persist([...hiddenIds, id]);
+  const hideTask = (id: string) => persist(hiddenIds.includes(id) ? hiddenIds : [...hiddenIds, id]);
   const restoreTask = (id: string) => persist(hiddenIds.filter((h) => h !== id));
 
   const visibleTasks = useMemo(
