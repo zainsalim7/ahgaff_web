@@ -8558,6 +8558,13 @@ async def get_today_lectures(
         except Exception:
             pass
 
+    # 🔁 أسماء الأساتذة الثابتين للمقررات (تُستبدَل بالمنفِّذ الفعلي لمحاضرة مُبادَلة/مُنابة أدناه)
+    _teacher_ids = {str(c.get("teacher_id")) for c in course_map.values() if c.get("teacher_id") and ObjectId.is_valid(str(c.get("teacher_id")))}
+    _teacher_name_map: dict = {}
+    if _teacher_ids:
+        async for t in db.teachers.find({"_id": {"$in": [ObjectId(x) for x in _teacher_ids]}}, {"full_name": 1}):
+            _teacher_name_map[str(t["_id"])] = t.get("full_name", "")
+
     for lecture in lectures:
         course = course_map.get(lecture["course_id"], {})
         # حساب عدد الطلاب الحاضرين (فقط إذا مطلوب)
@@ -8605,7 +8612,12 @@ async def get_today_lectures(
             "notes": lecture.get("notes", ""),
             "attendance_count": attendance_count,
             "total_enrolled": total_enrolled,
-            "created_at": lecture.get("created_at")
+            "created_at": lecture.get("created_at"),
+            # 🔁 الأستاذ الفعلي: محاضرة مُبادَلة/مُنابة تعرض اسم المنفِّذ الفعلي لا الأستاذ الثابت للمقرر
+            "teacher_name": lecture.get("teacher_name") or _teacher_name_map.get(str(course.get("teacher_id", "")), ""),
+            "is_swapped": bool(lecture.get("swap_id")),
+            "original_teacher_name": lecture.get("original_teacher_name"),
+            "swap_type": lecture.get("swap_type"),
         })
 
     return apply_fields(result, allowed)
@@ -8729,7 +8741,11 @@ async def get_all_schedule_lectures(
             "cancellation_reason": lecture.get("cancellation_reason", ""),
             "cancellation_reason_type": lecture.get("cancellation_reason_type"),
             "attendance_taken": str(lecture["_id"]) in _taken_ids,
-            "teacher_name": teacher_map.get(str(course.get("teacher_id", "")), ""),
+            # 🔁 الأستاذ الفعلي: محاضرة مُبادَلة/مُنابة تعرض اسم المنفِّذ الفعلي لا الأستاذ الثابت للمقرر
+            "teacher_name": lecture.get("teacher_name") or teacher_map.get(str(course.get("teacher_id", "")), ""),
+            "is_swapped": bool(lecture.get("swap_id")),
+            "original_teacher_name": lecture.get("original_teacher_name"),
+            "swap_type": lecture.get("swap_type"),
             "created_at": lecture.get("created_at", "")
         })
     
@@ -8893,6 +8909,12 @@ async def get_course_lectures(
     
     # 🆕 الحد الأقصى لتأخير الأستاذ لفتح التحضير (من إعدادات كلية المقرر، وإلا الافتراضي العام)
     _, _course_max_delay, _ = await _get_faculty_attendance_settings(course)
+
+    # 🔁 اسم الأستاذ الثابت للمقرر (يُستبدَل بالمنفِّذ الفعلي لمحاضرة مُبادَلة/مُنابة أدناه)
+    _default_teacher_name = ""
+    if course.get("teacher_id") and ObjectId.is_valid(str(course["teacher_id"])):
+        _ct = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])}, {"full_name": 1})
+        _default_teacher_name = (_ct or {}).get("full_name", "")
     
     # 🔒 معلم بلا أي صلة بهذا المقرر (لا ملكية ولا قيادة مجموعة)
     if current_user["role"] == UserRole.TEACHER:
@@ -9063,6 +9085,11 @@ async def get_course_lectures(
             "cancellation_reason_type": lecture.get("cancellation_reason_type"),
             "cancelled_at": lecture.get("cancelled_at"),
             "cancelled_by_name": lecture.get("cancelled_by_name"),
+            # 🔁 الأستاذ الفعلي: محاضرة مُبادَلة/مُنابة تعرض اسم المنفِّذ الفعلي لا الأستاذ الثابت للمقرر
+            "teacher_name": lecture.get("teacher_name") or _default_teacher_name,
+            "is_swapped": bool(lecture.get("swap_id")),
+            "original_teacher_name": lecture.get("original_teacher_name"),
+            "swap_type": lecture.get("swap_type"),
         })
     
     return {

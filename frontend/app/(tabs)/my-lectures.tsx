@@ -24,6 +24,9 @@ interface Lecture {
   status: string;
   attendance_count?: number;
   total_students?: number;
+  teacher_name?: string;
+  is_swapped?: boolean;
+  original_teacher_name?: string;
 }
 
 const DAY_NAMES: Record<string, string> = {
@@ -81,6 +84,12 @@ export default function MyLecturesTab() {
           <Text style={styles.courseCode}>{item.course_code}</Text>
           {item.room ? <Text style={styles.room}><Ionicons name="location" size={12} color="#666" /> {item.room}</Text> : null}
           {item.group ? <Text style={[styles.room, { color: '#00695c', fontWeight: '800' }]} testID={`my-lecture-group-${item.id}`}><Ionicons name="people" size={12} color="#00838f" /> {item.group_name || `مجموعة ${item.group}`}</Text> : null}
+          {item.is_swapped ? (
+            <View style={styles.swapBadge} testID={`my-lecture-swap-${item.id}`}>
+              <Ionicons name="repeat" size={12} color="#8e24aa" />
+              <Text style={styles.swapText}> إنابة — ينفّذها {item.teacher_name}{item.original_teacher_name ? ` بدلاً من ${item.original_teacher_name}` : ''}</Text>
+            </View>
+          ) : null}
           <View style={[styles.statusBadge, { backgroundColor: statusInfo.color + '20' }]}>
             <Ionicons name={statusInfo.icon as any} size={14} color={statusInfo.color} />
             <Text style={[styles.statusText, { color: statusInfo.color }]}> {statusInfo.label}</Text>
@@ -146,6 +155,8 @@ const styles = StyleSheet.create({
   room: { fontSize: 13, color: '#666', marginBottom: 6 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   statusText: { fontSize: 12, fontWeight: '600' },
+  swapBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: '#f3e5f5', marginBottom: 6 },
+  swapText: { fontSize: 11.5, color: '#6a1b9a', fontWeight: '700' },
   actionColumn: { justifyContent: 'center', alignItems: 'center' },
   attendanceBtn: {
     backgroundColor: '#1565c0', borderRadius: 20,

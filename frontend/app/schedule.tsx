@@ -335,6 +335,11 @@ export default function ScheduleScreen() {
             ) : null}
             {item.day_shift_cancelled ? <View style={[n.chip, { backgroundColor: '#fce4ec' }]} testID={`shift-cancelled-badge-${item.id}`}><Text style={[n.chipText, { color: '#ad1457' }]}>ملغاة بالإزاحة</Text></View>
               : item.day_shifted ? <View style={[n.chip, { backgroundColor: '#ede7f6' }]} testID={`shift-badge-${item.id}`}><Text style={[n.chipText, { color: '#5e35b1' }]}>{item.credited_minutes ? `إزاحة (تُحسب ${item.credited_minutes} د)` : 'إزاحة'}</Text></View> : null}
+            {item.is_swapped ? (
+              <View style={[n.chip, { backgroundColor: '#f3e5f5' }]} testID={`schedule-swap-${item.id}`}>
+                <Text style={[n.chipText, { color: '#6a1b9a' }]}>🔁 {item.swap_type === 'swap' ? 'تبادل' : 'إنابة'}{item.original_teacher_name ? ` — بدلاً من ${item.original_teacher_name}` : ''}</Text>
+              </View>
+            ) : null}
             {typeof item.attendance_count !== 'undefined' && (
               <Text style={n.attText}>{item.status === 'completed' ? `حضور ${item.attendance_count || 0}/${item.total_enrolled || 0}` : `مسجل ${item.total_enrolled || 0}`}</Text>
             )}

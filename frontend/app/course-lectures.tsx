@@ -54,6 +54,10 @@ interface Lecture {
   cancellation_reason_type?: string | null;
   cancelled_at?: string | null;
   cancelled_by_name?: string | null;
+  teacher_name?: string | null;
+  is_swapped?: boolean;
+  original_teacher_name?: string | null;
+  swap_type?: string | null;
 }
 
 const DAYS = [
@@ -990,6 +994,14 @@ export default function CourseLecturesScreen() {
               </View>
             ) : null}
           </View>
+          {item.is_swapped && (
+            <View style={[styles.noteBoxInfoNew, { backgroundColor: '#f3e5f5' }]} testID={`lecture-swap-badge-${item.id}`}>
+              <Ionicons name="repeat" size={12} color="#6a1b9a" />
+              <Text style={[styles.noteTextNew, { color: '#6a1b9a' }]} numberOfLines={1}>
+                {item.swap_type === 'swap' ? 'تبادل' : 'إنابة'} — ينفّذها {item.teacher_name}{item.original_teacher_name ? ` بدلاً من ${item.original_teacher_name}` : ''}
+              </Text>
+            </View>
+          )}
           {item.last_rescheduled_from && (
             <View style={styles.noteBoxInfoNew}>
               <Ionicons name="swap-horizontal" size={12} color="#1565c0" />
