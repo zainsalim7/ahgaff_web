@@ -21,6 +21,7 @@ import { DashViewTabs, DashView } from './DashViewTabs';
 import { DashUnitFilter } from './DashUnitFilter';
 import { HRDashboardView } from './HRDashboardView';
 import { DashModulesGrid } from './DashModulesGrid';
+import { DashExtraTasksGrid } from './DashExtraTasksGrid';
 
 type Period = 'day' | 'week' | 'month';
 
@@ -54,7 +55,7 @@ export const ManagementDashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState<'' | 'pdf' | 'excel'>('');
-  const [view, setView] = useState<DashView>('academic');
+  const [view, setView] = useState<DashView>('modules');
   const [orgUnitId, setOrgUnitId] = useState('');
   const [hrData, setHrData] = useState<any>(null);
   const [hrLoading, setHrLoading] = useState(false);
@@ -179,7 +180,10 @@ export const ManagementDashboard = () => {
         {isHR ? (
           hrData?.hr && <HRDashboardView data={hrData} compact={compact} width={Math.min(width, 1400) - 64} />
         ) : isModules ? (
-          <DashModulesGrid numbers={data?.numbers} />
+          <>
+            <DashModulesGrid numbers={data?.numbers} />
+            <DashExtraTasksGrid />
+          </>
         ) : data && (
           <>
             <DashKpis n={data.numbers} periodLabel={data.period_label} compact={compact} />

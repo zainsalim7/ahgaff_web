@@ -1136,6 +1136,8 @@ export const dashboardAPI = {
   teacher: (month?: number, year?: number) =>
     api.get('/dashboard/teacher', { params: { month, year } }),
   admin: () => api.get('/dashboard/admin'),
+  getModulesPrefs: () => api.get('/dashboard/modules-prefs'),
+  updateModulesPrefs: (hiddenTasks: string[]) => api.put('/dashboard/modules-prefs', { hidden_tasks: hiddenTasks }),
 };
 
 // Study Plans API (الخطة الدراسية لكل مقرر - أسبوعية)

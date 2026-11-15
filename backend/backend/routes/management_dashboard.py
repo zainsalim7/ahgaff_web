@@ -4,9 +4,10 @@ import os
 import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from bson import ObjectId
 
 from .deps import get_db, get_current_user, get_scope_filter, has_permission, export_filename, export_headers
@@ -628,6 +629,26 @@ async def management_dashboard_hr_export(fmt: str = "pdf", period: str = "week",
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية تصدير لوحة القيادة")
     d = await build_hr_dashboard(get_db(), current_user, period, org_unit_id)
     return _stream(d, fmt, "لوحة القيادة - شؤون الموظفين", d["hr"]["scope"]["label"])
+
+
+class ModulesPrefsUpdate(BaseModel):
+    hidden_tasks: List[str]
+
+
+@router.get("/dashboard/modules-prefs")
+async def get_modules_prefs(current_user: dict = Depends(get_current_user)):
+    """🧩 تفضيل شخصي: أي بطاقات مهام إضافية أخفاها المستخدم من لوحة الوحدات — مُزامَن على حسابه"""
+    db = get_db()
+    user = await db.users.find_one({"_id": ObjectId(current_user["id"])}, {"dashboard_hidden_tasks": 1})
+    return {"hidden_tasks": (user or {}).get("dashboard_hidden_tasks", [])}
+
+
+@router.put("/dashboard/modules-prefs")
+async def update_modules_prefs(payload: ModulesPrefsUpdate, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    hidden_tasks = [str(x) for x in payload.hidden_tasks]
+    await db.users.update_one({"_id": ObjectId(current_user["id"])}, {"$set": {"dashboard_hidden_tasks": hidden_tasks}})
+    return {"hidden_tasks": hidden_tasks}
 
 
 def _stream(d: dict, fmt: str, base: str, scope_label: str):
