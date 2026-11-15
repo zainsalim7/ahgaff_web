@@ -323,7 +323,7 @@ export default function ScheduleScreen() {
           {item.room ? <View style={n.meta}><Ionicons name="location-outline" size={12} color="#8a95a8" /><Text style={n.metaText}>قاعة {item.room}</Text></View> : null}
         </View>
         ) : null}
-        {(item.group || item.day_shift_cancelled || item.day_shifted || item.cancellation_reason_type || typeof item.attendance_count !== 'undefined') && (
+        {(item.group || item.is_swapped || item.day_shift_cancelled || item.day_shifted || item.cancellation_reason_type || typeof item.attendance_count !== 'undefined') && (
           <View style={n.chipRow}>
             {item.group ? <View style={[n.chip, { backgroundColor: '#e0f2f1' }]} testID={`schedule-group-${item.id}`}><Text style={[n.chipText, { color: '#00695c' }]}>👥 {item.group_name || `مجموعة ${item.group}`}</Text></View> : null}
             {item.status === 'cancelled' && item.cancellation_reason_type ? (

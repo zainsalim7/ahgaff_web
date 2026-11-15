@@ -1,0 +1,37 @@
+{
+  "summary": "Ran an end-to-end test of the lecture swap/cover (إنابة) display fix. The preview DB had no future scheduled lectures, so I created 2 TEST lectures for TODAY (2026-11-15, 21:00 and 22:00) on course 'لغة إنجليزية - اختبار' (6ac2c04cb031f88e942618de, teacher حسن صالح). Then I created a cover swap through the real /lecture-swaps UI (original teacher حسن صالح → substitute أستاذ اختبار 180156). The swap showed status 'مطبّق'. BACKEND: all 3 endpoints now return the substitute's teacher_name plus is_swapped=true, original_teacher_name and swap_type='cover'. The control (non-swapped) lecture keeps the course teacher with is_swapped=false. Cancelling the swap reverts everything. FRONTEND: /course-lectures shows the purple box 'إنابة — ينفّذها أستاذ اختبار 180156 بدلاً من حسن صالح'. On my-lectures (mobile viewport with the x-platform header), the substitute sees the covered lecture with the purple badge and the original teacher sees only the control lecture, with no badge. /schedule showed the substitute's name, but the purple swap chip was NOT rendered, because the chipRow wrapper condition did not include item.is_swapped and /all-schedule returns no attendance_count. I fixed this with a one-line change in schedule.tsx and confirmed the chip now shows '🔁 إنابة — بدلاً من حسن صالح'. Cancelling via UI set the status to 'ملغى' and the /schedule card went back to حسن صالح with no chip. Dashboard regression check passed: admin still lands on the 'الوحدات' tab.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/lecture-swaps", "issue": "Side effect (not a bug): one cover swap sends notifications to every enrolled student plus both teachers (about 76 per swap on the test course), and the notifications stay after the swap is cancelled. Testers need to clean them up by swap_id/lecture_id."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "schedule.tsx lecture card chipRow", "issue": "FIXED BY TESTING AGENT: the purple swap chip (schedule-swap-{id}) never rendered. Its wrapper condition `(item.group || item.day_shift_cancelled || item.day_shifted || item.cancellation_reason_type || typeof item.attendance_count !== 'undefined')` was false for swapped lectures with no group or day-shift, because /lectures/all-schedule does not return attendance_count. I added `item.is_swapped ||` to the condition.", "selector": "[data-testid='schedule-swap-{lectureId}']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "(tabs)/my-lectures.tsx swap badge", "issues": ["The badge always says 'إنابة' and ignores swap_type. A 'swap' (تبادل) lecture will be mislabelled as إنابة. schedule.tsx and course-lectures.tsx handle swap_type correctly."]},
+      {"screen": "lecture-swaps new modal", "issues": ["The date range filter uses the browser's native <input type='date'> (mm/dd/yyyy shown in an Arabic RTL UI) instead of a styled date picker. course-lectures uses the same native date inputs."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_lecture_swap_display.py", "/app/test_reports/pytest/swap_display.xml", "/app/backend/tests/ui_swap_setup.py", "/app/backend/tests/cleanup_swap_test.py"],
+  "action_items": [
+    "Review the 1-line schedule.tsx fix (chipRow condition now includes item.is_swapped) and keep it",
+    "my-lectures.tsx: use `item.swap_type === 'swap' ? 'تبادل' : 'إنابة'` in the badge text, as the other 2 screens do"
+  ],
+  "critical_code_review_comments": [
+    "schedule.tsx chipRow: new chips must be added to the wrapper's visibility condition, or they render only by accident when attendance_count happens to be present (as it is in /lectures/today, but not in /all-schedule).",
+    "Backend fix is correct on all 3 endpoints: lecture.teacher_name takes priority over the course's static teacher. _teacher_lecture_scope correctly gives the substitute the covered lecture via teacher_id+swap_id. The original teacher's /lectures/today correctly hides it.",
+    "lecture_swaps._revert relies on the snapshot lecture_a.teacher_id to decide set vs unset. This was verified to work for a course-level teacher (no explicit lecture teacher)."
+  ],
+  "updated_files": ["/app/frontend/app/schedule.tsx", "/app/backend/tests/test_lecture_swap_display.py", "/app/backend/tests/ui_swap_setup.py", "/app/backend/tests/cleanup_swap_test.py"],
+  "success_rate": {"backend": "100% (8/8 pytest)", "frontend": "100% after the 1-line schedule.tsx fix (it failed on the swap chip before the fix)"},
+  "test_credentials": "admin/admin123; teacher180156/teacher123 (substitute, teacher record 698f671431cfba92c49a550e); 9999/teacher123 (حسن صالح, teacher record 698e533beb4c6eb021c50302). Teachers cannot log in from a desktop web browser by design (routes/auth.py blocks teacher/student role on web). For Playwright, use page.set_extra_http_headers({'x-platform':'android'}) to log in as a teacher.",
+  "seed_data_creation": "Temporary only, and all of it was cleaned up: 4 TEST lectures (notes TEST_swap_display / TEST_swap_ui, deleted via API), 3 lecture_swaps (cancelled, then deleted by _id), and 228 lecture_swap notifications for those swap and lecture ids (deleted by id). No seed or user data was modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "There are no future scheduled lectures in the preview DB. Create TEST lectures for today on course 6ac2c04cb031f88e942618de at a late hour (POST /api/lectures with force:true). Run `python3 -m pytest tests/test_lecture_swap_display.py -p no:xdist -o addopts=''` from /app/backend. It creates and deletes its own lectures and cancels the swap. Cancelled swap docs and notifications stay behind; delete them by id (see cleanup_swap_test.py). The /lectures/all-schedule response is a dict, not a list; the lecture list is under 'lectures'. On my-lectures, the cards do not use the lecture-card-{id} testid, but my-lecture-swap-{id} exists.",
+  "rca of the issue": "Swap chip missing on /schedule: schedule.tsx line ~326 only renders the chip container when group, day-shift, cancellation_reason_type or attendance_count is set. /lectures/all-schedule never returns attendance_count, so a plain swapped lecture never rendered the container or the new chip inside it. Reproduced with a real UI-created cover swap (chip testid absent, substitute name present). Fix: add item.is_swapped to the condition. Verified the chip renders, and that it is absent on the non-swapped control lecture."
+}

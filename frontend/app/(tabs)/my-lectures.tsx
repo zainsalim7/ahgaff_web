@@ -27,6 +27,7 @@ interface Lecture {
   teacher_name?: string;
   is_swapped?: boolean;
   original_teacher_name?: string;
+  swap_type?: string | null;
 }
 
 const DAY_NAMES: Record<string, string> = {
@@ -87,7 +88,7 @@ export default function MyLecturesTab() {
           {item.is_swapped ? (
             <View style={styles.swapBadge} testID={`my-lecture-swap-${item.id}`}>
               <Ionicons name="repeat" size={12} color="#8e24aa" />
-              <Text style={styles.swapText}> إنابة — ينفّذها {item.teacher_name}{item.original_teacher_name ? ` بدلاً من ${item.original_teacher_name}` : ''}</Text>
+              <Text style={styles.swapText}> {item.swap_type === 'swap' ? 'تبادل' : 'إنابة'} — ينفّذها {item.teacher_name}{item.original_teacher_name ? ` بدلاً من ${item.original_teacher_name}` : ''}</Text>
             </View>
           ) : null}
           <View style={[styles.statusBadge, { backgroundColor: statusInfo.color + '20' }]}>
