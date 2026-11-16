@@ -18,6 +18,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/contexts/AuthContext';
 import { rolesAPI, permissionsAPI } from '../src/services/api';
+import { EXTRA_TASKS } from '../src/components/dashboard/DashExtraTasksGrid';
 
 interface Permission {
   key: string;
@@ -100,6 +101,10 @@ export default function ManageRolesScreen() {
   const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // 🕵️ تدقيق الصلاحيات: مقارنة كل دور بالمهام/الميزات الفعلية الظاهرة له
+  const [activeTab, setActiveTab] = useState<'roles' | 'audit'>('roles');
+  const [auditRoleId, setAuditRoleId] = useState<string>('__admin__');
   
   // Modal states
   const [showModal, setShowModal] = useState(false);
@@ -252,6 +257,29 @@ export default function ManageRolesScreen() {
     }
   };
 
+  // 🕵️ تدقيق الصلاحيات — لا نضيف أي صلاحية افتراضية هنا، فقط نعرض الواقع الحالي بدقة
+  const auditRole = roles.find(r => r.id === auditRoleId);
+  const isAuditAdmin = auditRoleId === '__admin__';
+  const auditExpandedPerms = isAuditAdmin ? [] : expandPermissions(auditRole?.permissions || []);
+
+  const auditFeatureStatus = (t: any): 'admin' | 'public' | 'admin_only' | 'gap' | 'granted' | 'denied' => {
+    if (isAuditAdmin) return 'admin';
+    if (t.alwaysVisible) return 'public';
+    if (t.adminOnly) return 'admin_only';
+    if (!t.perms || t.perms.length === 0) return 'gap';
+    return t.perms.some((p: string) => auditExpandedPerms.includes(p)) ? 'granted' : 'denied';
+  };
+
+  const auditCategoriesOrder = ['أكاديمي', 'تقارير', 'إداري', 'نظام وصيانة'];
+  const auditGrouped: Record<string, any[]> = {};
+  EXTRA_TASKS.forEach((t: any) => {
+    const cat = t.category || 'أخرى';
+    if (!auditGrouped[cat]) auditGrouped[cat] = [];
+    auditGrouped[cat].push(t);
+  });
+  const grantedCount = EXTRA_TASKS.filter((t: any) => ['admin', 'public', 'granted'].includes(auditFeatureStatus(t))).length;
+  const gapFeatures = EXTRA_TASKS.filter((t: any) => auditFeatureStatus(t) === 'gap');
+
   const handleSave = async () => {
     if (!roleName.trim()) {
       if (Platform.OS === 'web') {
@@ -402,6 +430,28 @@ export default function ManageRolesScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* 🕵️ تبويب تدقيق الصلاحيات */}
+      <View style={styles.tabBar} testID="manage-roles-tab-bar">
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'roles' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('roles')}
+          testID="manage-roles-tab-roles"
+        >
+          <Ionicons name="shield" size={16} color={activeTab === 'roles' ? '#fff' : '#64748b'} />
+          <Text style={[styles.tabBtnText, activeTab === 'roles' && styles.tabBtnTextActive]}>الأدوار</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'audit' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('audit')}
+          testID="manage-roles-tab-audit"
+        >
+          <Ionicons name="search" size={16} color={activeTab === 'audit' ? '#fff' : '#64748b'} />
+          <Text style={[styles.tabBtnText, activeTab === 'audit' && styles.tabBtnTextActive]}>تدقيق الصلاحيات</Text>
+        </TouchableOpacity>
+      </View>
+
+      {activeTab === 'roles' && (
+      <>
       {/* Info Card */}
       <View style={styles.infoCard}>
         <Ionicons name="information-circle" size={24} color="#1565c0" />
@@ -553,6 +603,85 @@ export default function ManageRolesScreen() {
           </View>
         )}
       </ScrollView>
+      </>
+      )}
+
+      {activeTab === 'audit' && (
+      <ScrollView style={styles.scrollView} testID="permissions-audit-panel">
+        <View style={styles.infoCard}>
+          <Ionicons name="information-circle" size={22} color="#1565c0" />
+          <Text style={styles.infoText}>
+            اختر دوراً لمعرفة الميزات الظاهرة له فعلياً مقارنةً بصلاحياته — بلا أي افتراض: فقط ما مُنح صراحةً من هذه الشاشة يظهر ✓.
+          </Text>
+        </View>
+
+        {/* اختيار الدور */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.auditRolePicker} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
+          <TouchableOpacity
+            style={[styles.auditRoleChip, isAuditAdmin && styles.auditRoleChipActive]}
+            onPress={() => setAuditRoleId('__admin__')}
+            testID="audit-role-chip-admin"
+          >
+            <Text style={[styles.auditRoleChipText, isAuditAdmin && styles.auditRoleChipTextActive]}>المدير العام (admin)</Text>
+          </TouchableOpacity>
+          {roles.map((r) => (
+            <TouchableOpacity
+              key={r.id}
+              style={[styles.auditRoleChip, auditRoleId === r.id && styles.auditRoleChipActive]}
+              onPress={() => setAuditRoleId(r.id)}
+              testID={`audit-role-chip-${r.id}`}
+            >
+              <Text style={[styles.auditRoleChipText, auditRoleId === r.id && styles.auditRoleChipTextActive]} numberOfLines={1}>{r.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <View style={styles.auditSummaryCard}>
+          <Text style={styles.auditSummaryText}>
+            {isAuditAdmin ? 'المدير العام يملك وصولاً كاملاً دائماً لكل الميزات.' : `${grantedCount} من أصل ${EXTRA_TASKS.length} ميزة ظاهرة لهذا الدور حالياً.`}
+          </Text>
+        </View>
+
+        {gapFeatures.length > 0 && (
+          <View style={styles.auditGapCard} testID="audit-gap-warning">
+            <Ionicons name="warning" size={18} color="#b45309" />
+            <Text style={styles.auditGapText}>
+              ⚠️ {gapFeatures.length} ميزة بلا صلاحية فردية مرتبطة بها بعد: {gapFeatures.map((f: any) => f.label).join('، ')}
+            </Text>
+          </View>
+        )}
+
+        {auditCategoriesOrder.filter(c => auditGrouped[c]).map((cat) => (
+          <View key={cat} style={styles.auditCategoryBlock}>
+            <Text style={styles.auditCategoryTitle}>{cat}</Text>
+            {auditGrouped[cat].map((t: any) => {
+              const status = auditFeatureStatus(t);
+              const statusMap: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+                admin: { label: 'متاحة (admin)', color: '#166534', bg: '#dcfce7', icon: 'checkmark-circle' },
+                granted: { label: 'ممنوحة ✓', color: '#166534', bg: '#dcfce7', icon: 'checkmark-circle' },
+                denied: { label: 'غير ممنوحة', color: '#64748b', bg: '#f1f5f9', icon: 'close-circle-outline' },
+                public: { label: 'عامة', color: '#0369a1', bg: '#e0f2fe', icon: 'globe-outline' },
+                admin_only: { label: 'للأدمن فقط', color: '#6d28d9', bg: '#ede9fe', icon: 'lock-closed' },
+                gap: { label: '⚠️ بلا صلاحية فردية', color: '#b45309', bg: '#fef3c7', icon: 'alert-circle' },
+              };
+              const s = statusMap[status];
+              return (
+                <View key={t.id} style={styles.auditFeatureRow} testID={`audit-feature-${t.id}`}>
+                  <View style={[styles.auditStatusBadge, { backgroundColor: s.bg }]}>
+                    <Ionicons name={s.icon} size={13} color={s.color} />
+                    <Text style={[styles.auditStatusText, { color: s.color }]}>{s.label}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.auditFeatureLabel} numberOfLines={1}>{t.label}</Text>
+                    <Text style={styles.auditFeatureRoute} numberOfLines={1}>{t.route}{t.perms ? ` · ${t.perms.join(' أو ')}` : ''}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ))}
+      </ScrollView>
+      )}
 
       {/* Add/Edit Role Modal */}
       <Modal
@@ -688,6 +817,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  tabBar: { flexDirection: 'row-reverse', gap: 8, paddingHorizontal: 16, paddingBottom: 10 },
+  tabBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: '#eef1f6' },
+  tabBtnActive: { backgroundColor: '#1565c0' },
+  tabBtnText: { fontSize: 12.5, fontWeight: '700', color: '#64748b' },
+  tabBtnTextActive: { color: '#fff' },
+  auditRolePicker: { marginHorizontal: 16, marginBottom: 10, maxHeight: 42 },
+  auditRoleChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
+  auditRoleChipActive: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
+  auditRoleChipText: { fontSize: 12.5, fontWeight: '700', color: '#334155' },
+  auditRoleChipTextActive: { color: '#fff' },
+  auditSummaryCard: { marginHorizontal: 16, marginBottom: 10, backgroundColor: '#fff', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  auditSummaryText: { fontSize: 12.5, fontWeight: '700', color: '#0f172a', textAlign: 'right' },
+  auditGapCard: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 10, backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 10, padding: 10 },
+  auditGapText: { flex: 1, fontSize: 11.5, fontWeight: '600', color: '#92400e', textAlign: 'right' },
+  auditCategoryBlock: { marginHorizontal: 16, marginBottom: 14 },
+  auditCategoryTitle: { fontSize: 13, fontWeight: '800', color: '#1565c0', textAlign: 'right', marginBottom: 6 },
+  auditFeatureRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: '#f1f5f9' },
+  auditStatusBadge: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, minWidth: 96, justifyContent: 'center' },
+  auditStatusText: { fontSize: 10.5, fontWeight: '700' },
+  auditFeatureLabel: { fontSize: 12.5, fontWeight: '700', color: '#0f172a', textAlign: 'right' },
+  auditFeatureRoute: { fontSize: 10, color: '#94a3b8', textAlign: 'right', marginTop: 1 },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

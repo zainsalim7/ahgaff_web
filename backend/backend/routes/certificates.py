@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity, export_filename, export_headers
+from .deps import get_db, get_current_user, log_activity, export_filename, export_headers, has_permission
 from .statements import get_verify_base, _can_issue
 
 router = APIRouter()
@@ -136,10 +136,12 @@ async def list_certificates(current_user: dict = Depends(get_current_user)):
             raise HTTPException(status_code=403, detail="غير مصرح")
         q["faculty_id"] = {"$in": list(fids)}
     elif current_user.get("role") != "admin":
+        if not has_permission(current_user, "issue_statements"):
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
         fids = set(current_user.get("faculty_ids") or [])
         if current_user.get("faculty_id"):
             fids.add(current_user["faculty_id"])
-        if not fids or current_user.get("role") in ("teacher", "student"):
+        if not fids:
             raise HTTPException(status_code=403, detail="غير مصرح لك")
         q["faculty_id"] = {"$in": list(fids)}
     items = []
