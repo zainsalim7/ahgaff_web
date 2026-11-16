@@ -20,6 +20,7 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { rolesAPI, permissionsAPI } from '../src/services/api';
 import { EXTRA_TASKS } from '../src/components/dashboard/DashExtraTasksGrid';
 import { MENU_ITEMS } from '../src/components/SideMenu';
+import { Picker } from '@react-native-picker/picker';
 
 interface Permission {
   key: string;
@@ -284,6 +285,7 @@ export default function ManageRolesScreen() {
   const isAuditAdmin = auditRoleId === '__admin__';
   const auditExpandedPerms = isAuditAdmin ? [] : expandPermissions(auditRole?.permissions || []);
   const auditRoleSystemKey = (auditRole as any)?.system_key || '';
+  const [auditSavingId, setAuditSavingId] = useState<string>('');
 
   const auditFeatureStatus = (t: any): 'admin' | 'public' | 'admin_only' | 'gap' | 'granted' | 'denied' | 'role_granted' | 'role_denied' | 'teacher_only' | 'advanced_access' => {
     if (isAuditAdmin) return 'admin';
@@ -305,6 +307,67 @@ export default function ManageRolesScreen() {
   });
   const grantedCount = auditRegistry.filter((t: any) => ['admin', 'public', 'granted', 'role_granted'].includes(auditFeatureStatus(t))).length;
   const gapFeatures = auditRegistry.filter((t: any) => auditFeatureStatus(t) === 'gap');
+
+  // 🔁 إسناد/سحب صلاحية مباشرة من تبويب التدقيق — يستخدم نفس نقطة نهاية حفظ الأدوار الحالية بلا أي مساس بصفحة "الأدوار"
+  const toggleAuditPermission = async (t: any) => {
+    const status = auditFeatureStatus(t);
+    if (isAuditAdmin || !auditRole) return;
+    if (status !== 'granted' && status !== 'denied') {
+      const reasonMap: Record<string, string> = {
+        public: 'هذه ميزة عامة متاحة للجميع ولا تحتاج صلاحية.',
+        admin_only: 'هذه أداة مخصّصة للمدير العام فقط ولا يمكن منحها لدور آخر.',
+        teacher_only: 'هذه الشاشة خاصة بحساب المعلم نفسه وليست صلاحية قابلة للإسناد.',
+        advanced_access: 'هذه الميزة تُدار عبر نظام الصلاحيات المتقدم الأحدث، وليس من هذه القائمة.',
+        role_granted: 'هذه الميزة مرتبطة مباشرة باسم الدور (كود) وليست صلاحية فردية بعد.',
+        role_denied: 'هذه الميزة مرتبطة مباشرة باسم الدور (كود) وليست صلاحية فردية بعد.',
+        gap: 'لا توجد صلاحية فردية لهذه الميزة بعد — لا يمكن إسنادها من هنا حالياً.',
+      };
+      const msg = reasonMap[status] || 'لا يمكن تعديل هذه الميزة من هنا.';
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تنبيه', msg);
+      return;
+    }
+
+    const primaryPerm = t.perms[0];
+    const permLabel = allPermissions.find(p => p.key === primaryPerm)?.label || primaryPerm;
+    const currentPerms: string[] = auditRole.permissions || [];
+    let confirmMsg = '';
+    let nextPerms: string[];
+
+    if (status === 'denied') {
+      nextPerms = currentPerms.includes(primaryPerm) ? currentPerms : [...currentPerms, primaryPerm];
+      confirmMsg = `منح صلاحية "${permLabel}" لدور "${auditRole.name}"؟\nستظهر ميزة "${t.label}" له فوراً.`;
+    } else {
+      if (!currentPerms.includes(primaryPerm)) {
+        const msg = `هذه الميزة ممنوحة ضمنياً عبر صلاحية أشمل غير موجودة مباشرة في قائمة هذا الدور. لسحبها عدّل الدور من تبويب "الأدوار" حتى لا تتأثر ميزات أخرى بالخطأ.`;
+        if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تنبيه', msg);
+        return;
+      }
+      const affected = auditRegistry.filter((f: any) => f.perms && f.perms.includes(primaryPerm) && f.id !== t.id && f.perms.some((p: string) => currentPerms.includes(p)) && f.perms[0] === primaryPerm);
+      nextPerms = currentPerms.filter((p) => p !== primaryPerm);
+      confirmMsg = `سحب صلاحية "${permLabel}" من دور "${auditRole.name}"؟\nستختفي ميزة "${t.label}" فوراً.` + (affected.length > 0 ? `\nكما ستختفي أيضاً: ${affected.map((f: any) => f.label).join('، ')}` : '');
+    }
+
+    const proceed = Platform.OS === 'web' ? window.confirm(confirmMsg) : await new Promise<boolean>((resolve) => {
+      Alert.alert('تأكيد', confirmMsg, [
+        { text: 'إلغاء', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'تأكيد', onPress: () => resolve(true) },
+      ]);
+    });
+    if (!proceed) return;
+
+    setAuditSavingId(t.id);
+    try {
+      await rolesAPI.update(auditRole.id, { permissions: nextPerms });
+      hasFetched.current = false;
+      setRoles([]);
+      await fetchData();
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || 'تعذّر تحديث الصلاحية';
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
+    } finally {
+      setAuditSavingId('');
+    }
+  };
 
   const handleSave = async () => {
     if (!roleName.trim()) {
@@ -637,30 +700,27 @@ export default function ManageRolesScreen() {
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={22} color="#1565c0" />
           <Text style={styles.infoText}>
-            اختر دوراً لمعرفة الميزات الظاهرة له فعلياً مقارنةً بصلاحياته — بلا أي افتراض: فقط ما مُنح صراحةً من هذه الشاشة يظهر ✓.
+            اختر دوراً لمعرفة الميزات الظاهرة له فعلياً مقارنةً بصلاحياته. اضغط على أي ميزة "ممنوحة"/"غير ممنوحة" لمنحها أو سحبها مباشرة — بلا أي افتراض: فقط ما مُنح صراحةً يظهر ✓.
           </Text>
         </View>
 
-        {/* اختيار الدور */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.auditRolePicker} contentContainerStyle={{ gap: 8, paddingHorizontal: 2 }}>
-          <TouchableOpacity
-            style={[styles.auditRoleChip, isAuditAdmin && styles.auditRoleChipActive]}
-            onPress={() => setAuditRoleId('__admin__')}
-            testID="audit-role-chip-admin"
-          >
-            <Text style={[styles.auditRoleChipText, isAuditAdmin && styles.auditRoleChipTextActive]}>المدير العام (admin)</Text>
-          </TouchableOpacity>
-          {roles.map((r) => (
-            <TouchableOpacity
-              key={r.id}
-              style={[styles.auditRoleChip, auditRoleId === r.id && styles.auditRoleChipActive]}
-              onPress={() => setAuditRoleId(r.id)}
-              testID={`audit-role-chip-${r.id}`}
+        {/* اختيار الدور — قائمة منسدلة لتفادي ازدحام عدد الأدوار الكبير */}
+        <View style={styles.auditRoleDropdownWrap}>
+          <Ionicons name="shield-checkmark" size={16} color="#1565c0" />
+          <View style={styles.auditRoleDropdown}>
+            <Picker
+              selectedValue={auditRoleId}
+              onValueChange={(value) => setAuditRoleId(value as string)}
+              style={styles.auditRolePickerNative}
+              testID="audit-role-picker"
             >
-              <Text style={[styles.auditRoleChipText, auditRoleId === r.id && styles.auditRoleChipTextActive]} numberOfLines={1}>{r.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+              <Picker.Item label="👑 المدير العام (admin) — وصول كامل دائماً" value="__admin__" />
+              {roles.map((r) => (
+                <Picker.Item key={r.id} label={r.name} value={r.id} />
+              ))}
+            </Picker>
+          </View>
+        </View>
 
         <View style={styles.auditSummaryCard}>
           <Text style={styles.auditSummaryText}>
@@ -695,17 +755,35 @@ export default function ManageRolesScreen() {
                 gap: { label: '⚠️ بلا صلاحية فردية', color: '#b45309', bg: '#fef3c7', icon: 'alert-circle' },
               };
               const s = statusMap[status];
+              const isEditable = !isAuditAdmin && (status === 'granted' || status === 'denied');
+              const isSaving = auditSavingId === t.id;
               return (
-                <View key={t.id} style={styles.auditFeatureRow} testID={`audit-feature-${t.id}`}>
-                  <View style={[styles.auditStatusBadge, { backgroundColor: s.bg }]}>
-                    <Ionicons name={s.icon} size={13} color={s.color} />
-                    <Text style={[styles.auditStatusText, { color: s.color }]}>{s.label}</Text>
-                  </View>
+                <TouchableOpacity
+                  key={t.id}
+                  style={[styles.auditFeatureRow, isEditable && styles.auditFeatureRowEditable]}
+                  onPress={() => toggleAuditPermission(t)}
+                  activeOpacity={isAuditAdmin ? 1 : 0.6}
+                  disabled={isSaving}
+                  testID={`audit-feature-${t.id}`}
+                >
+                  {isSaving ? (
+                    <View style={[styles.auditStatusBadge, { backgroundColor: '#f1f5f9', minWidth: 96 }]}>
+                      <ActivityIndicator size="small" color="#1565c0" />
+                    </View>
+                  ) : (
+                    <View style={[styles.auditStatusBadge, { backgroundColor: s.bg }]}>
+                      <Ionicons name={s.icon} size={13} color={s.color} />
+                      <Text style={[styles.auditStatusText, { color: s.color }]}>{s.label}</Text>
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.auditFeatureLabel} numberOfLines={1}>{t.label}</Text>
                     <Text style={styles.auditFeatureRoute} numberOfLines={1}>{t.route}{t.perms ? ` · ${t.perms.join(' أو ')}` : ''}</Text>
                   </View>
-                </View>
+                  {isEditable && (
+                    <Ionicons name={status === 'granted' ? 'remove-circle-outline' : 'add-circle-outline'} size={18} color={status === 'granted' ? '#dc2626' : '#16a34a'} />
+                  )}
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -853,6 +931,9 @@ const styles = StyleSheet.create({
   tabBtnText: { fontSize: 12.5, fontWeight: '700', color: '#64748b' },
   tabBtnTextActive: { color: '#fff' },
   auditRolePicker: { marginHorizontal: 16, marginBottom: 10, maxHeight: 42 },
+  auditRoleDropdownWrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginHorizontal: 16, marginBottom: 10 },
+  auditRoleDropdown: { flex: 1, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  auditRolePickerNative: { height: 44, color: '#0f172a', textAlign: 'right' } as any,
   auditRoleChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0' },
   auditRoleChipActive: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
   auditRoleChipText: { fontSize: 12.5, fontWeight: '700', color: '#334155' },
@@ -864,6 +945,7 @@ const styles = StyleSheet.create({
   auditCategoryBlock: { marginHorizontal: 16, marginBottom: 14 },
   auditCategoryTitle: { fontSize: 13, fontWeight: '800', color: '#1565c0', textAlign: 'right', marginBottom: 6 },
   auditFeatureRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: '#f1f5f9' },
+  auditFeatureRowEditable: { borderColor: '#bfdbfe', borderStyle: 'dashed' },
   auditStatusBadge: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, minWidth: 96, justifyContent: 'center' },
   auditStatusText: { fontSize: 10.5, fontWeight: '700' },
   auditFeatureLabel: { fontSize: 12.5, fontWeight: '700', color: '#0f172a', textAlign: 'right' },
