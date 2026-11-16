@@ -19843,6 +19843,7 @@ async def _startup_db_tasks():
         ("backfill_offline_override_attendance_started_at", backfill_offline_override_attendance_started_at),
         ("backfill_teacher_record_links", backfill_teacher_record_links),
         ("backfill_teaching_loads_semester_internal", backfill_teaching_loads_semester_internal),
+        ("backfill_weekly_schedule_teacher_sync", backfill_weekly_schedule_teacher_sync),
         ("backfill_alumni_department_snapshot_internal", backfill_alumni_department_snapshot_internal),
         ("letters_backfill_people_faculty", lambda: letters_backfill_people_faculty(db)),
         ("migrate_letterheads", lambda: migrate_letterheads(db)),
@@ -20409,6 +20410,39 @@ async def backfill_teacher_record_links():
             logging.info(f"✅ Backfill teacher_record_id: {fixed_linked} ربط بسجل موجود، {fixed_created} سجل teacher جديد أُنشئ تلقائياً.")
     except Exception as e:
         logging.warning(f"Backfill teacher_record_id failed (non-critical): {e}")
+
+
+async def backfill_weekly_schedule_teacher_sync():
+    """🔄 إصلاح تراجعي: يُزامن weekly_schedule.teacher_id مع courses.teacher_id الحالي.
+    السبب: إسناد/إلغاء إسناد مقرر عبر العبء التدريسي (teaching-load) كان يحدّث courses.teacher_id
+    فقط دون تحديث خلايا الجدول الأسبوعي المرتبطة، فيظهر الجدول الأسبوعي فارغاً للمعلم الجديد رغم
+    أن لديه مقررات ومحاضرات فعلية. Idempotent: يُعاد تشغيله بأمان في كل إقلاع."""
+    try:
+        fixed = 0
+        async for course in db.courses.find(
+            {"is_active": True},
+            {"_id": 1, "teacher_id": 1, "groups": 1},
+        ):
+            cid = str(course["_id"])
+            correct_teacher_id = course.get("teacher_id")
+            own_groups = [g.get("key") for g in (course.get("groups") or []) if g.get("teacher_id")]
+            ws_q = {"course_id": cid, "group": {"$nin": own_groups}}
+            if correct_teacher_id:
+                ws_q["teacher_id"] = {"$ne": correct_teacher_id}
+            else:
+                ws_q["teacher_id"] = {"$exists": True, "$ne": None}
+            mismatched = await db.weekly_schedule.count_documents(ws_q)
+            if not mismatched:
+                continue
+            if correct_teacher_id:
+                res = await db.weekly_schedule.update_many(ws_q, {"$set": {"teacher_id": correct_teacher_id}})
+            else:
+                res = await db.weekly_schedule.update_many(ws_q, {"$unset": {"teacher_id": ""}})
+            fixed += res.modified_count
+        if fixed:
+            logging.info(f"✅ Backfill weekly_schedule.teacher_id: {fixed} خلية جدول تمت مزامنتها مع المعلم الحالي للمقرر.")
+    except Exception as e:
+        logging.warning(f"Backfill weekly_schedule.teacher_id failed (non-critical): {e}")
 
 
 async def _ensure_weekly_schedule_unique_indexes(db, dedupe: bool = False):

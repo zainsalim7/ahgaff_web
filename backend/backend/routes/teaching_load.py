@@ -4,6 +4,7 @@ Teaching Load Routes - مسارات إدارة العبء التدريسي
 from fastapi import APIRouter, HTTPException, status, Depends, Query
 from fastapi.responses import StreamingResponse
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from datetime import datetime, timezone
 from typing import Optional
 from pydantic import BaseModel
@@ -25,6 +26,23 @@ class TeachingLoadCreate(BaseModel):
 class TeachingLoadUpdate(BaseModel):
     weekly_hours: Optional[float] = None
     notes: Optional[str] = None
+
+
+async def _sync_weekly_schedule_teacher(db, course_id: str, course: dict, new_teacher_id: Optional[str]):
+    """🔄 مزامنة خلايا الجدول الأسبوعي عند تغيّر معلم المقرر عبر إسناد العبء التدريسي
+    (بقاؤها بالمعلم القديم يجعل تقرير الجدول الأسبوعي يظهر فارغاً للمعلم الجديد)"""
+    old_teacher_id = course.get("teacher_id")
+    if new_teacher_id == old_teacher_id:
+        return
+    _own_groups = [g.get("key") for g in (course.get("groups") or []) if g.get("teacher_id")]
+    _ws_q = {"course_id": course_id, "group": {"$nin": _own_groups}}
+    try:
+        if new_teacher_id:
+            await db.weekly_schedule.update_many(_ws_q, {"$set": {"teacher_id": new_teacher_id}})
+        else:
+            await db.weekly_schedule.update_many(_ws_q, {"$unset": {"teacher_id": ""}})
+    except DuplicateKeyError:
+        pass
 
 
 async def _ensure_course_in_user_scope(db, current_user: dict, course: dict):
@@ -310,6 +328,7 @@ async def create_teaching_load(
         )
         # ربط المعلم بالمقرر في courses
         await db.courses.update_one({"_id": ObjectId(data.course_id)}, {"$set": {"teacher_id": data.teacher_id}})
+        await _sync_weekly_schedule_teacher(db, data.course_id, course, data.teacher_id)
         return {"id": str(existing["_id"]), "message": "تم تحديث العبء التدريسي بنجاح", "updated": True}
 
     doc = {
@@ -337,6 +356,7 @@ async def create_teaching_load(
 
     # ربط المعلم بالمقرر في courses
     await db.courses.update_one({"_id": ObjectId(data.course_id)}, {"$set": {"teacher_id": data.teacher_id}})
+    await _sync_weekly_schedule_teacher(db, data.course_id, course, data.teacher_id)
 
     await log_activity(
         current_user, "create_teaching_load", "teaching_load",
@@ -403,10 +423,13 @@ async def delete_teaching_load(
     await db.teaching_loads.delete_one({"_id": ObjectId(load_id)})
 
     # إزالة ربط المعلم من المقرر
+    course = await db.courses.find_one({"_id": ObjectId(existing["course_id"])})
     await db.courses.update_one(
         {"_id": ObjectId(existing["course_id"]), "teacher_id": existing["teacher_id"]},
         {"$set": {"teacher_id": None}}
     )
+    if course:
+        await _sync_weekly_schedule_teacher(db, existing["course_id"], course, None)
 
     await log_activity(
         current_user, "delete_teaching_load", "teaching_load",
@@ -712,6 +735,7 @@ async def bulk_save_teaching_load(
             {"_id": ObjectId(item.course_id)},
             {"$set": {"teacher_id": item.teacher_id}}
         )
+        await _sync_weekly_schedule_teacher(db, item.course_id, course, item.teacher_id)
 
     await log_activity(
         current_user, "bulk_teaching_load", "teaching_load",
