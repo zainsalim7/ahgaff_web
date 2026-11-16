@@ -15,9 +15,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import { teachersAPI, teachingLoadAPI, coursesAPI } from '../src/services/api';
+import api, { teachersAPI, teachingLoadAPI, coursesAPI, departmentsAPI, reportsAPI, scheduleAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
+
+const DAYS_ORDER = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'];
 
 interface Course {
   id: string;
@@ -96,6 +98,30 @@ export default function TeacherCoursesScreen() {
   const [loading, setLoading] = useState(true);
   const [teacherDept, setTeacherDept] = useState<string>('');
 
+  // 👤 إجراءات الأستاذ: تعديل / تفعيل / إعادة تعيين كلمة المرور / حذف
+  const canManageTeacher = isAdmin || hasPermission(PERMISSIONS.MANAGE_TEACHERS);
+  const [teacherFull, setTeacherFull] = useState<any>(null);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState<any>({});
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [actingOnTeacher, setActingOnTeacher] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteBackupInfo, setDeleteBackupInfo] = useState<any>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // 📊 عرض وتصدير إضافي: العبء التدريسي / تقرير الساعات / الجدول الأسبوعي
+  const [showReportsMenu, setShowReportsMenu] = useState(false);
+  const [activeReportModal, setActiveReportModal] = useState<'load' | 'hours' | 'weekly' | null>(null);
+  const [hoursData, setHoursData] = useState<any>(null);
+  const [weeklyData, setWeeklyData] = useState<any[]>([]);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [reportExporting, setReportExporting] = useState(false);
+
+  // 🔲 عرض المقررات: شبكي أو قائمة طويلة
+  const [coursesView, setCoursesView] = useState<'list' | 'grid'>('list');
+
   // Assign Modal State
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -136,6 +162,7 @@ export default function TeacherCoursesScreen() {
       }
       if (teacherRes.status === 'fulfilled') {
         setTeacherPhone(teacherRes.value.data?.phone || '');
+        setTeacherFull(teacherRes.value.data || null);
       }
       if (teacherRes.status === 'rejected') {
         console.warn('Failed to fetch teacher details:', teacherRes.reason);
@@ -150,6 +177,11 @@ export default function TeacherCoursesScreen() {
   useEffect(() => {
     fetchCourses();
   }, [fetchCourses]);
+
+  // 🏢 تحميل الأقسام مرة واحدة لاستخدامها في نموذج تعديل بيانات المعلم
+  useEffect(() => {
+    departmentsAPI.getAll().then((res: any) => setDepartments(res.data || [])).catch(() => {});
+  }, []);
 
   // Debounced search
   useEffect(() => {
@@ -320,8 +352,192 @@ export default function TeacherCoursesScreen() {
     () => (data?.courses || []).reduce((sum, c) => sum + (c.lectures_count || 0), 0),
     [data]
   );
+  const totalHours = data?.total_weekly_hours || 0;
+
+  // 👤 إجراءات الأستاذ: تعديل بيانات المعلم
+  const openEditModal = () => {
+    if (!teacherFull) { showMessage('تنبيه', 'جارٍ تحميل بيانات المعلم، أعد المحاولة بعد لحظات'); return; }
+    setEditForm({
+      full_name: teacherFull.full_name || teacherFull.name || '',
+      department_ids: Array.isArray(teacherFull.department_ids) ? teacherFull.department_ids : (teacherFull.department_id ? [teacherFull.department_id] : []),
+      specialization: teacherFull.specialization || '',
+      academic_title: teacherFull.academic_title || '',
+      weekly_hours: teacherFull.weekly_hours != null ? String(teacherFull.weekly_hours) : '',
+      phone: teacherFull.phone || '',
+      email: teacherFull.email || '',
+    });
+    setShowActionsMenu(false);
+    setShowEditModal(true);
+  };
+
+  const toggleEditDept = (deptId: string) => {
+    setEditForm((f: any) => {
+      const ids: string[] = f.department_ids || [];
+      return { ...f, department_ids: ids.includes(deptId) ? ids.filter((d: string) => d !== deptId) : [...ids, deptId] };
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!teacherId) return;
+    if (!editForm.full_name?.trim()) { showMessage('خطأ', 'الاسم الكامل مطلوب'); return; }
+    setSavingEdit(true);
+    try {
+      await teachersAPI.update(teacherId, {
+        full_name: editForm.full_name,
+        department_ids: editForm.department_ids,
+        specialization: editForm.specialization,
+        academic_title: editForm.academic_title,
+        weekly_hours: editForm.weekly_hours ? Number(editForm.weekly_hours) : undefined,
+        phone: editForm.phone,
+        email: editForm.email,
+      });
+      setShowEditModal(false);
+      showMessage('تم', 'تم تحديث بيانات المعلم بنجاح');
+      fetchCourses();
+    } catch (error: any) {
+      showMessage('خطأ', error?.response?.data?.detail || 'تعذر تحديث بيانات المعلم');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const confirmAction = (message: string): Promise<boolean> => {
+    if (Platform.OS === 'web') return Promise.resolve(window.confirm(message));
+    return new Promise((resolve) => {
+      Alert.alert('تأكيد', message, [
+        { text: 'إلغاء', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'تأكيد', style: 'destructive', onPress: () => resolve(true) },
+      ]);
+    });
+  };
+
+  const handleToggleActive = async () => {
+    if (!teacherId || !teacherFull) return;
+    const activating = teacherFull.is_active === false;
+    const ok = await confirmAction(activating ? 'هل تريد تفعيل حساب هذا المعلم؟' : 'هل تريد إلغاء تفعيل حساب هذا المعلم؟ لن يتمكن من تسجيل الدخول بعد ذلك.');
+    if (!ok) return;
+    setShowActionsMenu(false);
+    setActingOnTeacher(true);
+    try {
+      if (activating) await teachersAPI.activateAccount(teacherId);
+      else await teachersAPI.deactivateAccount(teacherId);
+      showMessage('تم', activating ? 'تم تفعيل حساب المعلم بنجاح' : 'تم إلغاء تفعيل حساب المعلم بنجاح');
+      fetchCourses();
+    } catch (error: any) {
+      showMessage('خطأ', error?.response?.data?.detail || 'تعذر تنفيذ العملية');
+    } finally {
+      setActingOnTeacher(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!teacherId || !teacherFull) return;
+    const ok = await confirmAction('هل تريد إعادة تعيين كلمة مرور هذا المعلم؟');
+    if (!ok) return;
+    setShowActionsMenu(false);
+    setActingOnTeacher(true);
+    try {
+      await teachersAPI.resetPassword(teacherId);
+      showMessage('تم', `تمت إعادة تعيين كلمة المرور بنجاح.\nكلمة المرور الجديدة: ${teacherFull.teacher_id || teacherId}`);
+    } catch (error: any) {
+      showMessage('خطأ', error?.response?.data?.detail || 'تعذر إعادة تعيين كلمة المرور');
+    } finally {
+      setActingOnTeacher(false);
+    }
+  };
+
+  const openDeleteModal = async () => {
+    if (!teacherId) return;
+    setShowActionsMenu(false);
+    setShowDeleteModal(true);
+    setDeleteBackupInfo(null);
+    setDeleting(true);
+    try {
+      const res = await api.get(`/teachers/${teacherId}/backup-info`);
+      setDeleteBackupInfo(res.data);
+    } catch (error) {
+      setDeleteBackupInfo({});
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!teacherId) return;
+    setDeleting(true);
+    try {
+      const res = await api.post(`/teachers/${teacherId}/safe-delete`);
+      if (Platform.OS === 'web' && res?.data?.backup) {
+        const blob = new Blob([JSON.stringify(res.data.backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `نسخة_احتياطية_${teacherDisplay}.json`; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      showMessage('تم الحذف', 'تم حذف المعلم بنجاح، وتم تنزيل نسخة احتياطية من بياناته');
+      setShowDeleteModal(false);
+      router.replace('/manage-teachers');
+    } catch (error: any) {
+      showMessage('خطأ', error?.response?.data?.detail || 'تعذر حذف المعلم');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // 📊 عرض وتصدير إضافي: العبء التدريسي / تقرير الساعات / الجدول الأسبوعي — بدون مغادرة الصفحة
+  const openReportModal = async (type: 'load' | 'hours' | 'weekly') => {
+    setShowReportsMenu(false);
+    setActiveReportModal(type);
+    if (type === 'load') return; // العبء التدريسي مُفصَّل أصلاً في هذه الصفحة
+    setLoadingReport(true);
+    try {
+      if (type === 'hours') {
+        const res = await reportsAPI.getTeacherWorkload({ teacher_id: teacherId! });
+        const list = res.data?.teachers || res.data || [];
+        setHoursData(Array.isArray(list) ? (list[0] || null) : list);
+      } else {
+        const res = await scheduleAPI.getSchedule({ teacher_id: teacherId! });
+        setWeeklyData(res.data || []);
+      }
+    } catch (error: any) {
+      showMessage('خطأ', error?.response?.data?.detail || 'تعذر تحميل التقرير');
+    } finally {
+      setLoadingReport(false);
+    }
+  };
+
+  const downloadBlob = (blobData: any, filename: string) => {
+    const url = URL.createObjectURL(blobData);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const handleReportExport = async (type: 'load' | 'hours' | 'weekly', fmt: 'excel' | 'pdf') => {
+    if (type === 'load') {
+      if (fmt === 'excel') handleExportExcel(); else handleExportPdf();
+      return;
+    }
+    setReportExporting(true);
+    try {
+      if (type === 'hours') {
+        const res = fmt === 'excel'
+          ? await reportsAPI.exportTeacherWorkloadExcel({ teacher_id: teacherId! })
+          : await reportsAPI.exportTeacherWorkloadPdf({ teacher_id: teacherId! });
+        if (Platform.OS === 'web') downloadBlob(new Blob([res.data]), `تقرير_الساعات_${teacherDisplay}.${fmt === 'excel' ? 'xlsx' : 'pdf'}`);
+      } else {
+        const res = await api.get(`/weekly-schedule/export-visual/${fmt}`, { params: { teacher_id: teacherId }, responseType: 'blob' });
+        if (Platform.OS === 'web') downloadBlob(new Blob([res.data]), `الجدول_الأسبوعي_${teacherDisplay}.${fmt === 'excel' ? 'xlsx' : 'pdf'}`);
+      }
+    } catch (error: any) {
+      showMessage('خطأ', error?.response?.data?.detail || 'تعذر التصدير');
+    } finally {
+      setReportExporting(false);
+    }
+  };
 
   if (loading) return <LoadingScreen />;
+
 
   const teacherDisplay = teacherName || data?.teacher_name || 'المعلم';
   const pickedCount = Object.keys(pickedCourses).length;
@@ -384,6 +600,16 @@ export default function TeacherCoursesScreen() {
               <Ionicons name="arrow-forward" size={16} color="#1a2540" />
               <Text style={styles.btnGhostText}>رجوع</Text>
             </TouchableOpacity>
+            {canManageTeacher && (
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.btnGhost]}
+                onPress={() => setShowActionsMenu(true)}
+                testID="teacher-actions-menu-btn"
+              >
+                <Ionicons name="ellipsis-vertical" size={16} color="#1a2540" />
+                <Text style={styles.btnGhostText}>إجراءات الأستاذ</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.headerBtn, styles.btnGhost]}
               onPress={() => router.push({ pathname: '/report-teacher-workload', params: { teacherId: teacherId!, teacherName: teacherDisplay, autorun: '1' } })}
@@ -417,6 +643,14 @@ export default function TeacherCoursesScreen() {
                 <Ionicons name="document-text" size={16} color="#fff" />
               )}
               <Text style={styles.btnPrimaryText}>{exportingPdf ? 'جاري التصدير...' : 'تصدير PDF'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.headerBtn, styles.btnGhost]}
+              onPress={() => setShowReportsMenu(true)}
+              testID="teacher-reports-menu-btn"
+            >
+              <Ionicons name="list" size={16} color="#1a2540" />
+              <Text style={styles.btnGhostText}>عرض وتصدير آخر</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.headerBtn, styles.btnPrimary, !canAssign && { opacity: 0.4 }]}
@@ -495,9 +729,27 @@ export default function TeacherCoursesScreen() {
         <View style={styles.coursesCard}>
           <View style={styles.coursesCardHeader}>
             <Text style={styles.coursesCardTitle}>المقررات المُسندة</Text>
-            <Text style={styles.coursesCardCount}>
-              <Text style={styles.coursesCountAccent}>{data?.courses?.length || 0}</Text> مقرر
-            </Text>
+            <View style={styles.coursesHeaderRight}>
+              <View style={styles.viewToggle} testID="courses-view-toggle">
+                <TouchableOpacity
+                  style={[styles.viewToggleBtn, coursesView === 'list' && styles.viewToggleBtnActive]}
+                  onPress={() => setCoursesView('list')}
+                  testID="courses-view-list-btn"
+                >
+                  <Ionicons name="reorder-three" size={16} color={coursesView === 'list' ? '#fff' : '#64748b'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.viewToggleBtn, coursesView === 'grid' && styles.viewToggleBtnActive]}
+                  onPress={() => setCoursesView('grid')}
+                  testID="courses-view-grid-btn"
+                >
+                  <Ionicons name="grid" size={16} color={coursesView === 'grid' ? '#fff' : '#64748b'} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.coursesCardCount}>
+                <Text style={styles.coursesCountAccent}>{data?.courses?.length || 0}</Text> مقرر
+              </Text>
+            </View>
           </View>
 
           {!data?.courses || data.courses.length === 0 ? (
@@ -510,11 +762,11 @@ export default function TeacherCoursesScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            <View style={styles.coursesList}>
+            <View style={[styles.coursesList, coursesView === 'grid' && styles.coursesListGrid]}>
               {data.courses.map((course) => {
                 const isOwned = canManageCourse(course);
                 return (
-                <View key={course.id} style={styles.courseRow}>
+                <View key={course.id} style={[styles.courseRow, coursesView === 'grid' && styles.courseRowGrid]}>
                   <TouchableOpacity
                     style={styles.courseMain}
                     onPress={() => {
@@ -788,6 +1040,227 @@ export default function TeacherCoursesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ⋮ مودال إجراءات الأستاذ */}
+      <Modal visible={showActionsMenu} transparent animationType="fade" onRequestClose={() => setShowActionsMenu(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowActionsMenu(false)}>
+          <View style={styles.menuCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.menuCardTitle}>إجراءات الأستاذ</Text>
+            <TouchableOpacity style={styles.menuRow} onPress={openEditModal} testID="teacher-action-edit">
+              <Ionicons name="create-outline" size={18} color="#1565c0" />
+              <Text style={styles.menuRowText}>تعديل البيانات</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuRow} onPress={handleToggleActive} disabled={actingOnTeacher} testID="teacher-action-toggle-active">
+              <Ionicons name={teacherFull?.is_active === false ? 'checkmark-circle-outline' : 'close-circle-outline'} size={18} color={teacherFull?.is_active === false ? '#2e7d32' : '#e65100'} />
+              <Text style={styles.menuRowText}>{teacherFull?.is_active === false ? 'تفعيل الحساب' : 'إلغاء تفعيل الحساب'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuRow} onPress={handleResetPassword} disabled={actingOnTeacher} testID="teacher-action-reset-password">
+              <Ionicons name="key-outline" size={18} color="#8e24aa" />
+              <Text style={styles.menuRowText}>إعادة تعيين كلمة المرور</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.menuRow, styles.menuRowDanger]} onPress={openDeleteModal} testID="teacher-action-delete">
+              <Ionicons name="trash-outline" size={18} color="#c62828" />
+              <Text style={[styles.menuRowText, { color: '#c62828' }]}>حذف المعلم</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuCancelBtn} onPress={() => setShowActionsMenu(false)}>
+              <Text style={styles.menuCancelText}>إغلاق</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ✏️ مودال تعديل بيانات المعلم */}
+      <Modal visible={showEditModal} transparent animationType="slide" onRequestClose={() => setShowEditModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.assignModalCard, { maxHeight: '85%' }]}>
+            <View style={styles.assignModalHeader}>
+              <Text style={styles.assignModalTitle}>تعديل بيانات المعلم</Text>
+              <TouchableOpacity onPress={() => setShowEditModal(false)}><Ionicons name="close" size={22} color="#64748b" /></TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 420 }}>
+              <Text style={styles.fieldLabel}>الاسم الكامل</Text>
+              <TextInput style={styles.modalSearchInput} value={editForm.full_name} onChangeText={(t) => setEditForm((f: any) => ({ ...f, full_name: t }))} testID="edit-teacher-fullname-input" />
+              <Text style={styles.fieldLabel}>البريد الإلكتروني</Text>
+              <TextInput style={styles.modalSearchInput} value={editForm.email} onChangeText={(t) => setEditForm((f: any) => ({ ...f, email: t }))} keyboardType="email-address" testID="edit-teacher-email-input" />
+              <Text style={styles.fieldLabel}>رقم الهاتف</Text>
+              <TextInput style={styles.modalSearchInput} value={editForm.phone} onChangeText={(t) => setEditForm((f: any) => ({ ...f, phone: t }))} keyboardType="phone-pad" testID="edit-teacher-phone-input" />
+              <Text style={styles.fieldLabel}>التخصص</Text>
+              <TextInput style={styles.modalSearchInput} value={editForm.specialization} onChangeText={(t) => setEditForm((f: any) => ({ ...f, specialization: t }))} testID="edit-teacher-specialization-input" />
+              <Text style={styles.fieldLabel}>الدرجة العلمية</Text>
+              <TextInput style={styles.modalSearchInput} value={editForm.academic_title} onChangeText={(t) => setEditForm((f: any) => ({ ...f, academic_title: t }))} testID="edit-teacher-title-input" />
+              <Text style={styles.fieldLabel}>النصاب الأسبوعي (ساعة)</Text>
+              <TextInput style={styles.modalSearchInput} value={editForm.weekly_hours} onChangeText={(t) => setEditForm((f: any) => ({ ...f, weekly_hours: t }))} keyboardType="numeric" testID="edit-teacher-hours-input" />
+              <Text style={styles.fieldLabel}>الأقسام</Text>
+              <View style={styles.deptChipsWrap}>
+                {departments.map((d: any) => {
+                  const selected = (editForm.department_ids || []).includes(d.id);
+                  return (
+                    <TouchableOpacity key={d.id} style={[styles.deptChip, selected && styles.deptChipSelected]} onPress={() => toggleEditDept(d.id)} testID={`edit-teacher-dept-${d.id}`}>
+                      <Text style={[styles.deptChipText, selected && styles.deptChipTextSelected]}>{d.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+            <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { justifyContent: 'center', marginTop: 14 }, savingEdit && { opacity: 0.6 }]} onPress={handleSaveEdit} disabled={savingEdit} testID="save-teacher-edit-btn">
+              {savingEdit ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnPrimaryText}>حفظ التعديلات</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🗑️ مودال حذف المعلم */}
+      <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmCard}>
+            <Ionicons name="warning" size={36} color="#c62828" style={{ alignSelf: 'center', marginBottom: 10 }} />
+            <Text style={styles.confirmTitle}>حذف المعلم نهائياً</Text>
+            {deleting && !deleteBackupInfo ? (
+              <ActivityIndicator color="#c62828" style={{ marginVertical: 10 }} />
+            ) : (
+              <>
+                <Text style={styles.confirmText}>
+                  {`هل أنت متأكد من حذف المعلم "${data?.teacher_name || teacherDisplay}" نهائياً؟`}
+                </Text>
+                {deleteBackupInfo && (deleteBackupInfo.courses_count || deleteBackupInfo.lectures_count) ? (
+                  <Text style={styles.confirmNote}>
+                    {`سيتأثر: ${deleteBackupInfo.courses_count || 0} مقرر، ${deleteBackupInfo.lectures_count || 0} محاضرة. سيُنزَّل ملف نسخة احتياطية تلقائياً قبل الحذف.`}
+                  </Text>
+                ) : (
+                  <Text style={styles.confirmNote}>سيُنزَّل ملف نسخة احتياطية تلقائياً قبل الحذف.</Text>
+                )}
+              </>
+            )}
+            <View style={{ flexDirection: 'row-reverse', gap: 10, marginTop: 16 }}>
+              <TouchableOpacity style={[styles.headerBtn, styles.btnGhost, { flex: 1, justifyContent: 'center' }]} onPress={() => setShowDeleteModal(false)} disabled={deleting}>
+                <Text style={styles.btnGhostText}>تراجع</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.headerBtn, { backgroundColor: '#c62828', flex: 1, justifyContent: 'center' }, deleting && { opacity: 0.6 }]}
+                onPress={handleConfirmDelete}
+                disabled={deleting}
+                testID="confirm-delete-teacher-btn"
+              >
+                {deleting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnPrimaryText}>تأكيد الحذف</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 📊 مودال قائمة عرض/تصدير إضافي */}
+      <Modal visible={showReportsMenu} transparent animationType="fade" onRequestClose={() => setShowReportsMenu(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowReportsMenu(false)}>
+          <View style={styles.menuCard} onStartShouldSetResponder={() => true}>
+            <Text style={styles.menuCardTitle}>عرض وتصدير</Text>
+            <TouchableOpacity style={styles.menuRow} onPress={() => openReportModal('load')} testID="report-menu-load">
+              <Ionicons name="bar-chart-outline" size={18} color="#1565c0" />
+              <Text style={styles.menuRowText}>العبء التدريسي</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuRow} onPress={() => openReportModal('hours')} testID="report-menu-hours">
+              <Ionicons name="time-outline" size={18} color="#e65100" />
+              <Text style={styles.menuRowText}>تقرير الساعات</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuRow} onPress={() => openReportModal('weekly')} testID="report-menu-weekly">
+              <Ionicons name="calendar-outline" size={18} color="#2e7d32" />
+              <Text style={styles.menuRowText}>الجدول الأسبوعي</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuCancelBtn} onPress={() => setShowReportsMenu(false)}>
+              <Text style={styles.menuCancelText}>إغلاق</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 👁️ مودال معاينة التقرير المختار مع زري التصدير */}
+      <Modal visible={!!activeReportModal} transparent animationType="slide" onRequestClose={() => setActiveReportModal(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.assignModalCard, { maxHeight: '85%' }]}>
+            <View style={styles.assignModalHeader}>
+              <Text style={styles.assignModalTitle}>
+                {activeReportModal === 'load' ? 'العبء التدريسي' : activeReportModal === 'hours' ? 'تقرير الساعات' : 'الجدول الأسبوعي'}
+              </Text>
+              <TouchableOpacity onPress={() => setActiveReportModal(null)}><Ionicons name="close" size={22} color="#64748b" /></TouchableOpacity>
+            </View>
+
+            {loadingReport ? (
+              <ActivityIndicator color={styles.btnPrimary.backgroundColor as any} style={{ marginVertical: 30 }} />
+            ) : (
+              <ScrollView style={{ maxHeight: 400 }}>
+                {activeReportModal === 'load' && (
+                  <View>
+                    <View style={styles.reportStatRow}><Text style={styles.reportStatLabel}>عدد المقررات</Text><Text style={styles.reportStatValue}>{data?.courses?.length || 0}</Text></View>
+                    <View style={styles.reportStatRow}><Text style={styles.reportStatLabel}>إجمالي الساعات</Text><Text style={styles.reportStatValue}>{totalHours}</Text></View>
+                    <View style={styles.reportStatRow}><Text style={styles.reportStatLabel}>إجمالي المحاضرات</Text><Text style={styles.reportStatValue}>{totalLectures}</Text></View>
+                    {(data?.courses || []).map((c) => (
+                      <View key={c.id} style={styles.reportCourseRow}>
+                        <Text style={styles.reportCourseName} numberOfLines={1}>{c.name}</Text>
+                        <Text style={styles.reportCourseHours}>{c.weekly_hours || c.credit_hours || 0} س</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {activeReportModal === 'hours' && (
+                  hoursData ? (
+                    <View>
+                      <View style={styles.reportStatRow}><Text style={styles.reportStatLabel}>الساعات المطلوبة</Text><Text style={styles.reportStatValue}>{hoursData.summary?.required_hours ?? '—'}</Text></View>
+                      <View style={styles.reportStatRow}><Text style={styles.reportStatLabel}>الساعات المنفذة فعلياً</Text><Text style={styles.reportStatValue}>{hoursData.summary?.total_actual_hours ?? '—'}</Text></View>
+                      <View style={styles.reportStatRow}><Text style={styles.reportStatLabel}>نسبة الإنجاز</Text><Text style={styles.reportStatValue}>{hoursData.summary?.completion_rate != null ? `${hoursData.summary.completion_rate}%` : '—'}</Text></View>
+                      <View style={styles.reportStatRow}><Text style={styles.reportStatLabel}>ساعات إضافية</Text><Text style={styles.reportStatValue}>{hoursData.summary?.overtime_hours ?? 0}</Text></View>
+                      {(hoursData.courses || []).map((c: any, idx: number) => (
+                        <View key={idx} style={styles.reportCourseRow}>
+                          <Text style={styles.reportCourseName} numberOfLines={1}>{c.course_name || c.name}</Text>
+                          <Text style={styles.reportCourseHours}>{c.actual_hours ?? c.scheduled_hours ?? 0} س</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={styles.emptyText}>لا توجد بيانات لتقرير الساعات في الفترة الحالية</Text>
+                  )
+                )}
+
+                {activeReportModal === 'weekly' && (
+                  weeklyData.length === 0 ? (
+                    <Text style={styles.emptyText}>لا يوجد جدول أسبوعي مُسجَّل لهذا المعلم</Text>
+                  ) : (
+                    DAYS_ORDER.filter((d) => weeklyData.some((s) => s.day === d)).map((day) => (
+                      <View key={day}>
+                        <Text style={styles.reportDayTitle}>{day}</Text>
+                        {weeklyData.filter((s) => s.day === day).sort((a, b) => (a.slot_number || 0) - (b.slot_number || 0)).map((s, idx) => (
+                          <View key={idx} style={styles.reportCourseRow}>
+                            <Text style={styles.reportCourseName} numberOfLines={1}>{s.course_name} {s.section ? `(${s.section})` : ''}</Text>
+                            <Text style={styles.reportCourseHours}>{s.actual_start_time || ''}{s.room_name ? ` · ${s.room_name}` : ''}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ))
+                  )
+                )}
+              </ScrollView>
+            )}
+
+            <View style={{ flexDirection: 'row-reverse', gap: 10, marginTop: 14 }}>
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.btnGhost, { flex: 1, justifyContent: 'center' }, reportExporting && { opacity: 0.6 }]}
+                onPress={() => handleReportExport(activeReportModal as any, 'excel')}
+                disabled={reportExporting}
+                testID="report-export-excel-btn"
+              >
+                <Text style={styles.btnGhostText}>تصدير Excel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.btnPrimary, { flex: 1, justifyContent: 'center' }, reportExporting && { opacity: 0.6 }]}
+                onPress={() => handleReportExport(activeReportModal as any, 'pdf')}
+                disabled={reportExporting}
+                testID="report-export-pdf-btn"
+              >
+                {reportExporting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnPrimaryText}>تصدير PDF</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -860,10 +1333,16 @@ const styles = StyleSheet.create({
   coursesCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },
   coursesCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eef1f6' },
   coursesCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540' },
+  coursesHeaderRight: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
   coursesCardCount: { fontSize: 12, color: '#5b6678' },
   coursesCountAccent: { color: '#2962ff', fontWeight: '700' },
 
+  viewToggle: { flexDirection: 'row-reverse', backgroundColor: '#f1f4f9', borderRadius: 8, padding: 3, gap: 2 },
+  viewToggleBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },
+  viewToggleBtnActive: { backgroundColor: '#2962ff' },
+
   coursesList: { padding: 14, gap: 10 },
+  coursesListGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   courseRow: {
     backgroundColor: '#fafbfd',
     borderRadius: 12,
@@ -871,6 +1350,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eef1f6',
   },
+  courseRowGrid: { width: '32%', minWidth: 280, marginLeft: '1.33%' },
   courseMain: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
   courseIconBox: {
     width: 44, height: 44, borderRadius: 10,
@@ -966,4 +1446,30 @@ const styles = StyleSheet.create({
   confirmTitle: { fontSize: 17, fontWeight: '700', color: '#1a2540', textAlign: 'center', marginBottom: 10 },
   confirmText: { fontSize: 13, color: '#5b6678', textAlign: 'center', lineHeight: 22 },
   confirmNote: { fontSize: 12, color: '#8a95a8', textAlign: 'center', marginTop: 8, fontStyle: 'italic' },
+
+  // مودال قوائم الإجراءات/التقارير
+  menuCard: { backgroundColor: '#fff', borderRadius: 14, padding: 10, width: '100%', maxWidth: 320 },
+  menuCardTitle: { fontSize: 14, fontWeight: '700', color: '#1a2540', textAlign: 'right', padding: 10 },
+  menuRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 10, borderRadius: 8 },
+  menuRowText: { fontSize: 14, color: '#1a2540', fontWeight: '600' },
+  menuRowDanger: { borderTopWidth: 1, borderTopColor: '#eef1f6', marginTop: 4 },
+  menuCancelBtn: { alignItems: 'center', paddingVertical: 12, marginTop: 6, borderTopWidth: 1, borderTopColor: '#eef1f6' },
+  menuCancelText: { fontSize: 13, color: '#8a95a8', fontWeight: '600' },
+
+  // نموذج تعديل بيانات المعلم
+  fieldLabel: { fontSize: 12, color: '#5b6678', fontWeight: '600', textAlign: 'right', marginTop: 12, marginBottom: 6 },
+  deptChipsWrap: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  deptChip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#f1f4f9', borderWidth: 1, borderColor: '#e3e7ee' },
+  deptChipSelected: { backgroundColor: '#e7f0fe', borderColor: '#2962ff' },
+  deptChipText: { fontSize: 12, color: '#5b6678', fontWeight: '600' },
+  deptChipTextSelected: { color: '#2962ff' },
+
+  // تقارير المعاينة
+  reportStatRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#eef1f6' },
+  reportStatLabel: { fontSize: 13, color: '#5b6678', fontWeight: '600' },
+  reportStatValue: { fontSize: 14, color: '#1a2540', fontWeight: '700' },
+  reportCourseRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f4f6fb' },
+  reportCourseName: { fontSize: 12, color: '#1a2540', fontWeight: '600', flex: 1, textAlign: 'right' },
+  reportCourseHours: { fontSize: 12, color: '#2962ff', fontWeight: '700', marginRight: 8 },
+  reportDayTitle: { fontSize: 13, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginTop: 12, marginBottom: 4, backgroundColor: '#f4f6fb', padding: 6, borderRadius: 6 },
 });
