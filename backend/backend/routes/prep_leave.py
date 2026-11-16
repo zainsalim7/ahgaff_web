@@ -6,7 +6,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .deps import get_current_user, get_db, log_activity
+from .deps import get_current_user, get_db, log_activity, has_permission
 from models.permissions import UserRole
 
 router = APIRouter(prefix="/prep-leave-periods", tags=["إجازة التحضير"])
@@ -20,7 +20,8 @@ def _now() -> datetime:
 
 
 def _can_manage(user: dict) -> bool:
-    return user.get("role") in (UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD)
+    """🔒 لا صلاحيات افتراضية بالدور — إجازة التحضير تتطلّب صراحةً manage_prep_leave"""
+    return user.get("role") == UserRole.ADMIN or has_permission(user, "manage_prep_leave")
 
 
 class PrepPeriodCreate(BaseModel):

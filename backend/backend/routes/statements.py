@@ -228,7 +228,7 @@ async def get_verify_base(db) -> str:
 
 @router.get("/settings/verify-base-url")
 async def read_verify_base(current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") in ("teacher", "student"):
+    if current_user.get("role") != "admin" and not has_permission(current_user, "issue_statements"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     return {"value": await get_verify_base(db)}
@@ -449,7 +449,8 @@ async def preview_statement_pdf(data: IssueRequest, fmt: str = "pdf", letterhead
 # ============ قوالب الإفادات (مشتركة لكل الكليات) ============
 
 def _can_manage_templates(user: dict) -> bool:
-    return user.get("role") not in ("teacher", "student")
+    """🔒 لا صلاحيات افتراضية بالدور — إدارة قوالب الإفادات تتطلّب صراحةً issue_statements"""
+    return user.get("role") == "admin" or has_permission(user, "issue_statements")
 
 
 class StatementTemplate(BaseModel):
@@ -684,10 +685,12 @@ async def list_statements(
                 raise HTTPException(status_code=403, detail="هذه الكلية خارج نطاق صلاحيتك")
             q["faculty_id"] = faculty_id
     elif current_user.get("role") != "admin":
+        if not has_permission(current_user, "issue_statements"):
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
         fids = set(current_user.get("faculty_ids") or [])
         if current_user.get("faculty_id"):
             fids.add(current_user["faculty_id"])
-        if not fids or current_user.get("role") in ("teacher", "student"):
+        if not fids:
             raise HTTPException(status_code=403, detail="غير مصرح لك")
         q["faculty_id"] = {"$in": list(fids)}
         if faculty_id:

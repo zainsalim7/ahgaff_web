@@ -109,3 +109,16 @@
 - اللغة: **العربية فقط في كل التواصل**.
 - `teacher-courses.tsx` تجاوزت 700 سطر — يُنصح بالفصل لمكونات عند أي تعديل كبير قادم.
 - حالة الحساب (مُفعّل/غير مُفعّل) تُحدَّد دائماً بوجود `user_id`، وليس حقل `is_active` (الذي لا يُغيّره الباكند أبداً).
+
+## 2026-11-16: إصلاح "تسريب المهام الإضافية" — إزالة كل الصلاحيات الافتراضية الضمنية بالدور
+**البلاغ:** مستخدم بدور مخصص (custom/employee) كان يرى بطاقات في "مهام إضافية" (الدرجات، سجل الإفادات، اعتماد صور الطلاب، طباعة/تصميم البطاقات...) رغم أن دوره لا يملك هذه الصلاحية — توجيه المستخدم الصريح: "لا أريد صلاحيات افتراضية لأي دور، كل دور نضيف الصلاحيات إليه صراحة حتى لو كان رسمياً".
+**السبب الجذري:** عدة دوال Backend كانت تمنح الوصول تلقائياً لأي مستخدم "دوره ليس teacher/student" دون تحقق من صلاحية صريحة: `statements.py::_can_issue/_can_manage_templates/list_statements`, `grades.py::_can_manage`, `student_cards.py` (كل نقاط النهاية)، `faculty_board.py::_can_decide`, `prep_leave.py::_can_manage`. والواجهة استخدمت `alwaysVisible: true` أو `roles: [...]` بدل صلاحية فعلية لـ 9 بطاقات في `DashExtraTasksGrid.tsx`.
+**الإصلاح:**
+- صلاحيات جديدة قابلة للمنح من "إدارة الأدوار": `manage_grades`, `approve_student_photos`, `print_student_cards`, `manage_faculty_board`, `manage_prep_leave`.
+- كل الدوال أعلاه الآن تتطلب `has_permission(user, perm)` صراحة (admin دائماً كامل الوصول، ونطاق الكلية محفوظ).
+- **لم تُضف** أي صلاحية جديدة إلى `DEFAULT_PERMISSIONS` لأي دور — بطلب المستخدم؛ من يحتاجها يُمنحها يدوياً.
+- الواجهة: 9 بطاقات أصبحت تستخدم `perms` مطابقة للـ Backend. بقيت `verify-report` فقط عامة (بلا بيانات حساسة).
+- **أثر جانبي مقصود:** dean/department_head/registrar/registration_manager فقدوا الوصول الضمني لهذه الميزات ما لم تُمنح الصلاحية صراحة الآن.
+- تحقق عبر testing_agent (iteration_191) + إصلاح 6 ثغرات إضافية اكتُشفت (print-report, batches, batch-count, list statements, templates, verify-base-url) + إعادة تحقق curl كاملة (admin=200، dean بلا صلاحية=403، teacher=403).
+**ملفات محدّثة:** `models/permissions.py`, `routes/statements.py`, `routes/grades.py`, `routes/student_cards.py`, `routes/faculty_board.py`, `routes/prep_leave.py`, `frontend/.../DashExtraTasksGrid.tsx`.
+

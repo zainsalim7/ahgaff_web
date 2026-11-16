@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from .deps import get_current_user, get_db, log_activity, get_scope_filter
+from .deps import get_current_user, get_db, log_activity, get_scope_filter, has_permission
 from ._active_semester import get_active_semester
 from models.permissions import UserRole
 from services.absence_engine import course_profiles, student_profile
@@ -22,7 +22,8 @@ def _now() -> datetime:
 
 
 def _can_decide(user: dict) -> bool:
-    return user.get("role") in (UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD)
+    """🔒 لا صلاحيات افتراضية بالدور — قرارات مجلس الكلية تتطلّب صراحةً manage_faculty_board"""
+    return user.get("role") == UserRole.ADMIN or has_permission(user, "manage_faculty_board")
 
 
 async def _scope_department_ids(db, user: dict) -> Optional[List[str]]:

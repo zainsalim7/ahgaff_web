@@ -213,6 +213,8 @@ class Permission:
     MANAGE_GRADES = "manage_grades"
     APPROVE_STUDENT_PHOTOS = "approve_student_photos"
     PRINT_STUDENT_CARDS = "print_student_cards"
+    MANAGE_FACULTY_BOARD = "manage_faculty_board"
+    MANAGE_PREP_LEAVE = "manage_prep_leave"
 
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
@@ -495,6 +497,8 @@ ALL_PERMISSIONS = [
     {"key": Permission.MANAGE_GRADES, "label": "إدارة الدرجات (استيراد الكشوفات وإصدار بيان الحالة)", "category": "المالية"},
     {"key": Permission.APPROVE_STUDENT_PHOTOS, "label": "اعتماد صور بطاقات الطلاب", "category": "بطاقات الطلاب"},
     {"key": Permission.PRINT_STUDENT_CARDS, "label": "طباعة بطاقات الطلاب وتصميمها", "category": "بطاقات الطلاب"},
+    {"key": Permission.MANAGE_FACULTY_BOARD, "label": "اتخاذ قرارات مجلس الكلية", "category": "مجلس الكلية"},
+    {"key": Permission.MANAGE_PREP_LEAVE, "label": "تحديد أيام الإجازة التحضيرية", "category": "الحضور"},
 ]
 
 DASHBOARD_PERMISSIONS = [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_ATTENDANCE, Permission.DASHBOARD_TEACHERS,

@@ -924,6 +924,8 @@ async def print_job_download(job_id: str, current_user: dict = Depends(get_curre
 @router.get("/cards/batches")
 async def list_print_batches(limit: int = 50, current_user: dict = Depends(get_current_user)):
     """📚 الدفعات السابقة (لإعادة التنزيل والمراجعة)"""
+    if current_user.get("role") != "admin" and not has_permission(current_user, "print_student_cards"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     items = []
     async for b in db.card_print_batches.find({}, {"students": 0, "settings": 0}).sort("batch_no", -1).limit(limit):
@@ -934,6 +936,8 @@ async def list_print_batches(limit: int = 50, current_user: dict = Depends(get_c
 
 @router.get("/cards/batches/{batch_no}")
 async def get_print_batch(batch_no: int, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") != "admin" and not has_permission(current_user, "print_student_cards"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     b = await db.card_print_batches.find_one({"batch_no": batch_no})
     if not b:
@@ -978,8 +982,14 @@ async def cards_print_report(department_id: Optional[str] = None, faculty_id: Op
     db = get_db()
     q: dict = {"is_alumni": {"$ne": True}}
     if department_id:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)}) if ObjectId.is_valid(department_id) else None
+        resolved_fid = (dept or {}).get("faculty_id", "")
+        if not _can_cards(current_user, resolved_fid):
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
         q["department_id"] = department_id
     elif faculty_id:
+        if not _can_cards(current_user, faculty_id):
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
         dept_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
         q["department_id"] = {"$in": dept_ids}
     else:
@@ -1332,6 +1342,9 @@ async def batch_back_pdf(data: BackBatchRequest, current_user: dict = Depends(ge
 async def batch_count(department_id: str, level: Optional[int] = None, section: Optional[str] = None,
                       current_user: dict = Depends(get_current_user)):
     db = get_db()
+    dept = await db.departments.find_one({"_id": ObjectId(department_id)}) if ObjectId.is_valid(department_id) else None
+    if not _can_cards(current_user, (dept or {}).get("faculty_id", "")):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     q = {"department_id": department_id, "is_alumni": {"$ne": True}}
     if level:
         q["level"] = level

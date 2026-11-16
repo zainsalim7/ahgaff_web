@@ -1,0 +1,47 @@
+{
+  "summary": "I tested the explicit permissions fix (no role defaults) for grades, statements, student photos and cards, plus the 'مهام إضافية' dashboard grid. The 7 gated GETs the main agent fixed work: Salim (dean) gets 403 on all 7 and admin gets 200. A TEST_ custom role holding the 4 permissions gets 200 and is denied (403) for another faculty. A TEST_ custom role without them gets 403. Teacher and student get 403. Salim still has fee receipts (200). The 4 new permissions appear in /api/permissions/all. In Playwright, Salim's grid shows 26 tiles and none of grades, statements-log, photo-approvals, batch-print or card-settings. It does show fee-receipts, view-calendar and letter-new, which matches his permissions. Admin sees all 45 tiles. A TEST_ custom user with only approve_student_photos, print_student_cards and view_students sees exactly student-references, student-statuses, verify-report, photo-approvals, batch-print and card-settings, and the photo-approvals page works. However, I found 6 more endpoints that still leak without the explicit permission. Two of them can be read by students and teachers.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/cards/print-report?faculty_id=...", "issue": "No permission check at all. Any logged-in user, including student 1001 and teacher180156, can download an Excel file with student names, student IDs and card print status for any faculty. This is a PII leak. Needs _can_cards(current_user, faculty_id) or a check on the department's faculty.", "priority": "CRITICAL"},
+      {"endpoint": "GET /api/cards/batches and GET /api/cards/batches/{batch_no}", "issue": "No permission check. Any user, including students, gets 200. The detail endpoint returns the full batch document, including students and settings. Needs print_student_cards plus a faculty scope check.", "priority": "HIGH"},
+      {"endpoint": "GET /api/statements (backend for the سجل الإفادات page)", "issue": "Salim has no issue_statements but gets 200 with 37 statements from his faculty. At statements.py ~686-690 the non-admin branch only checks the faculty and role not in teacher/student. It needs has_permission(user,'issue_statements'). Confirmed in the UI: opening /statements-log directly as Salim shows all 37 statements.", "priority": "HIGH"},
+      {"endpoint": "GET/POST/PUT/DELETE /api/statement-templates and POST /api/statements/preview-pdf", "issue": "_can_manage_templates (statements.py:451) is still role-based (`role not in ('teacher','student')`). Salim can list templates (200), and so can create, edit or delete these university-wide templates without issue_statements. Should require issue_statements (or a dedicated template permission).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/cards/batch-count", "issue": "No permission check. Any user, including students, can count the students in any department."},
+      {"endpoint": "GET /api/settings/verify-base-url", "issue": "Still role-based (`role in teacher/student` → 403). Low sensitivity."},
+      {"endpoint": "deps.get_user_permissions", "issue": "`user.permissions or DEFAULT_PERMISSIONS[role]`: when a dean, department_head or registrar user has permissions=[], they silently get the role's default permissions (e.g. issue_letters, manage_departments). This contradicts the user's request for no role defaults. None of the 4 new permissions are in the defaults, so this fix is not affected."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DashExtraTasksGrid", "issue": "'prep-leave-periods' and 'faculty-board' are still shown based on role (`roles: ['admin','dean','department_head']`), not on an explicit permission. This contradicts the 'no role defaults' request.", "selector": "[data-testid='dash-extra-task-prep-leave-periods'], [data-testid='dash-extra-task-faculty-board']", "priority": "MEDIUM"},
+      {"component": "Pages /grades, /statements-log, /batch-print, /card-settings, /photo-approvals", "issue": "None of these pages has a permission guard. Opening them directly as Salim renders the full UI. /statements-log shows real data because of the backend leak above. The others show 'غير مصرح لك' errors or empty data. Add a permission guard or redirect to each page.", "selector": "n/a", "priority": "MEDIUM"},
+      {"component": "Login page", "issue": "When the web login returns 403 for teacher or student accounts ('هذا الحساب مخصص للتطبيق فقط'), no visible error message appears. The page just stays on /login.", "selector": "login button", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_explicit_perms_extra_tasks_iter191.py", "/app/test_reports/pytest/iter191.xml"],
+  "action_items": [
+    "Add a _can_cards check, scoped to the faculty or department, to GET /cards/print-report, GET /cards/batches, GET /cards/batches/{n} and GET /cards/batch-count",
+    "GET /statements: in the non-admin branch, require has_permission('issue_statements')",
+    "Change _can_manage_templates to require issue_statements instead of the role check",
+    "Change prep-leave-periods and faculty-board tiles (and their backend endpoints) from roles to explicit perms if the user wants no role defaults everywhere",
+    "Add permission guards to the pages behind the gated tiles",
+    "Decide whether the DEFAULT_PERMISSIONS fallback in get_user_permissions should be removed for system roles, since the user wants no defaults",
+    "Show the 403 login error message on the web login screen"
+  ],
+  "critical_code_review_comments": [
+    "student_cards.py: the 4 new GET handlers (print-report, batches list/detail, batch-count) have no auth beyond get_current_user",
+    "statements.py: list_statements and _can_manage_templates still give implicit access to any role that is not teacher or student",
+    "DashExtraTasksGrid still uses `roles` for 2 tiles; the only alwaysVisible tile is verify-report, which is fine"
+  ],
+  "updated_files": ["/app/backend/tests/test_explicit_perms_extra_tasks_iter191.py"],
+  "success_rate": {"backend": "22/28 (79%) — every fix the main agent requested passes; the 6 failures are leak probes on endpoints that were not fixed", "frontend": "100% for dashboard tile visibility (Salim, admin, custom role); the leaks are at page and backend level"},
+  "seed_data_creation": "I created TEST_ roles and users (TEST_role_full_*, TEST_role_none_*, TEST_full_*, TEST_none_*, TEST_ui_cards_role_191, TEST_ui_cards_191) and deleted all of them by id. I verified in Mongo that 0 remain. Salim's data was not modified.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest backend/tests/test_explicit_perms_extra_tasks_iter191.py -p no:xdist -o addopts=''. test_dean_leak_probe and test_student_leak_probe are expected to pass once the leaks are fixed. Teacher and student cannot log in on the web by design (auth.py blocks browser user agents that are not on the allowed origins), so test their dashboards via the API or the X-Platform: mobile header. Regression checks passed: iter190 report isolation 28/28, iter189 letters isolation 10/10, and the Grid/List toggle on student-details and teacher-courses. I did not re-test weekly schedule sync.",
+  "rca of the issue": "The fix replaced role checks only in the helper functions (_can_issue, _can_manage, _can_photos, _can_cards) and the 6 named handlers. Several sibling handlers in the same routers never called any helper (print-report, batches, batch-count) or used separate role-based helpers (list_statements inline check, _can_manage_templates), so they still leak."
+}
