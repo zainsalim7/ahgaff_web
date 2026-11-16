@@ -19,6 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/contexts/AuthContext';
 import { rolesAPI, permissionsAPI } from '../src/services/api';
 import { EXTRA_TASKS } from '../src/components/dashboard/DashExtraTasksGrid';
+import { MENU_ITEMS } from '../src/components/SideMenu';
 
 interface Permission {
   key: string;
@@ -258,27 +259,52 @@ export default function ManageRolesScreen() {
   };
 
   // 🕵️ تدقيق الصلاحيات — لا نضيف أي صلاحية افتراضية هنا، فقط نعرض الواقع الحالي بدقة
+  // 📋 نمزج: SideMenu (القائمة الأكمل لكل شاشات التطبيق) + مهام لوحة التحكم الإضافية غير الموجودة بالقائمة
+  const auditRegistry = React.useMemo(() => {
+    const fromMenu = MENU_ITEMS
+      .filter((m: any) => m.path && !m.id.includes('divider'))
+      .map((m: any) => ({
+        id: `menu-${m.id}`,
+        label: m.label,
+        route: m.path,
+        perms: (m.permissions && m.permissions.length > 0) ? m.permissions : undefined,
+        roles: m.roles,
+        adminOnly: m.adminOnly,
+        teacherOnly: m.teacherOnly,
+        advancedAccessSystem: !!(m.advPermissionKeys || m.advGroups),
+        alwaysVisible: m.forAll || m.advancedAccessOnly || m.corrMembershipOnly,
+        category: m.category === 'academic' ? 'أكاديمي' : 'إداري',
+      }));
+    const seenRoutes = new Set(fromMenu.map((m: any) => m.route));
+    const extraOnly = (EXTRA_TASKS as any[]).filter((t) => !seenRoutes.has(t.route));
+    return [...fromMenu, ...extraOnly];
+  }, []);
+
   const auditRole = roles.find(r => r.id === auditRoleId);
   const isAuditAdmin = auditRoleId === '__admin__';
   const auditExpandedPerms = isAuditAdmin ? [] : expandPermissions(auditRole?.permissions || []);
+  const auditRoleSystemKey = (auditRole as any)?.system_key || '';
 
-  const auditFeatureStatus = (t: any): 'admin' | 'public' | 'admin_only' | 'gap' | 'granted' | 'denied' => {
+  const auditFeatureStatus = (t: any): 'admin' | 'public' | 'admin_only' | 'gap' | 'granted' | 'denied' | 'role_granted' | 'role_denied' | 'teacher_only' | 'advanced_access' => {
     if (isAuditAdmin) return 'admin';
     if (t.alwaysVisible) return 'public';
     if (t.adminOnly) return 'admin_only';
+    if (t.teacherOnly) return 'teacher_only';
+    if (t.roles && t.roles.length > 0) return t.roles.includes(auditRoleSystemKey) ? 'role_granted' : 'role_denied';
+    if ((!t.perms || t.perms.length === 0) && t.advancedAccessSystem) return 'advanced_access';
     if (!t.perms || t.perms.length === 0) return 'gap';
     return t.perms.some((p: string) => auditExpandedPerms.includes(p)) ? 'granted' : 'denied';
   };
 
   const auditCategoriesOrder = ['أكاديمي', 'تقارير', 'إداري', 'نظام وصيانة'];
   const auditGrouped: Record<string, any[]> = {};
-  EXTRA_TASKS.forEach((t: any) => {
+  auditRegistry.forEach((t: any) => {
     const cat = t.category || 'أخرى';
     if (!auditGrouped[cat]) auditGrouped[cat] = [];
     auditGrouped[cat].push(t);
   });
-  const grantedCount = EXTRA_TASKS.filter((t: any) => ['admin', 'public', 'granted'].includes(auditFeatureStatus(t))).length;
-  const gapFeatures = EXTRA_TASKS.filter((t: any) => auditFeatureStatus(t) === 'gap');
+  const grantedCount = auditRegistry.filter((t: any) => ['admin', 'public', 'granted', 'role_granted'].includes(auditFeatureStatus(t))).length;
+  const gapFeatures = auditRegistry.filter((t: any) => auditFeatureStatus(t) === 'gap');
 
   const handleSave = async () => {
     if (!roleName.trim()) {
@@ -638,7 +664,7 @@ export default function ManageRolesScreen() {
 
         <View style={styles.auditSummaryCard}>
           <Text style={styles.auditSummaryText}>
-            {isAuditAdmin ? 'المدير العام يملك وصولاً كاملاً دائماً لكل الميزات.' : `${grantedCount} من أصل ${EXTRA_TASKS.length} ميزة ظاهرة لهذا الدور حالياً.`}
+            {isAuditAdmin ? 'المدير العام يملك وصولاً كاملاً دائماً لكل الميزات.' : `${grantedCount} من أصل ${auditRegistry.length} ميزة/شاشة ظاهرة لهذا الدور حالياً.`}
           </Text>
         </View>
 
@@ -659,9 +685,13 @@ export default function ManageRolesScreen() {
               const statusMap: Record<string, { label: string; color: string; bg: string; icon: any }> = {
                 admin: { label: 'متاحة (admin)', color: '#166534', bg: '#dcfce7', icon: 'checkmark-circle' },
                 granted: { label: 'ممنوحة ✓', color: '#166534', bg: '#dcfce7', icon: 'checkmark-circle' },
+                role_granted: { label: 'ممنوحة (بالدور)', color: '#166534', bg: '#dcfce7', icon: 'checkmark-circle' },
                 denied: { label: 'غير ممنوحة', color: '#64748b', bg: '#f1f5f9', icon: 'close-circle-outline' },
+                role_denied: { label: 'غير ممنوحة (بالدور)', color: '#64748b', bg: '#f1f5f9', icon: 'close-circle-outline' },
                 public: { label: 'عامة', color: '#0369a1', bg: '#e0f2fe', icon: 'globe-outline' },
                 admin_only: { label: 'للأدمن فقط', color: '#6d28d9', bg: '#ede9fe', icon: 'lock-closed' },
+                teacher_only: { label: 'للمعلم فقط', color: '#0e7490', bg: '#cffafe', icon: 'school' },
+                advanced_access: { label: '🧪 نظام متقدم', color: '#7c3aed', bg: '#ede9fe', icon: 'flask' },
                 gap: { label: '⚠️ بلا صلاحية فردية', color: '#b45309', bg: '#fef3c7', icon: 'alert-circle' },
               };
               const s = statusMap[status];

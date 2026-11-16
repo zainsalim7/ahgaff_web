@@ -35,7 +35,8 @@ interface MenuItem {
 
 // قائمة العناصر مرتبطة بالصلاحيات
 // 🔑 مبدأ ذهبي: كل عنصر مربوط فقط بصلاحياته الخاصة (الأم + الفرعية المباشرة)، بدون خلط مع صلاحيات لا تنتمي إليه
-const MENU_ITEMS: MenuItem[] = [
+// 📋 مُصدَّرة أيضاً لتبويب "تدقيق الصلاحيات" بشاشة إدارة الأدوار (القائمة الأكمل والمرجعية لكل شاشات التطبيق)
+export const MENU_ITEMS: MenuItem[] = [
   { id: 'home', label: 'الرئيسية', icon: 'home', path: '/(tabs)', permissions: [], forAll: true },
   
   { id: 'admin', label: 'الإعدادات الأساسية', icon: 'settings', path: '/(tabs)/admin', category: 'administrative', permissions: [
@@ -187,8 +188,8 @@ const MENU_ITEMS: MenuItem[] = [
 
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', category: 'administrative', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
   { id: 'university-calendar', label: 'التقويم الجامعي والعطل', icon: 'calendar', path: '/university-calendar', category: 'academic', permissions: ['manage_calendar'] },
-  { id: 'prep-leave-periods', label: 'إجازة التحضير', icon: 'book', path: '/prep-leave-periods', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
-  { id: 'faculty-board', label: 'مجلس الكلية', icon: 'shield-checkmark', path: '/faculty-board', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'], advGroups: ['councils'] },
+  { id: 'prep-leave-periods', label: 'إجازة التحضير', icon: 'book', path: '/prep-leave-periods', category: 'academic', permissions: ['manage_prep_leave'] },
+  { id: 'faculty-board', label: 'مجلس الكلية', icon: 'shield-checkmark', path: '/faculty-board', category: 'academic', permissions: ['manage_faculty_board'] },
   { id: 'assistant-settings', label: 'مرشد الأحقاف (الذكاء الاصطناعي) 🤖', icon: 'sparkles', path: '/assistant-settings', category: 'administrative', permissions: [], roles: ['admin'] },
   { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', category: 'administrative', permissions: ['manage_settings', 'manage_semesters', 'manage_academic_years', 'manage_institution'] },
   { id: 'app-versions', label: 'إعدادات تحديث التطبيقات', icon: 'phone-portrait', path: '/app-versions', category: 'administrative', permissions: [], adminOnly: true },
