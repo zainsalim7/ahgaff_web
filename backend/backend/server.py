@@ -1371,6 +1371,15 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
     
     return query
 
+async def _report_scope_guard(current_user: dict, scope_type: str) -> dict:
+    """🔒 نطاق إضافي يُطبَّق على فلاتر التقارير لمنع تجاوز نطاق المستخدم (عميد/رئيس قسم/موظف نطاق...) حتى لو
+    مرّر العميل department_id/faculty_id/teacher_id/course_id/student_id من خارج نطاقه. يُعيد {} لغير
+    المقيَّد (أدمن/رئيس جامعة) أو لمستخدم «إنفاذ فعلي» (له فحصه الخاص المنفصل real_enforce_guard/check
+    في كل endpoint أصلاً، فلا نزدوج الفحص)."""
+    if current_user.get("advanced_access_real_enforcement"):
+        return {}
+    return await get_user_scope_filter(current_user, scope_type)
+
 async def get_faculty_department_ids(faculty_id: str) -> list:
     """جلب معرفات الأقسام التابعة لكلية معينة"""
     departments = await db.departments.find(
@@ -7831,6 +7840,9 @@ async def get_lesson_completion_report(
         dept_ids = [str(d["_id"]) for d in depts]
         course_query["department_id"] = {"$in": dept_ids}
     
+    own_scope = await _report_scope_guard(current_user, "courses")
+    if own_scope:
+        course_query = {"$and": [course_query, own_scope]}
     courses = await db.courses.find(course_query).to_list(500)
     
     report = []
@@ -12691,6 +12703,10 @@ async def get_department_report(
         await real_enforce_guard(db, current_user, "reports_ser_get_department_report", dept_id)
     elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "view_reports"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
+    elif current_user["role"] != UserRole.ADMIN:
+        own_scope = await get_user_scope_filter(current_user, "courses")
+        if own_scope and not await db.courses.find_one({"$and": [{"department_id": dept_id}, own_scope]}):
+            raise HTTPException(status_code=403, detail="هذا القسم خارج نطاق صلاحيتك")
     
     # Get department
     dept = await db.departments.find_one({"_id": ObjectId(dept_id)})
@@ -12800,6 +12816,9 @@ async def get_attendance_overview_report(
         dep_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
         course_query["department_id"] = {"$in": dep_ids}
     
+    own_scope = await _report_scope_guard(current_user, "courses")
+    if own_scope:
+        course_query = {"$and": [course_query, own_scope]}
     courses = await db.courses.find(course_query).to_list(100)
     
     result = []
@@ -12881,6 +12900,10 @@ async def get_absent_students_report(
             course_query["teacher_id"] = str(teacher_record["_id"])
         else:
             return {"students": [], "total_count": 0, "min_absence_rate_filter": min_absence_rate}
+    else:
+        own_scope = await _report_scope_guard(current_user, "courses")
+        if own_scope:
+            course_query = {"$and": [course_query, own_scope]}
     
     courses = await db.courses.find(course_query).to_list(100)
 
@@ -12989,6 +13012,10 @@ async def get_student_attendance_report(
         from services.advanced_access_service import real_enforce_guard
         dep = str(student.get("department_id")) if student.get("department_id") else None
         await real_enforce_guard(db, current_user, "reports_ser_get_student_attendance_report", dep)
+    else:
+        own_scope = await get_user_scope_filter(current_user, "students")
+        if own_scope and not await db.students.find_one({"$and": [{"_id": student["_id"]}, own_scope]}):
+            raise HTTPException(status_code=403, detail="هذا الطالب خارج نطاق صلاحيتك")
     
     # جلب المقررات المسجل فيها
     enrollments = await db.enrollments.find({"student_id": str(student["_id"])}).to_list(100)
@@ -13083,6 +13110,9 @@ async def get_daily_report(
     elif faculty_id:
         dep_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
         course_query["department_id"] = {"$in": dep_ids}
+    own_scope = await _report_scope_guard(current_user, "courses")
+    if own_scope:
+        course_query = {"$and": [course_query, own_scope]}
     courses = await db.courses.find(course_query).to_list(100)
     course_ids = [str(c["_id"]) for c in courses]
     
@@ -13166,6 +13196,9 @@ async def get_warnings_report(
         course_query["department_id"] = {"$in": dep_ids}
     if level is not None:
         course_query["level"] = level
+    own_scope = await _report_scope_guard(current_user, "courses")
+    if own_scope:
+        course_query = {"$and": [course_query, own_scope]}
     courses = await db.courses.find(course_query).to_list(500)
 
     warnings, deprivations = [], []
@@ -13245,6 +13278,10 @@ async def get_course_detailed_report(
         teacher_record = await db.teachers.find_one({"user_id": current_user["id"]})
         if not teacher_record or course.get("teacher_id") != str(teacher_record["_id"]):
             raise HTTPException(status_code=403, detail="هذا المقرر ليس من مقرراتك")
+    elif not current_user.get("advanced_access_real_enforcement"):
+        own_scope = await get_user_scope_filter(current_user, "courses")
+        if own_scope and not await db.courses.find_one({"$and": [{"_id": course["_id"]}, own_scope]}):
+            raise HTTPException(status_code=403, detail="هذا المقرر خارج نطاق صلاحيتك")
     
     # جلب المعلم
     teacher_name = None
@@ -13434,6 +13471,11 @@ async def get_teacher_summary_report(
     
     if not teacher:
         raise HTTPException(status_code=404, detail="المعلم غير موجود")
+    
+    if current_user["role"] != UserRole.TEACHER:
+        own_scope = await _report_scope_guard(current_user, "teachers")
+        if own_scope and not await db.teachers.find_one({"$and": [{"_id": ObjectId(teacher_id)}, own_scope]}):
+            raise HTTPException(status_code=403, detail="هذا المعلم خارج نطاق صلاحيتك")
     
     # جلب مقررات المعلم
     courses = await db.courses.find({"teacher_id": teacher_id, "is_active": True}).to_list(50)
@@ -13629,6 +13671,10 @@ async def get_teacher_delays_report(
     courses_map = {str(c["_id"]): c for c in await db.courses.find({"_id": {"$in": [ObjectId(c) for c in course_ids]}}).to_list(None)} if course_ids else {}
     fac_depts = {str(d["_id"]) for d in await db.departments.find({"faculty_id": faculty_id}, {"_id": 1}).to_list(None)} if faculty_id else None
     filter_teacher_id = teacher_id
+    own_scope = await _report_scope_guard(current_user, "courses")
+    allowed_course_ids = None
+    if own_scope and course_ids:
+        allowed_course_ids = {str(c["_id"]) async for c in db.courses.find({"$and": [{"_id": {"$in": [ObjectId(c) for c in course_ids]}}, own_scope]}, {"_id": 1})}
     # 🔎 مصدر بدء التحضير: أول عملية تحضير لكل محاضرة (من سجّل؟ أوفلاين؟) + حد التأخير للكلية لتفسير التأخيرات الكبيرة
     first_ops: dict = {}
     lec_ids = [str(lec["_id"]) for lec in lectures]
@@ -13649,6 +13695,8 @@ async def get_teacher_delays_report(
     for lec in lectures:
         course = courses_map.get(lec.get("course_id") or "")
         if not course:
+            continue
+        if allowed_course_ids is not None and str(course["_id"]) not in allowed_course_ids:
             continue
         
         # فلتر القسم/الكلية
@@ -14071,7 +14119,7 @@ _TEACHER_ATT_STATUS_LABELS = {
 }
 
 
-async def _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id=None):
+async def _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id=None, current_user=None):
     """يبني بيانات تقرير حضور الأساتذة وتنفيذ المحاضرات لفترة محددة."""
     # ضبط التواريخ (نصية بصيغة YYYY-MM-DD)
     if not start_date and not end_date:
@@ -14107,6 +14155,11 @@ async def _build_teacher_attendance_report(start_date, end_date, department_id, 
             pass
     depts = await db.departments.find({"_id": {"$in": dept_obj_ids}}).to_list(500)
     depts_map = {str(d["_id"]): d for d in depts}
+
+    own_scope = await _report_scope_guard(current_user, "courses") if current_user else {}
+    allowed_course_ids = None
+    if own_scope and obj_ids:
+        allowed_course_ids = {str(c["_id"]) async for c in db.courses.find({"$and": [{"_id": {"$in": obj_ids}}, own_scope]}, {"_id": 1})}
 
     now = get_yemen_time()
 
@@ -14150,6 +14203,8 @@ async def _build_teacher_attendance_report(start_date, end_date, department_id, 
     for lec in lectures:
         course = courses_map.get(lec.get("course_id"))
         if not course:
+            continue
+        if allowed_course_ids is not None and str(course["_id"]) not in allowed_course_ids:
             continue
 
         dept_id = course.get("department_id", "")
@@ -14276,7 +14331,7 @@ async def get_teacher_attendance_report(
     """تقرير حضور الأساتذة وتنفيذ المحاضرات (من حضر ونفّذ ومن غاب)."""
     if not has_permission(current_user, "report_teacher_attendance") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.VIEW_REPORTS)):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
-    return await _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id)
+    return await _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id, current_user)
 
 
 @api_router.get("/reports/teacher-attendance/export/excel")
@@ -14291,7 +14346,7 @@ async def export_teacher_attendance_excel(
     """تصدير تقرير حضور الأساتذة إلى Excel."""
     if not has_permission(current_user, "report_teacher_attendance") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.EXPORT_REPORTS)):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
-    report = await _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id)
+    report = await _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id, current_user)
 
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill
@@ -14389,7 +14444,7 @@ async def export_teacher_attendance_pdf(
     """تصدير تقرير حضور الأساتذة إلى PDF."""
     if not has_permission(current_user, "report_teacher_attendance") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.EXPORT_REPORTS)):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
-    report = await _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id)
+    report = await _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id, current_user)
 
     from reportlab.lib.pagesizes import landscape
 

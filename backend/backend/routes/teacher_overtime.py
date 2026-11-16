@@ -530,6 +530,11 @@ async def select_teachers(db, current_user: dict, teacher_id: Optional[str], fac
     elif faculty_id:
         dep_ids = [str(d["_id"]) for d in await db.departments.find({"faculty_id": faculty_id}, {"_id": 1}).to_list(500)]
         q["$or"] = [{"faculty_id": faculty_id}, {"department_id": {"$in": dep_ids}}, {"department_ids": {"$in": dep_ids}}]
+    if not current_user.get("advanced_access_real_enforcement"):
+        from .deps import get_scope_filter
+        own_scope = await get_scope_filter(current_user, "teachers")
+        if own_scope:
+            q = {"$and": [q, own_scope]}
     return await db.teachers.find(q).sort("full_name", 1).to_list(1000)
 
 
