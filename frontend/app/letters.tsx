@@ -153,7 +153,7 @@ export default function LettersPage() {
           setPreviewPageCount(Math.max(1, parseInt(r.headers['x-page-count'] || '1', 10)));
           setSigPage(parseInt(r.headers['x-sig-page'] || '0', 10));
         })
-        .catch(() => {}).finally(() => setPreviewBusy(false));
+        .catch((e) => console.warn('letter preview-pdf failed:', e?.response?.data?.detail || e?.message)).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
   }, [contentKey, layout, previewPage, previewLetterhead, showLayout]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -400,7 +400,7 @@ export default function LettersPage() {
             )}
             {previewImg && <PreviewPager page={previewPage} count={previewPageCount} onChange={setPreviewPage} testID="letter-preview-pager" />}
             {previewImg && <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>{previewPage === sigPage ? '🖋️ اسحب المقبض الأحمر فوق التوقيع لتحريك موضعه مباشرة في هذا الخطاب' : `🖋️ التوقيع في الصفحة ${sigPage + 1} — انتقل إليها لتحريكه`}</div>}
-            {!!preview && !previewImg && <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif' }}>{preview.replace(/<[^>]+>/g, ' ')}</div>}
+            {!!preview && !previewImg && <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif' }} dangerouslySetInnerHTML={{ __html: preview }} />}
           </div>
         </div>
       )}

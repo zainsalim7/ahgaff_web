@@ -127,6 +127,12 @@ def render_html(c: dict, prev: dict, org_name: str, *, watermark: str = "", qr_u
 @font-face{{font-family:"Amiri";src:url("file://{FONTS_DIR}/Amiri-Bold.ttf");font-weight:700}}
 @font-face{{font-family:"Cairo";src:url("file://{FONTS_DIR}/Cairo-Regular.ttf");font-weight:400}}
 @font-face{{font-family:"Cairo";src:url("file://{FONTS_DIR}/Cairo-Bold.ttf");font-weight:700}}
+@font-face{{font-family:"Noto Kufi Arabic";src:url("file://{FONTS_DIR}/NotoKufiArabic-Regular.ttf");font-weight:400}}
+@font-face{{font-family:"Noto Kufi Arabic";src:url("file://{FONTS_DIR}/NotoKufiArabic-Bold.ttf");font-weight:700}}
+@font-face{{font-family:"Tajawal";src:url("file://{FONTS_DIR}/Tajawal-Regular.ttf");font-weight:400}}
+@font-face{{font-family:"Tajawal";src:url("file://{FONTS_DIR}/Tajawal-Bold.ttf");font-weight:700}}
+@font-face{{font-family:"Almarai";src:url("file://{FONTS_DIR}/Almarai-Regular.ttf");font-weight:400}}
+@font-face{{font-family:"Almarai";src:url("file://{FONTS_DIR}/Almarai-Bold.ttf");font-weight:700}}
 @page{{size:A4;margin:{m.get("top", 15)}mm {m.get("right", 20)}mm {m.get("bottom", 15)}mm {m.get("left", 20)}mm}}
 *{{box-sizing:border-box}} html,body{{margin:0;padding:0}}
 body{{font-family:"Amiri","Cairo",serif;font-size:{fs}pt;line-height:{lhgt};color:#111827;direction:rtl}}

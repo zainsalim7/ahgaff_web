@@ -19844,6 +19844,7 @@ async def _startup_db_tasks():
         ("backfill_teacher_record_links", backfill_teacher_record_links),
         ("backfill_teaching_loads_semester_internal", backfill_teaching_loads_semester_internal),
         ("backfill_weekly_schedule_teacher_sync", backfill_weekly_schedule_teacher_sync),
+        ("backfill_letters_isolation_scope", backfill_letters_isolation_scope),
         ("backfill_alumni_department_snapshot_internal", backfill_alumni_department_snapshot_internal),
         ("letters_backfill_people_faculty", lambda: letters_backfill_people_faculty(db)),
         ("migrate_letterheads", lambda: migrate_letterheads(db)),
@@ -20410,6 +20411,34 @@ async def backfill_teacher_record_links():
             logging.info(f"✅ Backfill teacher_record_id: {fixed_linked} ربط بسجل موجود، {fixed_created} سجل teacher جديد أُنشئ تلقائياً.")
     except Exception as e:
         logging.warning(f"Backfill teacher_record_id failed (non-critical): {e}")
+
+
+async def backfill_letters_isolation_scope():
+    """🔒 إصلاح تراجعي: يُعيد وسم created_by_faculty_ids للخطابات القديمة الصادرة من عميد/رئيس قسم مقيَّد بكليته/قسمه
+    (الدالة hr_scope_isolation_faculty_ids كانت تُعيد None لهذه الأدوار فيُحفظ created_by_faculty_ids=[] خطأً،
+    فتظهر الخطابات «العامة» الصادرة منهم للجميع بلا عزل حسب الكلية). Idempotent: آمن التكرار في كل إقلاع."""
+    try:
+        from routes.letters import _isolation_scope
+        fixed = 0
+        async for letter in db.letters.find(
+            {"$or": [{"created_by_faculty_ids": {"$exists": False}}, {"created_by_faculty_ids": {"$size": 0}}]},
+            {"_id": 1, "issued_by": 1, "created_by": 1},
+        ):
+            uid = letter.get("issued_by") or letter.get("created_by")
+            if not uid:
+                continue
+            user = await db.users.find_one({"_id": ObjectId(uid)}) if ObjectId.is_valid(uid) else await db.users.find_one({"id": uid})
+            if not user:
+                continue
+            fids_list = await _isolation_scope(db, user)
+            if not fids_list:
+                continue
+            res = await db.letters.update_one({"_id": letter["_id"]}, {"$set": {"created_by_faculty_ids": fids_list}})
+            fixed += res.modified_count
+        if fixed:
+            logging.info(f"✅ Backfill letters isolation scope: {fixed} خطاب أُعيد وسمه بنطاق مُصدِره الأكاديمي.")
+    except Exception as e:
+        logging.warning(f"Backfill letters isolation scope failed (non-critical): {e}")
 
 
 async def backfill_weekly_schedule_teacher_sync():
