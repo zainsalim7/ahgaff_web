@@ -9,7 +9,7 @@ const notify = (m: string) => (Platform.OS === 'web' ? window.alert(m) : Alert.a
 const STATUS_AR: Record<string, string> = { draft: 'مسودة', issued: 'صادر', revoked: 'ملغي', pending: 'قيد التوقيع', approved: 'معتمد' };
 
 /** 🔖 شارة الخطابات المرفوعة لهذه الفترة + زر «رفع كخطاب» */
-export const RaiseLetterBar: React.FC<{ params: any; disabled?: boolean; raised?: any[]; onDone?: () => void }> = ({ params, disabled, raised = [], onDone }) => {
+export const RaiseLetterBar: React.FC<{ params: any; disabled?: boolean; raised?: any[]; reportTeachers?: any[]; onDone?: () => void }> = ({ params, disabled, raised = [], reportTeachers = [], onDone }) => {
   const router = useRouter();
   const [status, setStatus] = useState<any>(null);
   const [open, setOpen] = useState(false);
@@ -33,15 +33,16 @@ export const RaiseLetterBar: React.FC<{ params: any; disabled?: boolean; raised?
           <Text style={st.badgeText}>{it.mode === 'amend' ? 'تعديلي ' : ''}رُفع بالخطاب {it.number} · {String(it.issued_at || it.created_at).slice(0, 10)} · {STATUS_AR[it.status] || it.status}</Text>
         </TouchableOpacity>
       ))}
-      <RaiseLetterModal visible={open} onClose={() => setOpen(false)} params={params} hasActive={!!status?.has_active} raised={raised} onDone={() => { load(); onDone?.(); }} />
+      <RaiseLetterModal visible={open} onClose={() => setOpen(false)} params={params} hasActive={!!status?.has_active} raised={raised} reportTeachers={reportTeachers} onDone={() => { load(); onDone?.(); }} />
     </View>
   );
 };
 
-const RaiseLetterModal: React.FC<{ visible: boolean; onClose: () => void; params: any; hasActive: boolean; raised: any[]; onDone: () => void }> = ({ visible, onClose, params, hasActive, raised, onDone }) => {
+const RaiseLetterModal: React.FC<{ visible: boolean; onClose: () => void; params: any; hasActive: boolean; raised: any[]; reportTeachers: any[]; onDone: () => void }> = ({ visible, onClose, params, hasActive, raised, reportTeachers, onDone }) => {
   const router = useRouter();
   const [dupMode, setDupMode] = useState<'exclude' | 'tag'>('exclude');
   const [keep, setKeep] = useState<Record<string, boolean>>({});  // أساتذة مكررون اختار المستخدم إبقاءهم رغم ذلك
+  const [excluded, setExcluded] = useState<Record<string, boolean>>({});  // 🆕 أساتذة استبعدهم المستخدم يدوياً من هذا الخطاب
   const [tpls, setTpls] = useState<any[]>([]);
   const [recs, setRecs] = useState<any[]>([]);
   const [tpl, setTpl] = useState('');
@@ -54,7 +55,7 @@ const RaiseLetterModal: React.FC<{ visible: boolean; onClose: () => void; params
 
   useEffect(() => {
     if (!visible) return;
-    setLoading(true); setResult(null);
+    setLoading(true); setResult(null); setExcluded({});
     Promise.all([api.get('/reports/teacher-workload/letter-templates'), api.get('/letters/recipients')])
       .then(([t, r]) => { setTpls(t.data.templates || []); setRecs(r.data || []); if (!tpl && t.data.templates?.[0]) setTpl(t.data.templates[0].key); })
       .catch((e) => notify(e?.response?.data?.detail || 'فشل التحميل'))
@@ -63,13 +64,17 @@ const RaiseLetterModal: React.FC<{ visible: boolean; onClose: () => void; params
 
   const chosenTpl = tpls.find((t) => t.key === tpl);
   const suggested = recs.filter((r) => chosenTpl && (r.title || '').includes((chosenTpl.recipient_title || '').split(' ').slice(0, 2).join(' ')));
+  const includedCount = reportTeachers.length - Object.values(excluded).filter(Boolean).length;
   const submit = async () => {
     const rec = recId ? recs.find((r) => r.id === recId) : null;
     const recipient = rec ? { id: rec.id, name: rec.name, title: rec.title, organization: rec.organization, suffix: rec.suffix } : { name: manual.name.trim(), title: manual.title.trim() || chosenTpl?.recipient_title || '', suffix: 'المحترم' };
     if (!recipient.name && !recipient.title) { notify('حدد الجهة المرسل إليها'); return; }
+    if (includedCount === 0 && reportTeachers.length > 0) { notify('لا يمكن رفع الخطاب بدون أي أستاذ — أبقِ على واحد على الأقل'); return; }
     setBusy(true);
     try {
-      const exclude_teacher_ids = dupMode === 'exclude' ? raised.filter((r) => !keep[r.teacher_id]).map((r) => r.teacher_id) : [];
+      const dupExcludeIds = dupMode === 'exclude' ? raised.filter((r) => !keep[r.teacher_id]).map((r) => r.teacher_id) : [];
+      const manualExcludeIds = Object.keys(excluded).filter((id) => excluded[id]);
+      const exclude_teacher_ids = Array.from(new Set([...dupExcludeIds, ...manualExcludeIds]));
       const r = await api.post('/reports/teacher-workload/raise-letter', { template_key: tpl, start_date: params.start_date, end_date: params.end_date, faculty_id: params.faculty_id, department_id: params.department_id, teach_department_id: params.teach_department_id, teacher_id: params.teacher_id, hide_empty: !!params.hide_empty, only_overtime: !!params.only_overtime, recipient, extra_note: note, mode: hasActive ? 'amend' : 'new', base_url: Platform.OS === 'web' ? window.location.origin : '', exclude_teacher_ids, tag_previous: dupMode === 'tag' || Object.values(keep).some(Boolean) });
       setResult(r.data); onDone();
     } catch (e: any) { notify(e?.response?.data?.detail || 'فشل إنشاء الخطاب'); } finally { setBusy(false); }
@@ -95,6 +100,28 @@ const RaiseLetterModal: React.FC<{ visible: boolean; onClose: () => void; params
           ) : (
             <ScrollView style={{ maxHeight: 520 }}>
               {hasActive && <Text style={st.warn}>⚠️ هذه الفترة مرفوعة مسبقاً — سيُنشأ خطاب <Text style={{ fontWeight: '800' }}>تعديلي/إلحاقي</Text></Text>}
+              {reportTeachers.length > 0 && (
+                <View style={st.dupBox} testID="raise-select-teachers-box">
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={st.dupTitle}>👥 من يشمله هذا الخطاب؟ ({includedCount}/{reportTeachers.length} محدَّد)</Text>
+                    <TouchableOpacity onPress={() => setExcluded(Object.keys(excluded).length ? {} : Object.fromEntries(reportTeachers.map((t) => [t.teacher_db_id, true])))} testID="raise-select-toggle-all">
+                      <Text style={{ fontSize: 11.5, color: DASH.blue, fontWeight: '700' }}>{Object.keys(excluded).length ? 'تحديد الكل' : 'إلغاء تحديد الكل'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled>
+                    {reportTeachers.map((t) => {
+                      const isIncluded = !excluded[t.teacher_db_id];
+                      return (
+                        <TouchableOpacity key={t.teacher_db_id} style={st.dupLine} onPress={() => setExcluded({ ...excluded, [t.teacher_db_id]: isIncluded })} testID={`raise-select-teacher-${t.teacher_db_id}`}>
+                          <Ionicons name={isIncluded ? 'checkbox' : 'square-outline'} size={18} color={isIncluded ? DASH.blue : '#94a3b8'} />
+                          <Text style={st.dupText}>{t.teacher_name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                  <Text style={st.hint}>الافتراضي: الجميع مشمولون — أزل علامة الصح عمّن لا تريد ظهوره في هذا الخطاب فقط (لا يؤثر على بياناته في التقرير نفسه).</Text>
+                </View>
+              )}
               {raised.length > 0 && (
                 <View style={st.dupBox} testID="raise-dup-box">
                   <Text style={st.dupTitle}>⚠️ {raised.length} أستاذاً سبق رفعهم في خطاب غير ملغى عن فترة متداخلة:</Text>

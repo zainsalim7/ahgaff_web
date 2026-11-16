@@ -418,7 +418,7 @@ export default function TeacherWorkloadReport() {
             )}
 
             {view === 'sheet' ? (
-              <View style={dashStyles.card} testID="tw-sheet-card">{!isTeacher && <RaiseLetterBar params={params} disabled={rows.length === 0} raised={raised} onDone={() => loadRaised(params)} />}<OvertimeSheet teachers={rows} period={period} threshold={75} raisedMap={raisedMap} muteOvertime={!showFull} /></View>
+              <View style={dashStyles.card} testID="tw-sheet-card">{!isTeacher && <RaiseLetterBar params={params} disabled={rows.length === 0} raised={raised} reportTeachers={rows} onDone={() => loadRaised(params)} />}<OvertimeSheet teachers={rows} period={period} threshold={75} raisedMap={raisedMap} muteOvertime={!showFull} /></View>
             ) : (
             <View style={dashStyles.card} testID="tw-table">
               <View style={styles.tableHead}>
