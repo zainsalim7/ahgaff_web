@@ -496,9 +496,11 @@ async def build_custom_workload_report(db, start: datetime, end: datetime, entri
     return {"teachers": teachers_out, "period": period or {}, "summary": report_totals(teachers_out)}
 
 
-async def select_teachers(db, current_user: dict, teacher_id: Optional[str], faculty_id: Optional[str], department_id: Optional[str], teach_department_id: Optional[str] = None) -> List[dict]:
+async def select_teachers(db, current_user: dict, teacher_id: Optional[str], faculty_id: Optional[str], department_id: Optional[str], teach_department_id: Optional[str] = None, skip_scope: bool = False) -> List[dict]:
     """اختيار المدرسين حسب الدور والفلاتر (المدرس: نفسه فقط)
-    teach_department_id: 🆕 القسم الذي يُدرّس فيه المدرس فعلياً (حسب قسم مقرراته)، بصرف النظر عن القسم الذي ينتمي إليه تنظيمياً"""
+    teach_department_id: 🆕 القسم الذي يُدرّس فيه المدرس فعلياً (حسب قسم مقرراته)، بصرف النظر عن القسم الذي ينتمي إليه تنظيمياً
+    skip_scope: 🔒 لإعادة بناء جدول خطاب موجود مسبقاً بفلاتره الأصلية المخزّنة — لا يُعاد فحص نطاق من يُعيد البناء الآن
+    (قد يكون محرراً نطاقه أضيق من نطاق مُصدر الخطاب الأصلي)، فقط من يُنشئ/يرفع خطاباً جديداً يُفحص نطاقه"""
     if current_user["role"] == UserRole.TEACHER:
         rec = await db.teachers.find_one({"user_id": current_user["id"]})
         if not rec:
@@ -508,11 +510,12 @@ async def select_teachers(db, current_user: dict, teacher_id: Optional[str], fac
         from services.advanced_access_service import real_enforce_check
         target_type = "faculty" if faculty_id else ("department" if department_id else None)
         target_ref = faculty_id or department_id
-        if target_type is None:
+        if target_type is None and not skip_scope:
             raise HTTPException(status_code=400, detail="حدد القسم أو الكلية ضمن نطاق صلاحيتك لعرض هذا التقرير")
-        decision = await real_enforce_check(db, current_user, "reports_ser_get_teacher_workload_report", target_type, target_ref)
-        if not decision:
-            raise HTTPException(status_code=403, detail="غير مصرح")
+        if not skip_scope:
+            decision = await real_enforce_check(db, current_user, "reports_ser_get_teacher_workload_report", target_type, target_ref)
+            if not decision:
+                raise HTTPException(status_code=403, detail="غير مصرح")
     elif not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_TEACHER_WORKLOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     q: dict = {"is_active": {"$ne": False}}
@@ -530,10 +533,13 @@ async def select_teachers(db, current_user: dict, teacher_id: Optional[str], fac
     elif faculty_id:
         dep_ids = [str(d["_id"]) for d in await db.departments.find({"faculty_id": faculty_id}, {"_id": 1}).to_list(500)]
         q["$or"] = [{"faculty_id": faculty_id}, {"department_id": {"$in": dep_ids}}, {"department_ids": {"$in": dep_ids}}]
-    if not current_user.get("advanced_access_real_enforcement"):
+    if not skip_scope and not current_user.get("advanced_access_real_enforcement"):
         from .deps import get_scope_filter
         own_scope = await get_scope_filter(current_user, "teachers")
         if own_scope:
+            courses_scope = await get_scope_filter(current_user, "courses")
+            taught_ids = [t for t in await db.courses.distinct("teacher_id", courses_scope) if t and ObjectId.is_valid(t)] if courses_scope else []
+            own_scope = {"$or": [own_scope, {"_id": {"$in": [ObjectId(t) for t in taught_ids]}}]} if taught_ids else own_scope
             q = {"$and": [q, own_scope]}
     return await db.teachers.find(q).sort("full_name", 1).to_list(1000)
 

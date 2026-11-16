@@ -1380,6 +1380,22 @@ async def _report_scope_guard(current_user: dict, scope_type: str) -> dict:
         return {}
     return await get_user_scope_filter(current_user, scope_type)
 
+async def _teacher_identity_scope_guard(current_user: dict) -> dict:
+    """🔒 نطاق موحّد لتقارير «هوية المعلم» (ملخص أدائه)، على غرار منطق احتساب العبء الأكاديمي الذي يعترف
+    بعلاقتي انتماء المعلم معاً: قسمه الرسمي (تنظيمياً) + الأقسام التي يُدرّس فيها فعلياً (teach_department_id
+    في compute_workload/select_teachers) — فمن له نطاق على كلية يرى ملخص أي معلم زائر يُدرّس عندها أيضاً،
+    تماماً كما يراه في تقارير حضور/تأخر الأساتذة المبنية على نفس المنطق."""
+    own = await _report_scope_guard(current_user, "teachers")
+    if not own:
+        return {}
+    courses_scope = await _report_scope_guard(current_user, "courses")
+    if not courses_scope:
+        return own
+    taught_ids = [t for t in await db.courses.distinct("teacher_id", courses_scope) if t and ObjectId.is_valid(t)]
+    if not taught_ids:
+        return own
+    return {"$or": [own, {"_id": {"$in": [ObjectId(t) for t in taught_ids]}}]}
+
 async def get_faculty_department_ids(faculty_id: str) -> list:
     """جلب معرفات الأقسام التابعة لكلية معينة"""
     departments = await db.departments.find(
@@ -13473,7 +13489,7 @@ async def get_teacher_summary_report(
         raise HTTPException(status_code=404, detail="المعلم غير موجود")
     
     if current_user["role"] != UserRole.TEACHER:
-        own_scope = await _report_scope_guard(current_user, "teachers")
+        own_scope = await _teacher_identity_scope_guard(current_user)
         if own_scope and not await db.teachers.find_one({"$and": [{"_id": ObjectId(teacher_id)}, own_scope]}):
             raise HTTPException(status_code=403, detail="هذا المعلم خارج نطاق صلاحيتك")
     

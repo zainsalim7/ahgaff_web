@@ -194,7 +194,7 @@ async def rebuild_overtime_table(db, current_user: dict, lt: dict):
     if lr.get("type") != "overtime":
         return None
     start, end = parse_period(lr["start_date"], lr["end_date"])
-    report = await compute_workload(db, await select_teachers(db, current_user, None, lr.get("faculty_id"), lr.get("department_id"), lr.get("teach_department_id")), start, end, True, bool(lr.get("only_overtime")), set(lr.get("excluded") or []), teach_department_id=lr.get("teach_department_id"))
+    report = await compute_workload(db, await select_teachers(db, current_user, None, lr.get("faculty_id"), lr.get("department_id"), lr.get("teach_department_id"), skip_scope=True), start, end, True, bool(lr.get("only_overtime")), set(lr.get("excluded") or []), teach_department_id=lr.get("teach_department_id"))
     prev = {te["teacher_id"]: te.get("prev_letter") for te in lr.get("teachers_list", []) if te.get("prev_letter")}
     for t in report["teachers"]:
         if t["teacher_db_id"] in prev:
