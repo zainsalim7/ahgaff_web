@@ -97,7 +97,7 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
         <button type="button" data-testid={`${testID}-bold`} style={tb(editor.isActive('bold'))} onClick={run(() => editor.chain().focus().toggleBold().run())} title="عريض"><b>B</b></button>
         <button type="button" data-testid={`${testID}-underline`} style={tb(editor.isActive('underline'))} onClick={run(() => editor.chain().focus().toggleUnderline().run())} title="تسطير"><u>U</u></button>
         {COLORS.map((c) => (
-          <button key={c} type="button" style={{ ...tb(editor.isActive('textStyle', { color: c })), backgroundColor: c, minWidth: 18, width: 18, height: 22, padding: 0, border: editor.isActive('textStyle', { color: c }) ? '2px solid #00796b' : '1px solid #cbd5e1' }} onClick={run(() => (c === '#000000' ? editor.chain().focus().unsetColor().run() : editor.chain().focus().setColor(c).run()))} title="لون" />
+          <button key={c} type="button" data-testid={`${testID}-color-${c.slice(1)}`} style={{ ...tb(editor.isActive('textStyle', { color: c })), backgroundColor: c, minWidth: 18, width: 18, height: 22, padding: 0, border: editor.isActive('textStyle', { color: c }) ? '2px solid #00796b' : '1px solid #cbd5e1' }} onClick={run(() => (c === '#000000' ? editor.chain().focus().unsetColor().run() : editor.chain().focus().setColor(c).run()))} title="لون" />
         ))}
         <span style={{ width: 1, height: 20, backgroundColor: '#cbd5e1', margin: '0 4px' }} />
         <button type="button" style={tb(editor.isActive({ textAlign: 'right' }))} onClick={run(() => editor.chain().focus().setTextAlign('right').run())} title="يمين">⇤</button>

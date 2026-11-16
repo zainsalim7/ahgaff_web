@@ -40,6 +40,13 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
     * {
       font-family: 'Cairo', 'Ionicons', 'Material Design Icons', 'MaterialCommunityIcons', 'FontAwesome', 'Segoe UI', Tahoma, Arial, sans-serif !important;
     }
+    /* 🖋️ استثناء متن الخطابات/الإفادات المنسّق يدوياً (محرر StatementBodyEditor ومعاينته) من فرض Cairo العام أعلاه —
+       بلا هذا، يبدو أي خط آخر يختاره المستخدم (أميري/كوفي/تجوّل/المرعي) وكأنه عاد دائماً لـ Cairo */
+    [style*="font-family: Amiri"], [style*="font-family: 'Amiri'"] { font-family: 'Amiri', serif !important; }
+    [style*="font-family: Noto Kufi Arabic"], [style*="font-family: 'Noto Kufi Arabic'"] { font-family: 'Noto Kufi Arabic', sans-serif !important; }
+    [style*="font-family: Cairo"], [style*="font-family: 'Cairo'"] { font-family: 'Cairo', sans-serif !important; }
+    [style*="font-family: Tajawal"], [style*="font-family: 'Tajawal'"] { font-family: 'Tajawal', sans-serif !important; }
+    [style*="font-family: Almarai"], [style*="font-family: 'Almarai'"] { font-family: 'Almarai', sans-serif !important; }
     [role="button"][aria-label],
     div[aria-label] {
       position: relative;

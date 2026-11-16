@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from bson import ObjectId
 
 from .deps import get_db, get_current_user, log_activity, export_stamp, has_permission, has_any_permission
-from .hr_common import scope_employee_ids, user_id_of, hr_scope_isolation_faculty_ids, has_own_academic_scope
+from .hr_common import scope_employee_ids, user_id_of, hr_scope_isolation_faculty_ids
 from .letterheads import resolve_letterhead, resolve_series, next_serial, format_number
 from .statements import _apply_vars, _var_ctx, _safe_dept, _academic_year_display, get_verify_base, student_gender, GENDER_VARS
 from services.letter_pdf import build_letter_pdf
@@ -71,7 +71,7 @@ async def _isolation_scope(db, user: dict) -> list | None:
     hr_scope = await hr_scope_isolation_faculty_ids(db, user)
     if hr_scope is not None:
         return hr_scope
-    if not has_own_academic_scope(user):
+    if user.get("role") not in ("dean", "department_head"):
         return None
     fac_ids = set(_user_faculties(user))
     dept_ids = {str(d) for d in (user.get("department_ids") or []) if d}
@@ -675,6 +675,9 @@ async def finalize_draft(lid: str, base_url: Optional[str] = None, current_user:
     upd = {**(await _finalize_fields(db, series, base_url, ex.get("valid_days"), current_user)), **_lh_fields(settings, series), "draft_number": ex.get("number_display"),
            "sections": {k: _apply_vars(v, sctx) for k, v in (inputs.get("sections") or {}).items() if k in SECTION_KEYS and v is not None} or ex.get("sections") or {},
            "body": _apply_vars((inputs.get("body") or ex.get("body") or "").strip(), ctx), "table": (ex.get("table") if ex.get("custom_table") and not people else table), "people": people}
+    if ex.get("created_by_faculty_ids"):
+        # 🔒 حافظ على نطاق مؤلف المسودة الأصلي؛ لا تستبدله بنطاق من يعتمدها (قد يكون أدمن غير مقيَّد)
+        upd["created_by_faculty_ids"] = ex["created_by_faculty_ids"]
     if ex.get("signatory_position_id"):
         upd["signatory_name"], upd["signatory_title"] = await _resolve_sig(db, ex["signatory_position_id"], ex.get("signatory_name"), ex.get("signatory_title"), settings)
     await db.letters.update_one({"_id": ex["_id"]}, {"$set": upd})
