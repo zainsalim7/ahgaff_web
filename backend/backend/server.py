@@ -12704,8 +12704,8 @@ async def get_department_report(
     elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "view_reports"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     elif current_user["role"] != UserRole.ADMIN:
-        own_scope = await get_user_scope_filter(current_user, "courses")
-        if own_scope and not await db.courses.find_one({"$and": [{"department_id": dept_id}, own_scope]}):
+        own_scope = await get_user_scope_filter(current_user, "departments")
+        if own_scope and not await db.departments.find_one({"$and": [{"_id": ObjectId(dept_id)}, own_scope]}):
             raise HTTPException(status_code=403, detail="هذا القسم خارج نطاق صلاحيتك")
     
     # Get department

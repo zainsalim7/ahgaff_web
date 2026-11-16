@@ -1,0 +1,36 @@
+{
+  "summary": "Tested the report scope isolation in server.py (_report_scope_guard and the 9 changed report endpoints) and select_teachers in teacher_overtime.py. Backend: 28/28 pytest cases pass, all read-only GETs. Saeed (department_head, كلية البنات) now gets 403 on the Sharia student, teacher-summary (also its PDF export), course detailed (also its PDF export) and department report. He gets empty lists for teacher-workload?faculty_id=Sharia, teacher-workload/raised, teacher-delays?department_id=Sharia and teacher-attendance?department_id=Sharia. Workload with no filter returns 3 teachers for Saeed and 15 for admin. With department_id=Sharia, the list reports (absent-students, warnings, daily, attendance-overview, lesson-completion) return no Sharia data for Saeed. With no filter, Saeed still sees his own scope (attendance-overview 4 courses, lesson-completion 4, teacher-attendance 5 teachers, own department report 200). Admin is unrestricted everywhere (attendance-overview 34 courses, teacher-attendance 7 teachers). Salim (dean of Sharia) still gets 200 on the Sharia student, teacher and course. Teacher regressions pass: 222222 summary and workload 200 with 1 teacher; teacher180156 absent-students 200. A DB integrity snapshot (md5 of role/permission/scope/password/real_enforcement fields for users, roles and advanced_access_testers) was identical before and after. Frontend as admin: report-student, report-teacher-workload, availability-report, report-teacher-summary, report-course, report-teacher-attendance, report-attendance-overview and report-warnings all render with no 4xx/5xx API calls. The overtime raise-letter modal still shows the 'من يشمله هذا الخطاب؟' box with 4 teacher checkboxes and the toggle-all; toggling works. The letter was NOT actually raised.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/reports/teacher-summary vs /api/reports/teacher-attendance", "issue": "The two reports scope teachers differently. teacher-summary uses the 'teachers' scope (the teacher's own department_id), while teacher-attendance and teacher-delays use course scope. Saeed sees 5 teachers in teacher-attendance but only 3 in workload, so a teacher who teaches in his department but belongs to another department appears in attendance and then gets 403 on teacher-summary. Not a leak; just inconsistent UX."},
+      {"endpoint": "GET /api/reports/department/{dept_id}", "issue": "The scope check requires at least one course in the department (db.courses.find_one with dept_id plus own_scope). A dean or department head opening a department in their own scope that has no courses gets 403 instead of an empty report. Checking the 'departments' scope against the departments collection would be more accurate."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/availability-report", "issues": ["The top header bar shows the raw route name 'availability-report' instead of an Arabic title (existed before this change)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_reports_scope_isolation_iter190.py", "/app/test_reports/pytest/pytest_iter190.xml"],
+  "action_items": [
+    "Optional: in routes/overtime_letter.py, rebuild_overtime_table (called from letters.py lines 644 and 744 when a draft is edited) now goes through select_teachers with the EDITOR's scope. If a scoped user (e.g. a dean) edits an overtime draft that a broader-scope user (admin) created for a wider scope, the regenerated table is silently narrowed to the editor's scope. Consider rebuilding with the creator's scope, or keeping the original teachers_list.",
+    "Optional: make the department report scope check use the departments scope instead of requiring an existing course.",
+    "Optional: align teacher-summary scope with course-based scope, or accept the difference."
+  ],
+  "critical_code_review_comments": [
+    "_report_scope_guard is a clean wrapper and correctly skips users with advanced_access_real_enforcement (they have their own guard).",
+    "The PDF and Excel export endpoints (teacher-summary/export-pdf, course/{id}/export-pdf, teacher-delays/export, teacher-attendance export, warnings export) call the guarded functions internally, so they inherit the isolation. The two PDF exports were verified with 403 for Saeed.",
+    "All callers of select_teachers were checked: server.py teacher-workload, teacher_overtime.py exports (797, 811), and overtime_letter.py raised (146), rebuild (197) and raise (227). They are consistent apart from the rebuild_overtime_table concern above.",
+    "Existing issue: in the get_course_detailed_report TEACHER branch, the teacher is resolved only by teachers.user_id, not by the unified resolve_teacher_ids.",
+    "server.py is more than 20K lines and should be split."
+  ],
+  "updated_files": ["/app/backend/tests/test_reports_scope_isolation_iter190.py"],
+  "success_rate": {"backend": "100% (28/28)", "frontend": "100% (8 pages + raise-letter modal)"},
+  "seed_data_creation": "None. Only GET requests were made; no letters were raised and no users, roles or permissions were changed (verified by DB hash).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest backend/tests/test_reports_scope_isolation_iter190.py -p no:xdist. Sharia IDs: student 698e50c797fef774e66e93aa, teacher 698ad3da31ab437a06176e2a, course 698f671431cfba92c49a550d, dept 698e500997fef774e66e93a8, faculty 698e4f9297fef774e66e93a4. Saeed's department is 698e501d97fef774e66e93a9. The workload count assertions (Saeed 3, admin 15) depend on the data. Raise-letter modal testids: tw-view-sheet, then 'آخر 4 أشهر', then 'تنفيذ التقرير', then raise-letter-btn, then raise-select-teacher-*."
+}
