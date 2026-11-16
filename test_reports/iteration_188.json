@@ -1,0 +1,44 @@
+{
+  "summary": "Frontend E2E testing of the new teacher admin actions on /teacher-courses (admin login). Non-destructive flows were tested on حسن صالح (698e533beb4c6eb021c50302). Destructive flows were tested on a throwaway teacher TEST_T29387, which was created through the API and then deleted through the UI. PASSED: page loads from /manage-teachers; grid/list toggle; header Excel/PDF downloads (disabled when there are 0 courses); all 3 report previews (load/hours/weekly) open with no crash and no JS errors (the totalHours fix works: it shows 8.5), and all 6 report exports download without leaving the page; Edit modal pre-fills, saves, closes and the page refetches (persistence checked by GET); Reset password shows confirm and then an alert with the new password = teacher_id; Delete modal shows the backup note, Cancel works, Confirm downloads the backup JSON and redirects to /manage-teachers (teacher returns 404 and its user login returns 401); the assign-course modal opens with search results and the unassign confirm opens/cancels (regression). FAILED: the activate/deactivate toggle never flips state (CRITICAL logic bug), and a decimal weekly_hours value in Edit gives a backend 500.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/teachers/{id}", "issue": "Sending weekly_hours=12.5 returns 500 Internal Server Error. TeacherUpdate.weekly_hours is Optional[int] and the pydantic ValidationError is not handled. The Edit modal's hours input allows decimals (and teaching loads like 8.5 are common), so the user gets 'تعذر تحديث بيانات المعلم'. Fix: make it Optional[float] in models/teachers.py (TeacherBase/TeacherUpdate), or return 422/400."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Teacher actions > toggle active", "issue": "handleToggleActive and the menu label use teacherFull.is_active, but the backend never changes teachers.is_active (it defaults to True). Account state is driven by teachers.user_id: /deactivate deletes the user and unsets user_id, and /activate creates the user and sets user_id. So the label always shows 'إلغاء تفعيل الحساب'. Reproduced: deactivate succeeds; after the refetch the label still says 'إلغاء تفعيل'; clicking again gives 400 'المعلم ليس لديه حساب مفعل'; Reset Password then also fails with the same 400. An inactive account can never be reactivated from this page, and teachers who already show 'غير مفعل' in manage-teachers get the wrong option. Fix: use `const hasAccount = !!teacherFull?.user_id` (activating = !hasAccount) at lines 416 and 1054-1055. Optionally hide or disable reset-password when !user_id.", "selector": "[data-testid='teacher-action-toggle-active']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Report 'تقرير الساعات'", "issue": "Data mismatch, informational only: the preview lists 5 courses (it includes الفقه الإسلامي, which is not in the page's 4-course list) and required hours = 0 while the page shows 8.5 h/week. This is because compute_workload uses teacher.weekly_hours=0 and a different course set. It may confuse users but is not a crash.", "affected_selectors": ["[data-testid='report-menu-hours']"]}
+    ],
+    "design_issues": [
+      {"screen": "Courses grid view", "issues": ["courseRowGrid width 32% + marginLeft 1.33% + gap 10 means only 2 cards fit per row, leaving an empty third column on the right side (RTL). coursesListGrid uses flexDirection 'row', so cards fill from the left in an RTL page. Suggest row-reverse and width ~31.5% or calc with the gap, or use 48% for 2 columns."]},
+      {"screen": "Report preview modal & Edit modal", "issues": ["Rows and inputs have no horizontal padding inside the card: values ('4', '8.5', '3 س') and input text sit flush against the modal's left/right edges. The export/save buttons sit flush with the card's bottom and side edges. Add padding to the ScrollView contentContainer and the footer, and add a visible border on the edit TextInputs (they show no input boundary)."]},
+      {"screen": "Report exports", "issues": ["Hours and weekly export filenames are hardcoded (تقرير_الساعات_X.xlsx) instead of using filenameFromResponse like the load export, so naming is inconsistent (no timestamp)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/probe_teacher_actions.py", "/app/backend/tests/create_test_teacher.py", "/app/backend/tests/check_test_teacher.py"],
+  "action_items": [
+    "HIGH: Fix the activate/deactivate toggle in teacher-courses.tsx: base it on !!teacherFull.user_id, not teacherFull.is_active (lines 416, 1054-1055).",
+    "Make TeacherUpdate/TeacherBase weekly_hours a float (or validate and return 400) so decimal hours from the Edit modal do not cause a 500.",
+    "Fix grid layout so it fills 3 columns RTL (row-reverse plus correct width math).",
+    "Add inner padding to the report preview modal rows/footer and to the edit modal inputs, and add borders to the inputs.",
+    "Optional: disable/hide reset-password when the teacher has no user account; use filenameFromResponse for hours/weekly exports."
+  ],
+  "critical_code_review_comments": [
+    "teacher-courses.tsx is 1476 lines, well over the 700-line limit. Extract TeacherActionsMenu, EditTeacherModal, DeleteTeacherModal and ReportsPreviewModal into components.",
+    "The toggle-active state source is mismatched with the backend semantics (see ui_bugs).",
+    "downloadBlob (lines 509-514) duplicates the inline download logic in handleExportPdf/handleExportExcel/handleConfirmDelete. DRY it.",
+    "handleSaveEdit sends email:'' / phone:'' when blank. This is fine, but there is no email format validation.",
+    "Console warning 'Unexpected text node: . A text node cannot be a child of a <View>' appeared after navigating via /manage-teachers. It was not seen on direct loads of teacher-courses, so it likely comes from manage-teachers."
+  ],
+  "updated_files": ["/app/backend/tests/probe_teacher_actions.py", "/app/backend/tests/create_test_teacher.py", "/app/backend/tests/check_test_teacher.py"],
+  "success_rate": {"backend": "not requested (1 minor 500 found incidentally)", "frontend": "~90% (11/12 flows pass; toggle-active fails)"},
+  "seed_data_creation": "Created teacher TEST_T29387 (id 6afa7603405dd1c619d7d075) and its user account; both were deleted through the UI delete flow. Hassan's data is unchanged: no deactivation, no password reset, no assign/unassign was saved.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login is done by clicking the 'تسجيل الدخول' text (Enter does not submit). For destructive tests, create a TEST teacher with backend/tests/create_test_teacher.py (it also activates the account). Account state = teachers.user_id presence, not is_active. After the fix, retest: deactivate, check the label flips to 'تفعيل الحساب', activate, check the label flips back, and check the reset password succeeds.",
+  "rca of the issue": "Toggle: the frontend reads teachers.is_active (never written by the activate/deactivate endpoints, so always True), while the backend toggles account existence through teachers.user_id. Repro: deactivate a teacher, reopen the menu (it still says إلغاء تفعيل), click it, and get 400. Mitigation: derive the state from user_id. 500 on edit: pydantic int field gets the float 12.5, and the ValidationError raised inside the handler is not caught."
+}

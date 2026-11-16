@@ -413,7 +413,7 @@ export default function TeacherCoursesScreen() {
 
   const handleToggleActive = async () => {
     if (!teacherId || !teacherFull) return;
-    const activating = teacherFull.is_active === false;
+    const activating = !teacherFull.user_id;
     const ok = await confirmAction(activating ? 'هل تريد تفعيل حساب هذا المعلم؟' : 'هل تريد إلغاء تفعيل حساب هذا المعلم؟ لن يتمكن من تسجيل الدخول بعد ذلك.');
     if (!ok) return;
     setShowActionsMenu(false);
@@ -524,10 +524,10 @@ export default function TeacherCoursesScreen() {
         const res = fmt === 'excel'
           ? await reportsAPI.exportTeacherWorkloadExcel({ teacher_id: teacherId! })
           : await reportsAPI.exportTeacherWorkloadPdf({ teacher_id: teacherId! });
-        if (Platform.OS === 'web') downloadBlob(new Blob([res.data]), `تقرير_الساعات_${teacherDisplay}.${fmt === 'excel' ? 'xlsx' : 'pdf'}`);
+        if (Platform.OS === 'web') downloadBlob(new Blob([res.data]), filenameFromResponse(res, exportName(['تقرير الساعات', teacherDisplay], fmt === 'excel' ? 'xlsx' : 'pdf')));
       } else {
         const res = await api.get(`/weekly-schedule/export-visual/${fmt}`, { params: { teacher_id: teacherId }, responseType: 'blob' });
-        if (Platform.OS === 'web') downloadBlob(new Blob([res.data]), `الجدول_الأسبوعي_${teacherDisplay}.${fmt === 'excel' ? 'xlsx' : 'pdf'}`);
+        if (Platform.OS === 'web') downloadBlob(new Blob([res.data]), filenameFromResponse(res, exportName(['الجدول الأسبوعي', teacherDisplay], fmt === 'excel' ? 'xlsx' : 'pdf')));
       }
     } catch (error: any) {
       showMessage('خطأ', error?.response?.data?.detail || 'تعذر التصدير');
@@ -1051,13 +1051,15 @@ export default function TeacherCoursesScreen() {
               <Text style={styles.menuRowText}>تعديل البيانات</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.menuRow} onPress={handleToggleActive} disabled={actingOnTeacher} testID="teacher-action-toggle-active">
-              <Ionicons name={teacherFull?.is_active === false ? 'checkmark-circle-outline' : 'close-circle-outline'} size={18} color={teacherFull?.is_active === false ? '#2e7d32' : '#e65100'} />
-              <Text style={styles.menuRowText}>{teacherFull?.is_active === false ? 'تفعيل الحساب' : 'إلغاء تفعيل الحساب'}</Text>
+              <Ionicons name={!teacherFull?.user_id ? 'checkmark-circle-outline' : 'close-circle-outline'} size={18} color={!teacherFull?.user_id ? '#2e7d32' : '#e65100'} />
+              <Text style={styles.menuRowText}>{!teacherFull?.user_id ? 'تفعيل الحساب' : 'إلغاء تفعيل الحساب'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.menuRow} onPress={handleResetPassword} disabled={actingOnTeacher} testID="teacher-action-reset-password">
-              <Ionicons name="key-outline" size={18} color="#8e24aa" />
-              <Text style={styles.menuRowText}>إعادة تعيين كلمة المرور</Text>
-            </TouchableOpacity>
+            {!!teacherFull?.user_id && (
+              <TouchableOpacity style={styles.menuRow} onPress={handleResetPassword} disabled={actingOnTeacher} testID="teacher-action-reset-password">
+                <Ionicons name="key-outline" size={18} color="#8e24aa" />
+                <Text style={styles.menuRowText}>إعادة تعيين كلمة المرور</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={[styles.menuRow, styles.menuRowDanger]} onPress={openDeleteModal} testID="teacher-action-delete">
               <Ionicons name="trash-outline" size={18} color="#c62828" />
               <Text style={[styles.menuRowText, { color: '#c62828' }]}>حذف المعلم</Text>
@@ -1077,19 +1079,19 @@ export default function TeacherCoursesScreen() {
               <Text style={styles.assignModalTitle}>تعديل بيانات المعلم</Text>
               <TouchableOpacity onPress={() => setShowEditModal(false)}><Ionicons name="close" size={22} color="#64748b" /></TouchableOpacity>
             </View>
-            <ScrollView style={{ maxHeight: 420 }}>
+            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>
               <Text style={styles.fieldLabel}>الاسم الكامل</Text>
-              <TextInput style={styles.modalSearchInput} value={editForm.full_name} onChangeText={(t) => setEditForm((f: any) => ({ ...f, full_name: t }))} testID="edit-teacher-fullname-input" />
+              <TextInput style={styles.editInput} value={editForm.full_name} onChangeText={(t) => setEditForm((f: any) => ({ ...f, full_name: t }))} testID="edit-teacher-fullname-input" />
               <Text style={styles.fieldLabel}>البريد الإلكتروني</Text>
-              <TextInput style={styles.modalSearchInput} value={editForm.email} onChangeText={(t) => setEditForm((f: any) => ({ ...f, email: t }))} keyboardType="email-address" testID="edit-teacher-email-input" />
+              <TextInput style={styles.editInput} value={editForm.email} onChangeText={(t) => setEditForm((f: any) => ({ ...f, email: t }))} keyboardType="email-address" testID="edit-teacher-email-input" />
               <Text style={styles.fieldLabel}>رقم الهاتف</Text>
-              <TextInput style={styles.modalSearchInput} value={editForm.phone} onChangeText={(t) => setEditForm((f: any) => ({ ...f, phone: t }))} keyboardType="phone-pad" testID="edit-teacher-phone-input" />
+              <TextInput style={styles.editInput} value={editForm.phone} onChangeText={(t) => setEditForm((f: any) => ({ ...f, phone: t }))} keyboardType="phone-pad" testID="edit-teacher-phone-input" />
               <Text style={styles.fieldLabel}>التخصص</Text>
-              <TextInput style={styles.modalSearchInput} value={editForm.specialization} onChangeText={(t) => setEditForm((f: any) => ({ ...f, specialization: t }))} testID="edit-teacher-specialization-input" />
+              <TextInput style={styles.editInput} value={editForm.specialization} onChangeText={(t) => setEditForm((f: any) => ({ ...f, specialization: t }))} testID="edit-teacher-specialization-input" />
               <Text style={styles.fieldLabel}>الدرجة العلمية</Text>
-              <TextInput style={styles.modalSearchInput} value={editForm.academic_title} onChangeText={(t) => setEditForm((f: any) => ({ ...f, academic_title: t }))} testID="edit-teacher-title-input" />
+              <TextInput style={styles.editInput} value={editForm.academic_title} onChangeText={(t) => setEditForm((f: any) => ({ ...f, academic_title: t }))} testID="edit-teacher-title-input" />
               <Text style={styles.fieldLabel}>النصاب الأسبوعي (ساعة)</Text>
-              <TextInput style={styles.modalSearchInput} value={editForm.weekly_hours} onChangeText={(t) => setEditForm((f: any) => ({ ...f, weekly_hours: t }))} keyboardType="numeric" testID="edit-teacher-hours-input" />
+              <TextInput style={styles.editInput} value={editForm.weekly_hours} onChangeText={(t) => setEditForm((f: any) => ({ ...f, weekly_hours: t }))} keyboardType="numeric" testID="edit-teacher-hours-input" />
               <Text style={styles.fieldLabel}>الأقسام</Text>
               <View style={styles.deptChipsWrap}>
                 {departments.map((d: any) => {
@@ -1102,7 +1104,7 @@ export default function TeacherCoursesScreen() {
                 })}
               </View>
             </ScrollView>
-            <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { justifyContent: 'center', marginTop: 14 }, savingEdit && { opacity: 0.6 }]} onPress={handleSaveEdit} disabled={savingEdit} testID="save-teacher-edit-btn">
+            <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { justifyContent: 'center', margin: 16, marginTop: 14 }, savingEdit && { opacity: 0.6 }]} onPress={handleSaveEdit} disabled={savingEdit} testID="save-teacher-edit-btn">
               {savingEdit ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.btnPrimaryText}>حفظ التعديلات</Text>}
             </TouchableOpacity>
           </View>
@@ -1186,7 +1188,7 @@ export default function TeacherCoursesScreen() {
             {loadingReport ? (
               <ActivityIndicator color={styles.btnPrimary.backgroundColor as any} style={{ marginVertical: 30 }} />
             ) : (
-              <ScrollView style={{ maxHeight: 400 }}>
+              <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 6 }}>
                 {activeReportModal === 'load' && (
                   <View>
                     <View style={styles.reportStatRow}><Text style={styles.reportStatLabel}>عدد المقررات</Text><Text style={styles.reportStatValue}>{data?.courses?.length || 0}</Text></View>
@@ -1240,7 +1242,7 @@ export default function TeacherCoursesScreen() {
               </ScrollView>
             )}
 
-            <View style={{ flexDirection: 'row-reverse', gap: 10, marginTop: 14 }}>
+            <View style={{ flexDirection: 'row-reverse', gap: 10, margin: 16, marginTop: 14 }}>
               <TouchableOpacity
                 style={[styles.headerBtn, styles.btnGhost, { flex: 1, justifyContent: 'center' }, reportExporting && { opacity: 0.6 }]}
                 onPress={() => handleReportExport(activeReportModal as any, 'excel')}
@@ -1342,7 +1344,7 @@ const styles = StyleSheet.create({
   viewToggleBtnActive: { backgroundColor: '#2962ff' },
 
   coursesList: { padding: 14, gap: 10 },
-  coursesListGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  coursesListGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap' },
   courseRow: {
     backgroundColor: '#fafbfd',
     borderRadius: 12,
@@ -1350,7 +1352,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eef1f6',
   },
-  courseRowGrid: { width: '32%', minWidth: 280, marginLeft: '1.33%' },
+  courseRowGrid: { width: '32%', minWidth: 280 },
   courseMain: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
   courseIconBox: {
     width: 44, height: 44, borderRadius: 10,
@@ -1399,6 +1401,11 @@ const styles = StyleSheet.create({
 
   modalSearchBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#fafbfd', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e3e7ee', height: 42, marginHorizontal: 16, marginTop: 12 },
   modalSearchInput: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right', outlineStyle: 'none' as any },
+  editInput: {
+    fontSize: 13, color: '#1a2540', textAlign: 'right', outlineStyle: 'none' as any,
+    backgroundColor: '#fafbfd', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 8,
+    height: 42, paddingHorizontal: 12,
+  },
 
   filterToggle: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10 },
   filterToggleText: { fontSize: 12, color: '#5b6678' },
