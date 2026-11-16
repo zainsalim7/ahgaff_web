@@ -115,9 +115,10 @@ async def _ensure_builtin_templates(db):
 
 
 def _can_issue(user: dict, faculty_id: str) -> bool:
-    if user.get("role") == "admin" or has_permission(user, "issue_statements"):
+    """🔒 لا صلاحيات افتراضية بالدور — إصدار الإفادات يتطلّب صراحةً issue_statements ضمن نطاق كلية الطالب"""
+    if user.get("role") == "admin":
         return True
-    if user.get("role") in ("teacher", "student"):
+    if not has_permission(user, "issue_statements"):
         return False
     fids = set(user.get("faculty_ids") or [])
     if user.get("faculty_id"):

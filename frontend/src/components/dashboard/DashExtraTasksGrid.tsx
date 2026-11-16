@@ -16,10 +16,10 @@ interface ExtraTask {
   perms?: string[];
   roles?: string[];
   adminOnly?: boolean;
-  alwaysVisible?: boolean; // 🆕 متاحة لأي مستخدم إداري (غير معلم/طالب) — مطابقة لسلوك صفحة "جميع التقارير" الحالية
+  alwaysVisible?: boolean; // ⚠️ بلا أي تحقق صلاحية — تُستخدم فقط لأدوات تحقّق/عرض عامة لا تحمل بيانات حساسة
 }
 
-// 🧩 مهام إضافية — مطابقة تماماً لعناصر "الإعدادات الأساسية" و"جميع التقارير" الحاليتين (مدمجة ومُنقَّحة من التكرار)
+// 🧩 مهام إضافية — كل مهمة مربوطة بصلاحيتها الفعلية الصريحة (لا صلاحيات افتراضية بالدور)
 const EXTRA_TASKS: ExtraTask[] = [
   // 🎓 أكاديمي
   { id: 'manage-study-plan', label: 'إدارة الخطة الدراسية', icon: 'library', color: '#1565c0', bg: '#dbeafe', route: '/study-plans-overview', perms: [PERMISSIONS.MANAGE_CURRICULUM, PERMISSIONS.VIEW_CURRICULUM, PERMISSIONS.MANAGE_COURSES, 'view_courses'] },
@@ -27,7 +27,7 @@ const EXTRA_TASKS: ExtraTask[] = [
   { id: 'student-references', label: 'مراجع الطلاب', icon: 'document-text', color: '#7c3aed', bg: '#ede9fe', route: '/student-references', perms: [PERMISSIONS.MANAGE_STUDENTS, 'view_students'] },
   { id: 'student-statuses', label: 'حالات الطالب', icon: 'people-circle', color: '#0369a1', bg: '#e0f2fe', route: '/student-statuses', perms: [PERMISSIONS.MANAGE_STUDENTS, 'view_students'] },
   { id: 'university-calendar', label: 'إدارة التقويم الجامعي', icon: 'calendar', color: '#f97316', bg: '#ffedd5', route: '/university-calendar', perms: ['manage_calendar'] },
-  { id: 'view-calendar', label: 'عرض التقويم الجامعي', icon: 'calendar-outline', color: '#22c55e', bg: '#dcfce7', route: '/calendar', alwaysVisible: true },
+  { id: 'view-calendar', label: 'عرض التقويم الجامعي', icon: 'calendar-outline', color: '#22c55e', bg: '#dcfce7', route: '/calendar', perms: ['manage_calendar', PERMISSIONS.VIEW_REPORTS, PERMISSIONS.MANAGE_SCHEDULE, 'view_schedule'] },
   { id: 'prep-leave-periods', label: 'إجازة التحضير', icon: 'book', color: '#7c3aed', bg: '#ede9fe', route: '/prep-leave-periods', roles: ['admin', 'dean', 'department_head'] },
   { id: 'faculty-board', label: 'مجلس الكلية', icon: 'shield-checkmark', color: '#831843', bg: '#fce7f3', route: '/faculty-board', roles: ['admin', 'dean', 'department_head'] },
   { id: 'availability-report', label: 'تقرير توفّر القاعات', icon: 'business', color: '#0891b2', bg: '#cffafe', route: '/availability-report', perms: [PERMISSIONS.VIEW_REPORTS, PERMISSIONS.MANAGE_SCHEDULE, 'view_schedule'] },
@@ -56,13 +56,13 @@ const EXTRA_TASKS: ExtraTask[] = [
   { id: 'send-department-results', label: 'إرسال نتائج القسم', icon: 'send', color: '#1565c0', bg: '#dbeafe', route: '/send-department-results', perms: [PERMISSIONS.SEND_NOTIFICATIONS, PERMISSIONS.MANAGE_DEPARTMENTS, 'manage_grades'] },
   { id: 'send-notification', label: 'إرسال إشعار', icon: 'notifications', color: '#f97316', bg: '#ffedd5', route: '/send-notification', perms: [PERMISSIONS.SEND_NOTIFICATIONS, PERMISSIONS.MANAGE_NOTIFICATIONS] },
   { id: 'offline-sync-report', label: 'تقرير مزامنة الأوفلاين', icon: 'time', color: '#0891b2', bg: '#cffafe', route: '/offline-sync-report', adminOnly: true },
-  { id: 'fee-receipts', label: 'السندات المالية', icon: 'cash', color: '#f57f17', bg: '#fff8e1', route: '/fee-receipts', alwaysVisible: true },
-  { id: 'grades', label: 'الدرجات وبيانات الطلاب', icon: 'ribbon', color: '#5e35b1', bg: '#ede7f6', route: '/grades', alwaysVisible: true },
-  { id: 'statements-log', label: 'سجل الإفادات', icon: 'document-text', color: '#00796b', bg: '#e0f2f1', route: '/statements-log', alwaysVisible: true },
-  { id: 'letter-new', label: 'رسالة جديدة', icon: 'flash', color: '#d97706', bg: '#fef3c7', route: '/letter-new', alwaysVisible: true },
-  { id: 'photo-approvals', label: 'اعتماد صور الطلاب', icon: 'images', color: '#f9a825', bg: '#fff8e1', route: '/photo-approvals', alwaysVisible: true },
-  { id: 'batch-print', label: 'طباعة البطاقات', icon: 'print', color: '#3949ab', bg: '#e8eaf6', route: '/batch-print', alwaysVisible: true },
-  { id: 'card-settings', label: 'تصميم البطاقة', icon: 'color-palette', color: '#00796b', bg: '#e0f2f1', route: '/card-settings', alwaysVisible: true },
+  { id: 'fee-receipts', label: 'السندات المالية', icon: 'cash', color: '#f57f17', bg: '#fff8e1', route: '/fee-receipts', perms: ['manage_fee_receipts', 'view_fee_receipts'] },
+  { id: 'grades', label: 'الدرجات وبيانات الطلاب', icon: 'ribbon', color: '#5e35b1', bg: '#ede7f6', route: '/grades', perms: ['manage_grades'] },
+  { id: 'statements-log', label: 'سجل الإفادات', icon: 'document-text', color: '#00796b', bg: '#e0f2f1', route: '/statements-log', perms: ['issue_statements'] },
+  { id: 'letter-new', label: 'رسالة جديدة', icon: 'flash', color: '#d97706', bg: '#fef3c7', route: '/letter-new', perms: [PERMISSIONS.ISSUE_LETTERS, 'hr_manage_correspondence', 'hr_manage_employees'] },
+  { id: 'photo-approvals', label: 'اعتماد صور الطلاب', icon: 'images', color: '#f9a825', bg: '#fff8e1', route: '/photo-approvals', perms: ['approve_student_photos'] },
+  { id: 'batch-print', label: 'طباعة البطاقات', icon: 'print', color: '#3949ab', bg: '#e8eaf6', route: '/batch-print', perms: ['print_student_cards'] },
+  { id: 'card-settings', label: 'تصميم البطاقة', icon: 'color-palette', color: '#00796b', bg: '#e0f2f1', route: '/card-settings', perms: ['print_student_cards'] },
 
   // ⚙️ نظام وصيانة
   { id: 'permissions-tree', label: 'شجرة الصلاحيات', icon: 'git-branch', color: '#7c3aed', bg: '#ede9fe', route: '/permissions', perms: [PERMISSIONS.MANAGE_ROLES] },

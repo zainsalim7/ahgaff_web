@@ -12,8 +12,32 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity, export_filename, export_headers
-from .statements import _can_issue as _can_manage, get_verify_base
+from .deps import get_db, get_current_user, log_activity, export_filename, export_headers, has_permission
+from .statements import get_verify_base
+
+
+def _can_photos(user: dict, faculty_id: str) -> bool:
+    """🔒 لا صلاحيات افتراضية بالدور — اعتماد صور الطلاب تتطلّب صراحةً approve_student_photos ضمن نطاق كلية الطالب"""
+    if user.get("role") == "admin":
+        return True
+    if not has_permission(user, "approve_student_photos"):
+        return False
+    fids = set(user.get("faculty_ids") or [])
+    if user.get("faculty_id"):
+        fids.add(user["faculty_id"])
+    return faculty_id in fids
+
+
+def _can_cards(user: dict, faculty_id: str) -> bool:
+    """🔒 لا صلاحيات افتراضية بالدور — تصميم/طباعة بطاقات الطلاب تتطلّب صراحةً print_student_cards ضمن نطاق كلية الطالب"""
+    if user.get("role") == "admin":
+        return True
+    if not has_permission(user, "print_student_cards"):
+        return False
+    fids = set(user.get("faculty_ids") or [])
+    if user.get("faculty_id"):
+        fids.add(user["faculty_id"])
+    return faculty_id in fids
 
 router = APIRouter()
 
@@ -115,7 +139,7 @@ class CardSettings(BaseModel):
 
 @router.get("/cards/settings/{faculty_id}")
 async def get_card_settings(faculty_id: str, current_user: dict = Depends(get_current_user)):
-    if not _can_manage(current_user, faculty_id):
+    if not _can_cards(current_user, faculty_id):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     doc = await db.card_settings.find_one({"_id": f"faculty_{faculty_id}"}) or {}
@@ -132,7 +156,7 @@ async def get_card_settings(faculty_id: str, current_user: dict = Depends(get_cu
 
 @router.put("/cards/settings/{faculty_id}")
 async def update_card_settings(faculty_id: str, data: CardSettings, current_user: dict = Depends(get_current_user)):
-    if not _can_manage(current_user, faculty_id):
+    if not _can_cards(current_user, faculty_id):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     if data.template not in TEMPLATES:
         raise HTTPException(status_code=400, detail="قالب غير معروف")
@@ -220,7 +244,7 @@ async def get_student_card(student_id: str, base_url: Optional[str] = Query(None
     db = get_db()
     student = await _student_or_404(db, student_id)
     fid, _, _ = await _resolve_faculty(db, student)
-    if not _can_manage(current_user, fid):
+    if not _can_cards(current_user, fid):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     return await _card_payload(db, student, base_url or "")
 
@@ -265,7 +289,7 @@ async def upload_student_photo(student_id: str, file: UploadFile = File(...), cu
     db = get_db()
     student = await _student_or_404(db, student_id)
     fid, _, _ = await _resolve_faculty(db, student)
-    if not _can_manage(current_user, fid):
+    if not _can_photos(current_user, fid):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     path = await _store_photo(file)
     await db.students.update_one({"_id": student["_id"]}, {"$set": {"photo_path": path}, "$unset": {"pending_photo_path": "", "pending_photo_at": ""}})
@@ -276,7 +300,7 @@ async def upload_student_photo(student_id: str, file: UploadFile = File(...), cu
 @router.get("/pending-photos")
 async def list_pending_photos(current_user: dict = Depends(get_current_user)):
     db = get_db()
-    if current_user.get("role") in ("teacher", "student"):
+    if current_user.get("role") != "admin" and not has_permission(current_user, "approve_student_photos"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     q = {"pending_photo_path": {"$exists": True, "$ne": ""}}
     if current_user.get("role") != "admin":
@@ -303,7 +327,7 @@ async def list_pending_photos(current_user: dict = Depends(get_current_user)):
 async def list_approved_photos(search: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """🖼️ الصور المعتمدة (الظاهرة على البطاقات)"""
     db = get_db()
-    if current_user.get("role") in ("teacher", "student"):
+    if current_user.get("role") != "admin" and not has_permission(current_user, "approve_student_photos"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     q: dict = {"photo_path": {"$exists": True, "$ne": ""}}
     if current_user.get("role") != "admin":
@@ -335,7 +359,7 @@ async def revoke_student_photo(student_id: str, current_user: dict = Depends(get
     db = get_db()
     student = await _student_or_404(db, student_id)
     fid, _, _ = await _resolve_faculty(db, student)
-    if not _can_manage(current_user, fid):
+    if not _can_photos(current_user, fid):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     if not student.get("photo_path"):
         raise HTTPException(status_code=400, detail="لا توجد صورة معتمدة لهذا الطالب")
@@ -384,7 +408,7 @@ async def approve_student_photo(student_id: str, current_user: dict = Depends(ge
     db = get_db()
     student = await _student_or_404(db, student_id)
     fid, _, _ = await _resolve_faculty(db, student)
-    if not _can_manage(current_user, fid):
+    if not _can_photos(current_user, fid):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     pending = student.get("pending_photo_path")
     if not pending:
@@ -400,7 +424,7 @@ async def reject_student_photo(student_id: str, current_user: dict = Depends(get
     db = get_db()
     student = await _student_or_404(db, student_id)
     fid, _, _ = await _resolve_faculty(db, student)
-    if not _can_manage(current_user, fid):
+    if not _can_photos(current_user, fid):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     # الرفض يعيد فتح فرصة الرفع للطالب تلقائياً ليرفع صورة أفضل
     await db.students.update_one({"_id": student["_id"]}, {"$set": {"photo_upload_allowed": True}, "$unset": {"pending_photo_path": "", "pending_photo_at": ""}})
@@ -427,7 +451,7 @@ async def bulk_photo_decision(request: Request, current_user: dict = Depends(get
             skipped += 1
             continue
         fid, _, _ = await _resolve_faculty(db, student)
-        if not _can_manage(current_user, fid):
+        if not _can_photos(current_user, fid):
             skipped += 1
             continue
         pending = student.get("pending_photo_path")
@@ -454,7 +478,7 @@ async def allow_photo_upload(student_id: str, current_user: dict = Depends(get_c
     db = get_db()
     student = await _student_or_404(db, student_id)
     fid, _, _ = await _resolve_faculty(db, student)
-    if not _can_manage(current_user, fid):
+    if not _can_photos(current_user, fid):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     await db.students.update_one({"_id": student["_id"]}, {"$set": {"photo_upload_allowed": True}})
     await log_activity(current_user, "allow_photo_upload", "student", str(student["_id"]), student.get("full_name", ""), {})
@@ -525,7 +549,7 @@ ORIENTATIONS = ("auto", "portrait", "landscape")
 
 @router.get("/cards/print-settings")
 async def get_print_settings(current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") in ("teacher", "student"):
+    if current_user.get("role") != "admin" and not has_permission(current_user, "print_student_cards"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     doc = await db.card_print_settings.find_one({"_id": "global"}) or {}
@@ -584,7 +608,7 @@ async def _batch_candidates(db, data: "BatchPrintRequest", current_user: dict):
             dept = None
         if not dept:
             raise HTTPException(status_code=404, detail="القسم غير موجود")
-        if not _can_manage(current_user, dept.get("faculty_id", "")):
+        if not _can_cards(current_user, dept.get("faculty_id", "")):
             raise HTTPException(status_code=403, detail="غير مصرح لك")
         q = {"department_id": data.department_id, "is_alumni": {"$ne": True}}
         if data.level:
@@ -632,7 +656,7 @@ async def _prepare_batch(db, data: "BatchPrintRequest", current_user: dict) -> d
             raise HTTPException(status_code=404, detail="لا يوجد طلاب مطابقون")
         for s in students:
             fid_s, fac_name_s, dept_name_s = await _resolve_faculty(db, s)
-            if not _can_manage(current_user, fid_s):
+            if not _can_cards(current_user, fid_s):
                 raise HTTPException(status_code=403, detail=f"غير مصرح لك بطباعة بطاقات كلية الطالب {s.get('full_name', '')}")
             if fid_s not in tpl_map:
                 tpl_map[fid_s] = await db.card_settings.find_one({"_id": f"faculty_{fid_s}"}) or {}
@@ -649,7 +673,7 @@ async def _prepare_batch(db, data: "BatchPrintRequest", current_user: dict) -> d
         if not dept:
             raise HTTPException(status_code=404, detail="القسم غير موجود")
         fid = dept.get("faculty_id", "")
-        if not _can_manage(current_user, fid):
+        if not _can_cards(current_user, fid):
             raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     orientation = data.orientation if data.orientation in ORIENTATIONS else "auto"
@@ -922,7 +946,7 @@ async def get_print_batch(batch_no: int, current_user: dict = Depends(get_curren
 async def delete_print_batch(batch_no: int, restore: bool = True, current_user: dict = Depends(get_current_user)):
     """🗑️ حذف دفعة من السجل — restore=true يعيد طلابها إلى قائمة «المطلوب طباعته» (يُلغى وسم مطبوع)"""
     db = get_db()
-    if current_user.get("role") in ("teacher", "student"):
+    if current_user.get("role") != "admin" and not has_permission(current_user, "print_student_cards"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     b = await db.card_print_batches.find_one({"batch_no": batch_no})
     if not b:
@@ -1038,14 +1062,14 @@ async def _back_settings(db, faculty_id: Optional[str] = None) -> dict:
 
 @router.get("/cards/back-settings")
 async def get_back_settings(faculty_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") in ("teacher", "student"):
+    if current_user.get("role") != "admin" and not has_permission(current_user, "print_student_cards"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     g = await _back_settings(db)
     uni = await db.university.find_one({}, {"address": 1, "phone": 1, "website": 1}) or {}
     out = {**await _back_settings(db, faculty_id), "defaults": DEFAULT_BACK_SETTINGS, "global": {k: g.get(k) for k in BACK_OVERRIDE_KEYS},
            "university_contact": {"address": uni.get("address", ""), "phone": uni.get("phone", ""), "website": uni.get("website", "")},
-           "can_edit": current_user.get("role") == "admin", "can_edit_faculty": bool(faculty_id) and _can_manage(current_user, faculty_id)}
+           "can_edit": current_user.get("role") == "admin", "can_edit_faculty": bool(faculty_id) and _can_cards(current_user, faculty_id)}
     return out
 
 
@@ -1057,7 +1081,7 @@ async def put_back_settings(data: BackSettingsIn, faculty_id: Optional[str] = No
     if not lines:
         raise HTTPException(status_code=400, detail="أضف بنداً واحداً على الأقل")
     if faculty_id:
-        if not _can_manage(current_user, faculty_id):
+        if not _can_cards(current_user, faculty_id):
             raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل خلفية بطاقات هذه الكلية")
         upd = {"enabled_override": True, "enabled": bool(data.enabled), "title": (data.title or "").strip() or DEFAULT_BACK_SETTINGS["title"], "lines": lines,
                "footer_note": (data.footer_note or "").strip()[:300], "show_contact": bool(data.show_contact),
@@ -1082,7 +1106,7 @@ async def put_back_settings(data: BackSettingsIn, faculty_id: Optional[str] = No
 @router.delete("/cards/back-settings")
 async def reset_faculty_back_settings(faculty_id: str, current_user: dict = Depends(get_current_user)):
     """↩️ إلغاء تخصيص خلفية الكلية والعودة للإعداد العام"""
-    if not _can_manage(current_user, faculty_id):
+    if not _can_cards(current_user, faculty_id):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     await db.card_settings.delete_one({"_id": f"back_faculty_{faculty_id}"})
@@ -1211,7 +1235,7 @@ def _render_card_back_png(back: dict, template: str, font_key: str, portrait: bo
 @router.get("/cards/back-preview/{faculty_id}")
 async def back_preview(faculty_id: str, current_user: dict = Depends(get_current_user)):
     """معاينة PNG لخلفية البطاقة بقالب الكلية المختار"""
-    if not _can_manage(current_user, faculty_id):
+    if not _can_cards(current_user, faculty_id):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     tpl_settings = await db.card_settings.find_one({"_id": f"faculty_{faculty_id}"}) or {}
@@ -1234,7 +1258,7 @@ class BackBatchRequest(BaseModel):
 async def batch_back_pdf(data: BackBatchRequest, current_user: dict = Depends(get_current_user)):
     """🔄 PDF خلفيات الدفعة: بطاقتان في كل ورقة A4 بمواضع مستقلة (تُحفظ) — نفس عدد وترتيب الوجه الأمامي للدفعة"""
     db = get_db()
-    if current_user.get("role") in ("teacher", "student"):
+    if current_user.get("role") != "admin" and not has_permission(current_user, "print_student_cards"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     if data.batch_no:
         b = await db.card_print_batches.find_one({"batch_no": int(data.batch_no)})
@@ -1675,7 +1699,7 @@ async def download_student_card(
     db = get_db()
     student = await _student_or_404(db, student_id)
     fid, _, _ = await _resolve_faculty(db, student)
-    if not _can_manage(current_user, fid):
+    if not _can_cards(current_user, fid):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     p = await _card_payload(db, student, base_url or "")
     photo_bytes = None
@@ -1708,7 +1732,7 @@ async def download_student_card(
 @router.get("/cards/preview/{faculty_id}")
 async def card_preview(faculty_id: str, template: str = "green", font: str = DEFAULT_CARD_FONT, show_section: Optional[bool] = None, current_user: dict = Depends(get_current_user)):
     """🖼️ معاينة فورية للقالب والخط ببيانات تجريبية (بلا حفظ)"""
-    if not _can_manage(current_user, faculty_id):
+    if not _can_cards(current_user, faculty_id):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     if template not in TEMPLATES or font not in CARD_FONTS:
         raise HTTPException(status_code=400, detail="قالب أو خط غير معروف")

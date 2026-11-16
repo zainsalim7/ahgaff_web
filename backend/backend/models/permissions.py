@@ -210,6 +210,9 @@ class Permission:
     HR_APPROVE_PHOTOS = "hr_approve_photos"
     HR_PRINT_CARDS = "hr_print_cards"
     HR_MANAGE_LOCATIONS = "hr_manage_locations"
+    MANAGE_GRADES = "manage_grades"
+    APPROVE_STUDENT_PHOTOS = "approve_student_photos"
+    PRINT_STUDENT_CARDS = "print_student_cards"
 
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
@@ -489,6 +492,9 @@ ALL_PERMISSIONS = [
     {"key": Permission.HR_APPROVE_PHOTOS, "label": "اعتماد صور بطاقات الموظفين", "category": "شؤون الموظفين"},
     {"key": Permission.HR_PRINT_CARDS, "label": "طباعة بطاقات الموظفين وتصميمها", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_LOCATIONS, "label": "مواقع العمل والنطاق الجغرافي", "category": "شؤون الموظفين"},
+    {"key": Permission.MANAGE_GRADES, "label": "إدارة الدرجات (استيراد الكشوفات وإصدار بيان الحالة)", "category": "المالية"},
+    {"key": Permission.APPROVE_STUDENT_PHOTOS, "label": "اعتماد صور بطاقات الطلاب", "category": "بطاقات الطلاب"},
+    {"key": Permission.PRINT_STUDENT_CARDS, "label": "طباعة بطاقات الطلاب وتصميمها", "category": "بطاقات الطلاب"},
 ]
 
 DASHBOARD_PERMISSIONS = [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_ATTENDANCE, Permission.DASHBOARD_TEACHERS,

@@ -19,9 +19,8 @@ LEVEL_AR = {1: "الأول", 2: "الثاني", 3: "الثالث", 4: "الرا�
 
 
 def _can_manage(user: dict) -> bool:
-    if user.get("role") in ("admin", "registrar", "registration_manager"):
-        return True
-    return has_permission(user, "manage_grades")
+    """🔒 لا صلاحيات افتراضية بالدور — إدارة الدرجات تتطلّب صراحةً manage_grades"""
+    return user.get("role") == "admin" or has_permission(user, "manage_grades")
 
 
 def _norm_name(n: str) -> str:
