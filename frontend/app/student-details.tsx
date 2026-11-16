@@ -136,6 +136,7 @@ export default function StudentDetailsScreen() {
   const [showRecords, setShowRecords] = useState(false);
 
   // توسيع سجل الحضور لمقرر معيّن
+  const [coursesView, setCoursesView] = useState<'list' | 'grid'>('grid');
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
   const [courseRecordsCache, setCourseRecordsCache] = useState<Record<string, AttendanceRecord[]>>({});
   const [loadingCourseId, setLoadingCourseId] = useState<string | null>(null);
@@ -1269,9 +1270,27 @@ export default function StudentDetailsScreen() {
         <View style={styles.sectionCard}>
           <View style={styles.sectionCardHeader}>
             <Text style={styles.sectionCardTitle}>المقررات المسجَّلة</Text>
-            <Text style={styles.sectionCardCount}>
-              <Text style={styles.countAccent}>{courses.length}</Text> مقرر
-            </Text>
+            <View style={styles.coursesHeaderRight}>
+              <View style={styles.viewToggle} testID="student-courses-view-toggle">
+                <TouchableOpacity
+                  style={[styles.viewToggleBtn, coursesView === 'list' && styles.viewToggleBtnActive]}
+                  onPress={() => setCoursesView('list')}
+                  testID="student-courses-view-list-btn"
+                >
+                  <Ionicons name="reorder-three" size={16} color={coursesView === 'list' ? '#fff' : '#64748b'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.viewToggleBtn, coursesView === 'grid' && styles.viewToggleBtnActive]}
+                  onPress={() => setCoursesView('grid')}
+                  testID="student-courses-view-grid-btn"
+                >
+                  <Ionicons name="grid" size={16} color={coursesView === 'grid' ? '#fff' : '#64748b'} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.sectionCardCount}>
+                <Text style={styles.countAccent}>{courses.length}</Text> مقرر
+              </Text>
+            </View>
           </View>
 
           {courses.length === 0 ? (
@@ -1280,7 +1299,7 @@ export default function StudentDetailsScreen() {
               <Text style={styles.emptyText}>لا توجد مقررات مسجلة</Text>
             </View>
           ) : (
-            <View style={styles.coursesList}>
+            <View style={[styles.coursesList, coursesView === 'grid' && styles.coursesListGrid]}>
               {courses.map(course => {
                 const courseStats = attendanceByCourse[course.id];
                 const rate = courseStats?.attendance_rate;
@@ -1296,7 +1315,7 @@ export default function StudentDetailsScreen() {
                 const isLoading = loadingCourseId === course.id;
                 const records = courseRecordsCache[course.id] || [];
                 return (
-                <View key={course.id} style={{ gap: 0 }}>
+                <View key={course.id} style={[{ gap: 0 }, coursesView === 'grid' && styles.courseRowGrid]}>
                   <TouchableOpacity
                     style={[styles.courseRow, isExpanded && styles.courseRowExpanded]}
                     onPress={() => toggleCourseAttendance(course.id)}
@@ -2717,11 +2736,17 @@ const styles = StyleSheet.create({
     padding: 16, borderBottomWidth: 1, borderBottomColor: '#eef1f6',
   },
   sectionCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540' },
+  coursesHeaderRight: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
   sectionCardCount: { fontSize: 12, color: '#5b6678' },
   countAccent: { color: '#2962ff', fontWeight: '700' },
 
+  viewToggle: { flexDirection: 'row-reverse', backgroundColor: '#f1f4f9', borderRadius: 8, padding: 3, gap: 2 },
+  viewToggleBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },
+  viewToggleBtnActive: { backgroundColor: '#2962ff' },
+
   // المقررات
   coursesList: { padding: 14, gap: 10 },
+  coursesListGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap' },
   inferredBanner: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
@@ -2742,6 +2767,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#eef1f6',
   },
+  courseRowGrid: { width: '32%', minWidth: 280 },
   courseIconBox: {
     width: 44, height: 44, borderRadius: 10,
     backgroundColor: '#e7f0fe',

@@ -120,7 +120,7 @@ export default function TeacherCoursesScreen() {
   const [reportExporting, setReportExporting] = useState(false);
 
   // 🔲 عرض المقررات: شبكي أو قائمة طويلة
-  const [coursesView, setCoursesView] = useState<'list' | 'grid'>('list');
+  const [coursesView, setCoursesView] = useState<'list' | 'grid'>('grid');
 
   // Assign Modal State
   const [showAssignModal, setShowAssignModal] = useState(false);
