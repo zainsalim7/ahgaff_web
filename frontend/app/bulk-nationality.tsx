@@ -103,7 +103,7 @@ export default function BulkNationalityScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={s.hint}>⚠ الجنسيات المميّزة بالأحمر غير موجودة في القائمة المعتمدة ويُنصح بتوحيدها.</Text>
+            {stats.stats.some(x => !x.in_list) && <Text style={s.hint}>⚠ الجنسيات المميّزة بالأحمر غير موجودة في القائمة المعتمدة ويُنصح بتوحيدها.</Text>}
           </View>
         )}
 
@@ -135,7 +135,7 @@ export default function BulkNationalityScreen() {
               <View key={n} style={s.chip}>
                 <Text style={s.chipTx}>{n}</Text>
                 {canEditList && <TouchableOpacity onPress={async () => { if (await confirmAsk(`حذف «${n}» من القائمة؟ (لا يغيّر بيانات الطلاب)`)) void saveList(items.filter(x => x !== n)); }} testID={`nat-remove-${n}`}>
-                  <Ionicons name="close-circle" size={14} color="#999" />
+                  <Ionicons name="close-circle" size={18} color="#c62828" />
                 </TouchableOpacity>}
               </View>
             ))}

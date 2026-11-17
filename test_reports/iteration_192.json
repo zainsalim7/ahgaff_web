@@ -1,0 +1,28 @@
+{
+  "summary": "Tested the bulk student nationality feature end to end on backend and frontend. Backend: 18 of 18 pytest checks passed. They cover the approved list (GET, PUT, de-duplication, empty list rejected, PUT returns 403 for Saeed), nationality-stats by faculty and department with the in_list flag, and bulk-set-nationality. bulk-set rejects values not in the list (400) and requests with no scope (400). It honours from_nationality, works with student_ids and skips invalid ids. Saeed's scope is enforced: 0 updates outside his department, by faculty or by ids. A teacher with no permission gets 403. UI as admin: the dashboard tile opens /bulk-nationality. Choosing a faculty shows the stats card with 72 'إندونيسية' students, and that chip is red with a warning icon. The department picker narrows the scope. The target picker lists only approved values. Clicking a chip, choosing a target and pressing apply shows a confirm dialog and a success alert, and the stats refresh to 'إندونيسي (72)'. Adding and removing a nationality in the list works. On /students, selecting 3 students and using bulk-nationality-btn, the modal and confirm set them to 'سوداني'; the database confirmed exactly 3 updated, the modal closed and the selection cleared. As Saeed: the tile is visible, there are no add/remove controls, and the faculty and department options are limited to his own scope. All data was restored afterwards: faculty ...a4 has 20 'يمني', faculty ...a6 has 72 'إندونيسية', and the settings doc student_nationalities was deleted.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/bulk-nationality stats card", "issues": ["The hint '⚠ الجنسيات المميّزة بالأحمر غير موجودة...' always shows, even when every nationality is in the approved list. Render it only when stats.some(s => !s.in_list).", "The remove (x) icons in the approved-list chips are small (14px, #999), which is hard to see and tap on mobile."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_bulk_nationality.py", "/app/test_reports/pytest/bulk_nationality.xml"],
+  "action_items": [
+    "Optional: show the red-flag hint only when there are nationalities that are not in the approved list.",
+    "Optional: make the remove icon on list chips larger and higher-contrast."
+  ],
+  "critical_code_review_comments": [
+    "The bulk overwrite cannot be undone. log_activity stores only the count, not the previous values. Consider saving the old nationality per student, or a snapshot, so the change can be rolled back.",
+    "bulk-set-nationality silently drops invalid ObjectIds. If every id is invalid it returns updated=0 instead of 400. Acceptable, but a 400 would be clearer.",
+    "Bulk-set and stats include graduated students, which the /students list hides (stats show 72 and 20, while the list shows 91 of 92). Probably intended, but worth confirming with the user.",
+    "Endpoints accept a raw dict payload instead of Pydantic models (no input validation schema)."
+  ],
+  "updated_files": ["/app/backend/tests/test_bulk_nationality.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None. Data was modified temporarily and fully restored: faculty ...a4 has 20 'يمني', faculty ...a6 has 72 'إندونيسية', and the settings doc {type:'student_nationalities'} was deleted so the defaults apply.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: python -m pytest backend/tests/test_bulk_nationality.py -v. Its module teardown restores the nationalities directly in Mongo and deletes the settings doc. To log in on the web, fill the inputs with placeholders 'اسم المستخدم...' and 'كلمة المرور', then click the text 'تسجيل الدخول' (pressing Enter does not submit). On /students, click enter-selection-mode-btn, then click student-row-<id> to select rows."
+}
