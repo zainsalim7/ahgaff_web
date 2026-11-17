@@ -4,8 +4,9 @@ import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { GenderPicker, PROGRAM_OPTIONS } from './StudentEditFields';
 import { NationalityPicker } from './NationalityPicker';
+import { StudentIdentityFields, StudentIdentityValues, emptyIdentity } from './StudentIdentityFields';
 
-export interface StudentFormValues {
+export interface StudentFormValues extends StudentIdentityValues {
   student_id: string;
   full_name: string;
   department_id: string;
@@ -33,6 +34,7 @@ export const emptyStudentForm: StudentFormValues = {
   password: '',
   program_code: '',
   enrollment_year: '',
+  ...emptyIdentity,
 };
 
 interface Props {
@@ -205,6 +207,8 @@ export const AddStudentForm: React.FC<Props> = ({
       <Text style={[styles.label, styles.mt10]}>الجنسية (اختياري — الافتراضي: يمني)</Text>
       <NationalityPicker value={values.nationality} onChange={(v) => set({ nationality: v })}
         testID="add-student-nationality-input" emptyLabel="— بدون (تُعامل: يمني) —" />
+
+      <StudentIdentityFields values={values} set={set} testPrefix="add-student" />
 
       <Text style={[styles.label, styles.mt10]}>الجنس (لصيغة الإفادات: الطالب/الطالبة)</Text>
       <GenderPicker value={values.gender} onChange={(v) => set({ gender: v })} testPrefix="add-student" />

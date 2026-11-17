@@ -31,6 +31,7 @@ import { formatGregorianDate } from '../src/utils/dateUtils';
 import { StudentEditFields, StudentEditValues, emptyStudentEdit, studentToEditValues } from '../src/components/StudentEditFields';
 import { AssignGroupModal } from '../src/components/AssignGroupModal';
 import { BulkNationalityModal } from '../src/components/BulkNationalityModal';
+import { identityBody } from '../src/components/StudentIdentityFields';
 
 const LEVELS = ['1', '2', '3', '4', '5'];
 
@@ -238,20 +239,7 @@ export default function StudentsScreen() {
   // ➕ إضافة طالب مفرد
   const [showAddModal, setShowAddModal] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [newStudent, setNewStudent] = useState({
-    student_id: '',
-    full_name: '',
-    department_id: '',
-    level: '1',
-    section: '',
-    phone: '',
-    email: '',
-    nationality: '',
-    gender: '',
-    password: '',
-    program_code: '',
-    enrollment_year: '',
-  });
+  const [newStudent, setNewStudent] = useState({ ...emptyStudentForm });
 
   const handleAddStudent = async () => {
     if (!newStudent.student_id.trim() || !newStudent.full_name.trim() || !newStudent.department_id) {
@@ -267,6 +255,7 @@ export default function StudentsScreen() {
         level: parseInt(newStudent.level) || 1,
         section: newStudent.section.trim(), // فارغ مسموح
       };
+      Object.assign(body, identityBody(newStudent));
       if (newStudent.phone.trim()) body.phone = newStudent.phone.trim();
       if (newStudent.email.trim()) body.email = newStudent.email.trim();
       if (newStudent.nationality.trim()) body.nationality = newStudent.nationality.trim();
@@ -1006,6 +995,13 @@ export default function StudentsScreen() {
             'البرنامج': (s as any).program_code || '',
             'سنة الالتحاق': (s as any).enrollment_year || '',
             'الجنسية': (s as any).nationality || '',
+            'الاسم بالإنجليزية': (s as any).full_name_en || '',
+            'تاريخ الميلاد': (s as any).birth_date || '',
+            'مكان الميلاد': (s as any).birth_place || '',
+            'نوع الوثيقة': ({ national_id: 'بطاقة شخصية', passport: 'جواز سفر', residence: 'إقامة', other: 'أخرى' } as any)[(s as any).id_type] || '',
+            'رقم الوثيقة': (s as any).id_number || '',
+            'تاريخ انتهاء الوثيقة': (s as any).id_expiry_date || '',
+            'الحالة الاجتماعية': ({ single: 'أعزب', married: 'متزوج', divorced: 'مطلق', widowed: 'أرمل' } as any)[(s as any).marital_status] || '',
             'الهاتف': (s as any).phone || '',
             'البريد': (s as any).email || '',
           };

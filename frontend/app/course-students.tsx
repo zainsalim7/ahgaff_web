@@ -24,6 +24,7 @@ import { TargetCourseFilters } from '../src/components/TargetCourseFilters';
 import { CourseTabBar } from '../src/components/CourseTabBar';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { AddStudentForm, emptyStudentForm, type StudentFormValues } from '../src/components/AddStudentForm';
+import { identityBody } from '../src/components/StudentIdentityFields';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { useAuthStore } from '../src/store/authStore';
 import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR_SHORT } from '../src/utils/dateUtils';
@@ -118,20 +119,7 @@ export default function CourseStudentsScreen() {
   const [importing, setImporting] = useState(false);
   
   // نموذج إنشاء طالب جديد (نستخدم StudentFormValues الموحَّد)
-  const [newStudentForm, setNewStudentForm] = useState<StudentFormValues>({
-    student_id: '',
-    full_name: '',
-    department_id: '',
-    level: '1',
-    section: '',
-    phone: '',
-    email: '',
-    nationality: '',
-    gender: '',
-    password: '',
-    program_code: '',
-    enrollment_year: '',
-  });
+  const [newStudentForm, setNewStudentForm] = useState<StudentFormValues>({ ...emptyStudentForm });
   const [creatingStudent, setCreatingStudent] = useState(false);
   
   // حالة عرض الحضور
@@ -350,6 +338,7 @@ export default function CourseStudentsScreen() {
         email: newStudentForm.email.trim() || null,
         nationality: newStudentForm.nationality.trim() || null,
         gender: newStudentForm.gender || null,
+        ...identityBody(newStudentForm),
       };
       if (newStudentForm.program_code.trim()) {
         studentData.program_code = newStudentForm.program_code.trim().toUpperCase();

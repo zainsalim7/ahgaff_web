@@ -18,6 +18,13 @@ class StudentBase(BaseModel):
     gender: Optional[str] = None  # male / female (فارغ = يُستنتج من الكلية ثم مذكر)
     program_code: Optional[str] = None  # B/M/D/E/P
     enrollment_year: Optional[str] = None  # 25, 26, 27...
+    full_name_en: Optional[str] = None
+    birth_date: Optional[str] = None  # YYYY-MM-DD
+    birth_place: Optional[str] = None
+    id_type: Optional[str] = None  # national_id / passport / residence / other
+    id_number: Optional[str] = None
+    id_expiry_date: Optional[str] = None  # YYYY-MM-DD
+    marital_status: Optional[str] = None  # single / married / divorced / widowed
 
 class StudentCreate(StudentBase):
     password: Optional[str] = None

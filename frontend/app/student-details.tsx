@@ -28,6 +28,7 @@ import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { formatGregorianDate } from '../src/utils/dateUtils';
 import { StudentEditFields, StudentEditValues, emptyStudentEdit, studentToEditValues } from '../src/components/StudentEditFields';
 import { NationalityPicker } from '../src/components/NationalityPicker';
+import { StudentIdentitySummary } from '../src/components/StudentIdentityFields';
 import { StatusEditPill } from '../src/components/attendance/StatusEditPill';
 import { AttendanceFilterBar, AttFilter, EMPTY_ATT_FILTER, applyAttFilter } from '../src/components/attendance/AttendanceFilterBar';
 import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
@@ -1093,6 +1094,7 @@ export default function StudentDetailsScreen() {
                 </>
               ) : null}
             </View>
+            <StudentIdentitySummary st={student} />
             {(student.phone || student.email || (student as any).nationality) && (
               <View style={styles.studentSubRow}>
                 {(student as any).nationality ? (

@@ -3810,6 +3810,8 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
     student_dict["nationality"], _nat_ok = await normalize_nationality(db, student_dict.get("nationality"))
     if not _nat_ok:
         raise HTTPException(status_code=400, detail="اختر الجنسية من القائمة المعتمدة")
+    from routes.admin_tools import clean_identity
+    student_dict.update(clean_identity(student_dict))
     student_dict["qr_code"] = generate_qr_code(student.student_id)
     student_dict["created_at"] = get_yemen_time()
     student_dict["is_active"] = True
@@ -3980,6 +3982,13 @@ async def get_students(
         "phone": s.get("phone"),
         "email": s.get("email"),
         "nationality": s.get("nationality"),
+        "full_name_en": s.get("full_name_en"),
+        "birth_date": s.get("birth_date"),
+        "birth_place": s.get("birth_place"),
+        "id_type": s.get("id_type"),
+        "id_number": s.get("id_number"),
+        "id_expiry_date": s.get("id_expiry_date"),
+        "marital_status": s.get("marital_status"),
         "gender": s.get("gender"),
         "user_id": s.get("user_id"),
         "qr_code": s["qr_code"],
@@ -4023,6 +4032,13 @@ async def get_my_student_record(current_user: dict = Depends(get_current_user)):
         "phone": student.get("phone"),
         "email": student.get("email"),
         "nationality": student.get("nationality"),
+        "full_name_en": student.get("full_name_en"),
+        "birth_date": student.get("birth_date"),
+        "birth_place": student.get("birth_place"),
+        "id_type": student.get("id_type"),
+        "id_number": student.get("id_number"),
+        "id_expiry_date": student.get("id_expiry_date"),
+        "marital_status": student.get("marital_status"),
         "gender": student.get("gender"),
         "user_id": student.get("user_id"),
         "qr_code": student["qr_code"],
@@ -4286,6 +4302,13 @@ async def get_student(student_id: str, current_user: dict = Depends(get_current_
         "phone": student.get("phone"),
         "email": student.get("email"),
         "nationality": student.get("nationality"),
+        "full_name_en": student.get("full_name_en"),
+        "birth_date": student.get("birth_date"),
+        "birth_place": student.get("birth_place"),
+        "id_type": student.get("id_type"),
+        "id_number": student.get("id_number"),
+        "id_expiry_date": student.get("id_expiry_date"),
+        "marital_status": student.get("marital_status"),
         "gender": student.get("gender"),
         "program_code": student.get("program_code"),
         "enrollment_year": student.get("enrollment_year"),
@@ -4314,6 +4337,13 @@ async def get_student_by_qr(qr_code: str, current_user: dict = Depends(get_curre
         "phone": student.get("phone"),
         "email": student.get("email"),
         "nationality": student.get("nationality"),
+        "full_name_en": student.get("full_name_en"),
+        "birth_date": student.get("birth_date"),
+        "birth_place": student.get("birth_place"),
+        "id_type": student.get("id_type"),
+        "id_number": student.get("id_number"),
+        "id_expiry_date": student.get("id_expiry_date"),
+        "marital_status": student.get("marital_status"),
         "gender": student.get("gender"),
         "user_id": student.get("user_id"),
         "qr_code": student["qr_code"],
@@ -4544,6 +4574,13 @@ class StudentUpdate(BaseModel):
     program_code: Optional[str] = None
     enrollment_year: Optional[str] = None
     gender: Optional[str] = None
+    full_name_en: Optional[str] = None
+    birth_date: Optional[str] = None
+    birth_place: Optional[str] = None
+    id_type: Optional[str] = None
+    id_number: Optional[str] = None
+    id_expiry_date: Optional[str] = None
+    marital_status: Optional[str] = None
 
 @api_router.put("/students/{student_id}", response_model=StudentResponse)
 async def update_student(student_id: str, data: StudentUpdate, current_user: dict = Depends(get_current_user)):
@@ -4563,6 +4600,8 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
         if not _nat_ok and _nat != (student.get("nationality") or "").strip():
             raise HTTPException(status_code=400, detail="اختر الجنسية من القائمة المعتمدة")
         update_data["nationality"] = _nat or ""
+    from routes.admin_tools import clean_identity
+    update_data.update(clean_identity(update_data))
     
     # التحقق من تفرد رقم القيد الجديد إذا تم تغييره
     new_sid = update_data.get("student_id")
@@ -4646,6 +4685,13 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
         "phone": updated.get("phone"),
         "email": updated.get("email"),
         "nationality": updated.get("nationality"),
+        "full_name_en": updated.get("full_name_en"),
+        "birth_date": updated.get("birth_date"),
+        "birth_place": updated.get("birth_place"),
+        "id_type": updated.get("id_type"),
+        "id_number": updated.get("id_number"),
+        "id_expiry_date": updated.get("id_expiry_date"),
+        "marital_status": updated.get("marital_status"),
         "gender": updated.get("gender"),
         "user_id": updated.get("user_id"),
         "qr_code": updated["qr_code"],
@@ -16013,6 +16059,11 @@ async def import_students_from_excel(
             'الجنس': 'gender',
             'النوع': 'gender',
             'جنسية الطالب': 'nationality',
+            'الاسم بالإنجليزية': 'full_name_en', 'الاسم بالانجليزية': 'full_name_en', 'الاسم الإنجليزي': 'full_name_en',
+            'تاريخ الميلاد': 'birth_date', 'مكان الميلاد': 'birth_place',
+            'نوع الوثيقة': 'id_type', 'نوع الهوية': 'id_type', 'رقم الوثيقة': 'id_number', 'رقم الهوية': 'id_number', 'رقم الجواز': 'id_number',
+            'تاريخ انتهاء الوثيقة': 'id_expiry_date', 'تاريخ انتهاء الجواز': 'id_expiry_date', 'تاريخ انتهاء الإقامة': 'id_expiry_date',
+            'الحالة الاجتماعية': 'marital_status',
             # حقول الرقم المرجعي
             'البرنامج': 'program_code',
             'رمز البرنامج': 'program_code',
@@ -16063,6 +16114,10 @@ async def import_students_from_excel(
                 elif 'section' in df.columns and pd.notna(row.get('section')):
                     student_section = str(row.get('section', ''))
                 
+                def _import_identity(r):
+                    from routes.admin_tools import clean_identity
+                    raw = {k: (r.get(k) if pd.notna(r.get(k)) else None) for k in ("full_name_en", "birth_date", "birth_place", "id_type", "id_number", "id_expiry_date", "marital_status") if k in df.columns}
+                    return {k: v for k, v in clean_identity(raw, lenient=True).items() if v}
                 async def _import_nat(r):
                     raw = str(r.get('nationality', '')).strip() if pd.notna(r.get('nationality')) else ''
                     from routes.admin_tools import normalize_nationality
@@ -16082,6 +16137,7 @@ async def import_students_from_excel(
                     "phone": _xl_str(row.get('phone', '')) if pd.notna(row.get('phone')) else None,
                     "email": str(row.get('email', '')).strip() if pd.notna(row.get('email')) else None,
                     "nationality": await _import_nat(row),
+                    **_import_identity(row),
                     "gender": {"ذكر": "male", "م": "male", "male": "male", "m": "male", "أنثى": "female", "انثى": "female", "أ": "female", "female": "female", "f": "female"}.get(str(row.get('gender', '')).strip().lower(), None) if pd.notna(row.get('gender')) else None,
                     "qr_code": generate_qr_code(_xl_str(row['student_id'])),
                     "created_at": get_yemen_time(),
@@ -16814,6 +16870,13 @@ async def export_students_to_excel(
             "البرنامج": s.get("program_code", ""),
             "سنة الالتحاق": s.get("enrollment_year", ""),
             "الجنسية": s.get("nationality", "") or "",
+            "الاسم بالإنجليزية": s.get("full_name_en") or "",
+            "تاريخ الميلاد": s.get("birth_date") or "",
+            "مكان الميلاد": s.get("birth_place") or "",
+            "نوع الوثيقة": {"national_id": "بطاقة شخصية", "passport": "جواز سفر", "residence": "إقامة", "other": "أخرى"}.get(s.get("id_type") or "", ""),
+            "رقم الوثيقة": s.get("id_number") or "",
+            "تاريخ انتهاء الوثيقة": s.get("id_expiry_date") or "",
+            "الحالة الاجتماعية": {"single": "أعزب", "married": "متزوج", "divorced": "مطلق", "widowed": "أرمل"}.get(s.get("marital_status") or "", ""),
             "الهاتف": s.get("phone", ""),
             "البريد": s.get("email", ""),
             "نشط": "نعم" if s.get("is_active", True) else "لا",
@@ -17042,6 +17105,13 @@ async def get_students_template(current_user: dict = Depends(get_current_user)):
         "البرنامج": ["B", "B", "M"],
         "سنة الالتحاق": ["25", "25", "24"],
         "الجنسية": ["يمني", "سعودي", "يمني"],
+        "الاسم بالإنجليزية": ["Mohammed Ahmed Ali", "", ""],
+        "تاريخ الميلاد": ["2003-05-14", "", ""],
+        "مكان الميلاد": ["حضرموت - المكلا", "", ""],
+        "نوع الوثيقة": ["بطاقة شخصية", "جواز سفر", ""],
+        "رقم الوثيقة": ["01010123456", "A1234567", ""],
+        "تاريخ انتهاء الوثيقة": ["", "2028-01-31", ""],
+        "الحالة الاجتماعية": ["أعزب", "", ""],
     }
     
     df = pd.DataFrame(data)

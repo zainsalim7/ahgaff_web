@@ -128,6 +128,56 @@ async def normalize_nationality(db, value: Optional[str]):
     return (hit, True) if hit else (v, False)
 
 
+ID_TYPES = {"national_id": ["بطاقة شخصية", "بطاقة", "هوية", "هوية وطنية", "national id", "id"], "passport": ["جواز سفر", "جواز", "passport"],
+            "residence": ["إقامة", "اقامة", "residence"], "other": ["أخرى", "اخرى", "other"]}
+MARITAL = {"single": ["أعزب", "اعزب", "عزباء", "single"], "married": ["متزوج", "متزوجة", "married"],
+           "divorced": ["مطلق", "مطلقة", "divorced"], "widowed": ["أرمل", "ارمل", "أرملة", "ارملة", "widowed"]}
+
+
+def _to_date(v):
+    if v is None or v == "":
+        return ""
+    if hasattr(v, "strftime"):
+        return v.strftime("%Y-%m-%d")
+    t = str(v).strip().split(" ")[0].replace("/", "-")
+    m = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})$", t)
+    if m:
+        t = f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
+    try:
+        return datetime.strptime(t, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except ValueError:
+        return None
+
+
+def _to_code(v, table):
+    t = str(v or "").strip().lower()
+    if not t or t in table:
+        return t
+    return next((k for k, al in table.items() if t in [a.lower() for a in al]), None)
+
+
+def clean_identity(data: dict, lenient: bool = False) -> dict:
+    """تنظيف حقول الهوية الشخصية — يرجع الحقول الموجودة فقط. lenient: يتجاهل القيم غير الصالحة بدل رفضها."""
+    out = {}
+    for k in ("full_name_en", "birth_place", "id_number"):
+        if k in data and data[k] is not None:
+            v = str(data[k]).strip()
+            out[k] = v[:-2] if k == "id_number" and v.endswith(".0") else v
+    for k, lbl in (("birth_date", "تاريخ الميلاد"), ("id_expiry_date", "تاريخ انتهاء الوثيقة")):
+        if k in data and data[k] is not None:
+            d = _to_date(data[k])
+            if d is None and not lenient:
+                raise HTTPException(status_code=400, detail=f"صيغة {lbl} غير صحيحة (YYYY-MM-DD)")
+            out[k] = d or ""
+    for k, table, lbl in (("id_type", ID_TYPES, "نوع الوثيقة"), ("marital_status", MARITAL, "الحالة الاجتماعية")):
+        if k in data and data[k] is not None:
+            c = _to_code(data[k], table)
+            if c is None and not lenient:
+                raise HTTPException(status_code=400, detail=f"قيمة {lbl} غير صحيحة")
+            out[k] = c or ""
+    return out
+
+
 def _require_bulk(user: dict):
     if not (has_permission(user, "students_bulk_ops") or has_permission(user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
