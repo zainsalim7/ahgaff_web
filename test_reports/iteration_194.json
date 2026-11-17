@@ -1,0 +1,30 @@
+{
+  "summary": "Tested the new optional student identity fields (full_name_en, birth_date, birth_place, id_type, id_number, id_expiry_date, marital_status) end to end. Backend: 16 of 16 pytest tests passed. They cover create with and without identity data, dd/mm/yyyy to YYYY-MM-DD conversion, Arabic and English aliases for id_type and marital_status, 400 on a bad date, an impossible date (31/02) or an unknown code, update/clear persistence checked with GET, the GET list and detail fields, the template columns, lenient Excel import (invalid values ignored, numeric id_number handled) and export columns with the Arabic marital label. Frontend (admin, desktop, Playwright): 4 of 4 flows passed. (1) /students add modal: the identity section renders, a student with all fields saved correctly (checked in the DB), and a student with no identity data saved with nulls. (2) /students edit modal: existing values load, and changes plus clearing a field (marital, birth_date set to '') saved. (3) /student-details: student-identity-summary shows the values. student-id-expiry-warning shows orange 'تنتهي خلال 13 يوم' for an expiry 13 days away and red 'منتهية منذ 677 يوم' for a past date. The edit modal loads and saves, and the summary refreshes. (4) /course-students 'إنشاء طالب جديد' form: the identity section is present and the created student had the correct identity data. No functional defects found.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "POST /api/import/students", "issue": "Excel date cells stored as numeric serials (e.g. 37755) rather than date/text are silently ignored because of lenient mode. Real datetime cells and text dates work."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/student-details identity summary", "issues": ["Dates like 2003-05-14 render as '14-05-2003' (bidi reversal of the LTR date inside RTL text). Wrapping the value in an LTR span or using \\u200E would keep the YYYY-MM-DD order."]},
+      {"screen": "/students add-student-btn", "issues": ["data-testid on the TouchableOpacity does not render in the DOM (RN-web needs testID). The test used the text 'إضافة طالب' instead."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_student_identity_iter194.py", "/app/test_reports/pytest/pytest_iter194.xml"],
+  "action_items": [
+    "Optional: wrap identity summary values in LTR so dates show as YYYY-MM-DD",
+    "Optional: change data-testid to testID on the add-student-btn in students.tsx",
+    "Optional: convert numeric Excel serial dates in _to_date"
+  ],
+  "critical_code_review_comments": [
+    "clean_identity is applied correctly on create, update and import (lenient). PUT passes '' through to clear fields, and the whole edit form is sent, so clearing works.",
+    "The summary days calculation uses new Date('YYYY-MM-DD') (UTC midnight) and Date.now(), so the count can be off by one day near midnight local time. Minor."
+  ],
+  "updated_files": ["/app/backend/tests/test_student_identity_iter194.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_I* students (pytest), TEST_UI194A/B/C (UI; C was auto-enrolled in 8 courses). All of them, plus ZZTEST991 from the main agent, were deleted via the API, and the remaining student and enrollment documents were removed by id in Mongo.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Identity fields: StudentIdentityFields component, testID prefixes add-student-* and edit-*. Pickers and date inputs render as <select>/<input type=date> with data-testid. To open /students add, click the text 'إضافة طالب'. Row edit: [data-testid=row-actions-<id>] then the text 'تعديل', then save with 'حفظ التغييرات'. On student-details: edit-student-btn / save-edit-btn. On course-students: 'إضافة طلاب' then 'إنشاء طالب جديد' then confirm-add-student-btn (this auto-enrolls the student in matching courses, so clean up enrollments)."
+}

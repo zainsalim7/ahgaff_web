@@ -73,8 +73,8 @@ const label = (opts: [string, string][], v: string) => opts.find(o => o[0] === v
 /** عرض مختصر لبيانات الهوية في صفحة الطالب — مع تنبيه انتهاء الوثيقة */
 export const StudentIdentitySummary = ({ st }: { st: any }) => {
   const rows: [string, string][] = [
-    ['الاسم بالإنجليزية', st?.full_name_en], ['تاريخ الميلاد', st?.birth_date], ['مكان الميلاد', st?.birth_place],
-    [label(ID_TYPES, st?.id_type) || 'رقم الوثيقة', st?.id_number], ['انتهاء الوثيقة', st?.id_expiry_date],
+    ['الاسم بالإنجليزية', st?.full_name_en], ['تاريخ الميلاد', st?.birth_date && `\u2066${st.birth_date}\u2069`], ['مكان الميلاد', st?.birth_place],
+    [label(ID_TYPES, st?.id_type) || 'رقم الوثيقة', st?.id_number], ['انتهاء الوثيقة', st?.id_expiry_date && `\u2066${st.id_expiry_date}\u2069`],
     ['الحالة الاجتماعية', st?.marital_status ? label(MARITAL, st.marital_status) : ''],
   ].filter(r => r[1]) as any;
   if (!rows.length) return null;

@@ -140,6 +140,9 @@ def _to_date(v):
     if hasattr(v, "strftime"):
         return v.strftime("%Y-%m-%d")
     t = str(v).strip().split(" ")[0].replace("/", "-")
+    if re.match(r"^\d{4,5}(\.0)?$", t) and 10000 < float(t) < 80000:
+        from datetime import timedelta
+        return (datetime(1899, 12, 30) + timedelta(days=int(float(t)))).strftime("%Y-%m-%d")
     m = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})$", t)
     if m:
         t = f"{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}"
