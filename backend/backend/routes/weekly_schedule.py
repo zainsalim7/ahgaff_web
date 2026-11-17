@@ -3518,8 +3518,6 @@ async def rooms_availability(
     - المحاضرة المشتركة تظهر بكل شعبها
     """
     await assert_view_schedule(get_db(), current_user, None, also=('view_reports',))
-    if not can_manage_schedule(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
 
     # جلب القاعات (فلتر الكلية يسري على القاعات فقط)
@@ -3675,8 +3673,6 @@ async def teachers_availability(
     - بدون فلتر: heatmap كامل
     """
     await assert_view_schedule(get_db(), current_user, None, also=('view_reports',))
-    if not can_manage_schedule(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
 
     # جلب الأساتذة
@@ -6208,7 +6204,7 @@ async def get_valid_slots(
     current_user: dict = Depends(get_current_user),
 ):
     """حساب الخلايا (يوم×فترة) الصالحة لنقل/إدراج محاضرة دون تعارضات — لإضاءتها بصرياً"""
-    await assert_view_schedule(get_db(), current_user, teacher_id)
+    await assert_view_schedule(get_db(), current_user, None)
     db = get_db()
 
     settings = await db.schedule_settings.find_one({"_id": f"faculty_{faculty_id}"})

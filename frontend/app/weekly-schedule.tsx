@@ -1010,6 +1010,7 @@ export default function WeeklySchedulePage() {
                       </Text>
                     </View>
                   )}
+                  {canManageSchedule && (<>
                   {viewMode === 'section' && (
                     <TouchableOpacity style={[st.btn, { backgroundColor: '#2e7d32' }]} onPress={handleGenerate} disabled={generating} testID="auto-generate-btn">
                       {generating ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="flash" size={16} color="#fff" />}
@@ -1078,6 +1079,7 @@ export default function WeeklySchedulePage() {
                       <Text style={st.btnText}>النسخ المحفوظة</Text>
                     </TouchableOpacity>
                   )}
+                  </>)}
                   {/* 📄 تصدير */}
                   {schedule.length > 0 && (
                     <TouchableOpacity
@@ -1377,7 +1379,7 @@ export default function WeeklySchedulePage() {
                                       🔗 مشتركة مع: {item.merged_with.join('، ')}
                                     </div>
                                   )}
-                                  <button onClick={() => handleDeleteSlot(item.id)} style={{ position: 'absolute', top: 2, left: 2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#e53935' }}>x</button>
+                                  {canManageSchedule && <button onClick={() => handleDeleteSlot(item.id)} style={{ position: 'absolute', top: 2, left: 2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#e53935' }}>x</button>}
                                 </div>
                                 );
                               })}
@@ -1397,7 +1399,7 @@ export default function WeeklySchedulePage() {
                                 <div style={{ fontSize: 10, color: '#666', textAlign: 'right' }}>{item.course_code}</div>
                                 <div style={{ fontSize: 10, color: '#1565c0', textAlign: 'right' }}>{item.teacher_name}</div>
                                 <div style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{[item.room_name, `${item.department_name} م${item.level}${item.section ? ` ${item.section}` : ''}`].filter(Boolean).join(' | ')}</div>
-                                <button data-testid={`custom-slot-delete-${item.id}`} onClick={() => handleDeleteSlot(item.id)} style={{ position: 'absolute', top: 2, left: 2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#e53935' }}>x</button>
+                                {canManageSchedule && <button data-testid={`custom-slot-delete-${item.id}`} onClick={() => handleDeleteSlot(item.id)} style={{ position: 'absolute', top: 2, left: 2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#e53935' }}>x</button>}
                               </div>
                             ))}
                           </td>

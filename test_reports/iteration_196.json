@@ -1,0 +1,33 @@
+{
+  "summary": "Re-tested the follow-ups from iteration 195. Backend: 10/10 pytest pass. assert_view_schedule returns 403 for Salim and Saeed on all 12 guarded GET endpoints (weekly-schedule, sections, conflicts, export-visual pdf/excel, availability rooms/teachers, master-view plus its pdf/excel exports, free-rooms, valid-slots), using valid params. Admin gets 200 on all of them and master-view returns can_manage=true. can_manage_schedule is now strict: drafts GET, weekly-schedule POST, drafts POST, rooms POST, schedule-settings PUT and slot DELETE all return 403 for Salim and Saeed. The teacher-id exception works: Saeed and Salim (who have teacher/course permissions) get 200 on weekly-schedule and export-visual with a specific teacher_id; a teacher gets 200 for their own id and 403 without one. GET /api/lectures/month now returns 404. Role toggle on رئيس قسم: with view_schedule only, Saeed sees just the 'الجدول' tab, the master view loads, and drafts returns 403. With manage_schedule added, all 4 tabs show, the drafts modal opens, and creating and deleting a TEST_ draft works (200/200). The role was restored to its exact original 28 permissions (restored equal: True). Admin regression all passes: the 4 tabs, master view, master Excel download, availability-report with results, the /schedule daily page, and the /teacher-courses weekly report modal plus Excel export (also passes for Saeed).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/weekly-schedule/availability/rooms|teachers", "issue": "assert_view_schedule(also=('view_reports',)) is dead code because the next line still requires can_manage_schedule. Users with only view_reports or view_schedule (Salim has view_reports) get 403. Either drop the can_manage_schedule check so view-only and report users can see the availability report, or remove the view_reports allowance to be consistent."},
+      {"endpoint": "GET /api/weekly-schedule/valid-slots, /conflicts, /export-visual with a bogus teacher_id", "issue": "Any user with view_courses/view_teachers/manage_* can pass teacher_id=zzz to get past the guard. weekly-schedule, conflicts and export results are filtered to empty, which is fine. valid-slots still returns per-cell occupancy for any faculty/department/level (reasons like 'الشعبة مشغولة'), a small information leak. Consider validating that teacher_id exists, or applying the teacher_id exception only where the result is filtered by teacher."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "weekly-schedule.tsx action bar (lines ~1013-1100) + slot card delete 'x'", "issue": "A view-only user (view_schedule without manage_schedule) still sees the management buttons: توليد تلقائي, مسح, توليد المحاضرات, مزامنة الأوقات, حفظ نسخة, النسخ المحفوظة, إضافة يدوية, تقرير الفراغ and the 'x' delete on each slot card. Clicking النسخ المحفوظة calls GET /drafts, gets 403, and the global 403 handler redirects the user to /no-permission. تقرير الفراغ followed by تنفيذ التقرير also redirects to /no-permission. Wrap these buttons and the slot delete/edit actions with canManageSchedule; keep تصدير visible.", "selector": "[data-testid=open-drafts-btn], [data-testid=auto-generate-btn], [data-testid=resync-lecture-times-btn], [data-testid=save-draft-btn], [data-testid=availability-report-btn]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_schedule_strict_perms_iter196.py", "/app/backend/tests/ui196_role_toggle.py", "/app/backend/tests/probe196_teacherid.py", "/app/test_reports/pytest/pytest_iter196.xml"],
+  "action_items": [
+    "weekly-schedule.tsx: gate the management action buttons (auto-generate, clear, generate lectures, resync times, save draft, drafts, manual add, availability report) and the slot-card delete/edit actions behind canManageSchedule.",
+    "availability/rooms and availability/teachers: decide the policy. Either remove `if not can_manage_schedule` so view_schedule/view_reports users can use the report, or drop also=('view_reports',).",
+    "Optional: in assert_view_schedule, only honor the teacher_id exception when teacher_id is a real teacher (ObjectId valid and exists), to close the valid-slots occupancy leak."
+  ],
+  "critical_code_review_comments": [
+    "assert_view_schedule calls ObjectId(user['id']) for teachers. This is fine for normal users but will raise if the id is ever non-ObjectId; guard with ObjectId.is_valid.",
+    "SCHEDULE_ROLES constant in weekly_schedule.py is now unused; remove it."
+  ],
+  "updated_files": ["/app/backend/tests/test_schedule_strict_perms_iter196.py", "/app/backend/tests/ui196_role_toggle.py", "/app/backend/tests/probe196_teacherid.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "~90% (all required flows pass; view-only UX shows management buttons)"},
+  "seed_data_creation": "None persisted. Created and deleted one TEST_iter196 draft as Saeed. Role 698c93119a944c07ac7f80c3 (رئيس قسم) was temporarily granted view_schedule and then manage_schedule, then reverted to its exact original permissions (verified equal, Saeed /auth/me has no schedule perms, drafts back to 403).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use `python3 backend/tests/ui196_role_toggle.py grant view_schedule [manage_schedule]` and `... revert` to toggle the رئيس قسم role; it stores the original in /tmp/role196_orig.json. Saeed has no faculty_id but sees كلية البنات. Teacher حسن صالح id = 698e533beb4c6eb021c50302. In RN-web, testID on TouchableOpacity renders as data-testid, but some buttons only expose data-testid when the prop is written as data-testid; click by text if needed."
+}
