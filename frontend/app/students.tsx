@@ -1463,6 +1463,14 @@ export default function StudentsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.headerBtn, styles.btnGhost]}
+                onPress={() => router.push('/bulk-nationality')}
+                testID="open-bulk-nationality-btn"
+              >
+                <Ionicons name="earth-outline" size={16} color="#2e7d32" />
+                <Text style={[styles.btnGhostText, { color: '#2e7d32' }]}>الجنسيات</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.btnGhost]}
                 onPress={handleExportStudents}
                 testID="export-students-btn"
               >

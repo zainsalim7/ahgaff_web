@@ -93,6 +93,16 @@ const SECTIONS: Section[] = [
         route: '/student-statuses',
         permissions: [PERMISSIONS.MANAGE_STUDENTS, 'view_students'],
       },
+      {
+        id: 'bulk-nationality',
+        label: 'تعديل الجنسيات جماعياً',
+        description: 'توحيد وتعيين جنسية الطلاب حسب الكلية أو القسم',
+        icon: 'earth',
+        color: '#2e7d32',
+        bg: '#e8f5e9',
+        route: '/bulk-nationality',
+        permissions: ['students_bulk_ops', PERMISSIONS.MANAGE_STUDENTS],
+      },
     ],
   },
 
