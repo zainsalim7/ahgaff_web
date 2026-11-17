@@ -960,6 +960,9 @@ export default function StudentsScreen() {
         if (res.data?.enrolled_courses_msg) {
           msg += '\n' + res.data.enrolled_courses_msg;
         }
+        if (res.data?.nationality_msg) {
+          msg += '\n' + res.data.nationality_msg;
+        }
         if (res.data?.errors?.length > 0) {
           msg += '\n\nتنبيهات:\n' + res.data.errors.join('\n');
         }

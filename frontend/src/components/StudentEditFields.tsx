@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import { NationalityPicker } from './NationalityPicker';
 
 export interface StudentEditValues {
   student_id: string;
@@ -154,8 +155,8 @@ export const StudentEditFields: React.FC<Props> = ({ values, onChange, isAdmin, 
       </View>
 
       <Text style={st.label}>الجنسية</Text>
-      <TextInput style={st.input} value={values.nationality} onChangeText={(t) => set({ nationality: t })}
-        placeholder="يمني (اختياري)" placeholderTextColor="#a8b1c2" testID="edit-nationality-input" />
+      <NationalityPicker value={values.nationality} onChange={(t) => set({ nationality: t })}
+        testID="edit-nationality-input" emptyLabel="— بدون (تُعامل: يمني) —" style={{ marginBottom: 10 }} />
 
       <Text style={st.label}>الجنس (لصيغة الإفادات: الطالب/الطالبة)</Text>
       <GenderPicker value={values.gender} onChange={(v) => set({ gender: v })} testPrefix="edit-student" />

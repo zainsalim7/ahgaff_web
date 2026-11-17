@@ -27,6 +27,7 @@ import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { formatGregorianDate } from '../src/utils/dateUtils';
 import { StudentEditFields, StudentEditValues, emptyStudentEdit, studentToEditValues } from '../src/components/StudentEditFields';
+import { NationalityPicker } from '../src/components/NationalityPicker';
 import { StatusEditPill } from '../src/components/attendance/StatusEditPill';
 import { AttendanceFilterBar, AttFilter, EMPTY_ATT_FILTER, applyAttFilter } from '../src/components/attendance/AttendanceFilterBar';
 import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
@@ -2435,13 +2436,8 @@ export default function StudentDetailsScreen() {
             {statementMode === 'standard' && (
               <>
                 <Text style={{ fontSize: 12, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 4 }}>الجنسية (تُجلب تلقائياً من بيانات الطالب — يمكن تعديلها)</Text>
-                <TextInput
-                  value={statementNationality}
-                  onChangeText={setStatementNationality}
-                  placeholder="يمني"
-                  style={{ borderWidth: 1, borderColor: '#dde3ec', borderRadius: 8, padding: 10, textAlign: 'right', marginBottom: 10, fontSize: 13 }}
-                  testID="statement-nationality-input"
-                />
+                <NationalityPicker value={statementNationality} onChange={setStatementNationality}
+                  testID="statement-nationality-input" emptyLabel="— من بيانات الطالب (يمني) —" style={{ marginBottom: 10 }} />
               </>
             )}
             <Text style={{ fontSize: 12, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 4 }}>الغرض (اختياري)</Text>

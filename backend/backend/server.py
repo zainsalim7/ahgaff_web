@@ -3806,6 +3806,10 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
         raise HTTPException(status_code=400, detail="رقم الطالب موجود مسبقاً في نفس القسم")
     
     student_dict = student.dict()
+    from routes.admin_tools import normalize_nationality
+    student_dict["nationality"], _nat_ok = await normalize_nationality(db, student_dict.get("nationality"))
+    if not _nat_ok:
+        raise HTTPException(status_code=400, detail="اختر الجنسية من القائمة المعتمدة")
     student_dict["qr_code"] = generate_qr_code(student.student_id)
     student_dict["created_at"] = get_yemen_time()
     student_dict["is_active"] = True
@@ -4553,6 +4557,12 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
+    if "nationality" in update_data:
+        from routes.admin_tools import normalize_nationality
+        _nat, _nat_ok = await normalize_nationality(db, update_data["nationality"])
+        if not _nat_ok and _nat != (student.get("nationality") or "").strip():
+            raise HTTPException(status_code=400, detail="اختر الجنسية من القائمة المعتمدة")
+        update_data["nationality"] = _nat or ""
     
     # التحقق من تفرد رقم القيد الجديد إذا تم تغييره
     new_sid = update_data.get("student_id")
@@ -16029,6 +16039,8 @@ async def import_students_from_excel(
         ref_adopted = 0
         ref_conflicts: list = []
         errors = []
+        nat_fixed: dict = {}
+        nat_unknown: dict = {}
         
         for index, row in df.iterrows():
             try:
@@ -16051,6 +16063,15 @@ async def import_students_from_excel(
                 elif 'section' in df.columns and pd.notna(row.get('section')):
                     student_section = str(row.get('section', ''))
                 
+                async def _import_nat(r):
+                    raw = str(r.get('nationality', '')).strip() if pd.notna(r.get('nationality')) else ''
+                    from routes.admin_tools import normalize_nationality
+                    val, ok = await normalize_nationality(db, raw)
+                    if raw and not ok:
+                        nat_unknown[val] = nat_unknown.get(val, 0) + 1
+                    elif raw and val != raw:
+                        nat_fixed[f"{raw} ← {val}"] = nat_fixed.get(f"{raw} ← {val}", 0) + 1
+                    return val
                 student_data = {
                     "student_id": _xl_str(row['student_id']),
                     "full_name": str(row['full_name']).strip(),
@@ -16060,7 +16081,7 @@ async def import_students_from_excel(
                     "section": student_section,
                     "phone": _xl_str(row.get('phone', '')) if pd.notna(row.get('phone')) else None,
                     "email": str(row.get('email', '')).strip() if pd.notna(row.get('email')) else None,
-                    "nationality": str(row.get('nationality', '')).strip() if pd.notna(row.get('nationality')) else None,
+                    "nationality": await _import_nat(row),
                     "gender": {"ذكر": "male", "م": "male", "male": "male", "m": "male", "أنثى": "female", "انثى": "female", "أ": "female", "female": "female", "f": "female"}.get(str(row.get('gender', '')).strip().lower(), None) if pd.notna(row.get('gender')) else None,
                     "qr_code": generate_qr_code(_xl_str(row['student_id'])),
                     "created_at": get_yemen_time(),
@@ -16172,6 +16193,7 @@ async def import_students_from_excel(
             "reference_adopted": ref_adopted,
             "reference_conflicts": ref_conflicts[:20],
             "reference_msg": (f"اعتُمد رقم القيد كرقم مرجعي لـ {ref_adopted} طالب" if ref_adopted else "") + (f" · {len(ref_conflicts)} رقم مُدخل كان مستخدماً فوُلِّد التالي تلقائياً" if ref_conflicts else ""),
+            "nationality_msg": ("صُحّحت جنسيات: " + "، ".join(f"{k} ({v})" for k, v in nat_fixed.items()) if nat_fixed else "") + (("\n" if nat_fixed else "") + "⚠ جنسيات غير موجودة في القائمة المعتمدة (عدّلها من أداة الجنسيات): " + "، ".join(f"{k} ({v})" for k, v in nat_unknown.items()) if nat_unknown else ""),
             "errors": errors[:10]  # Return first 10 errors only
         }
     except HTTPException:

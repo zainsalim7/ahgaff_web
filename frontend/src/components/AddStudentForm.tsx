@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { GenderPicker, PROGRAM_OPTIONS } from './StudentEditFields';
+import { NationalityPicker } from './NationalityPicker';
 
 export interface StudentFormValues {
   student_id: string;
@@ -202,13 +203,8 @@ export const AddStudentForm: React.FC<Props> = ({
       </View>
 
       <Text style={[styles.label, styles.mt10]}>الجنسية (اختياري — الافتراضي: يمني)</Text>
-      <TextInput
-        value={values.nationality}
-        onChangeText={(v) => set({ nationality: v })}
-        placeholder="يمني"
-        style={styles.input}
-        testID="add-student-nationality-input"
-      />
+      <NationalityPicker value={values.nationality} onChange={(v) => set({ nationality: v })}
+        testID="add-student-nationality-input" emptyLabel="— بدون (تُعامل: يمني) —" />
 
       <Text style={[styles.label, styles.mt10]}>الجنس (لصيغة الإفادات: الطالب/الطالبة)</Text>
       <GenderPicker value={values.gender} onChange={(v) => set({ gender: v })} testPrefix="add-student" />

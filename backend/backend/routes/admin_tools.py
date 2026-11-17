@@ -110,6 +110,24 @@ DEFAULT_NATIONALITIES = ["يمني", "سعودي", "عماني", "إماراتي
                          "بنغلاديشي", "أفغاني", "تركي", "نيجيري", "تشادي", "كيني", "تنزاني", "روسي", "أمريكي", "بريطاني"]
 
 
+def _nat_key(n: str) -> str:
+    n = re.sub(r"\s+", " ", (n or "").strip())
+    n = re.sub(r"^ال", "", n)
+    n = re.sub(r"[أإآ]", "ا", n)
+    n = re.sub(r"(ية|يه|ة|ه)$", "ي", n)
+    return re.sub(r"ى$", "ي", n)
+
+
+async def normalize_nationality(db, value: Optional[str]):
+    """يرجع (القيمة المعتمدة أو الأصلية, هل هي معتمدة). الفارغ → (None, True)."""
+    v = (value or "").strip()
+    if not v:
+        return None, True
+    by_key = {_nat_key(n): n for n in await _nationality_list(db)}
+    hit = by_key.get(_nat_key(v))
+    return (hit, True) if hit else (v, False)
+
+
 def _require_bulk(user: dict):
     if not (has_permission(user, "students_bulk_ops") or has_permission(user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
