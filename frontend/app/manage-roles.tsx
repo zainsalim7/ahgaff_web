@@ -138,6 +138,11 @@ export default function ManageRolesScreen() {
       if (isMounted.current) {
         setRoles((rolesRes.data || []).filter((r: Role) => r.system_key !== 'admin'));
         setAllPermissions(permsRes.data.permissions || []);
+        // 🔑 مزامنة خريطة التوسيع مع الخادم (مصدر الحقيقة) كي يعكس التدقيق والتعديل الصلاحيات الفعلية
+        if (permsRes.data.full_mapping) {
+          Object.keys(FULL_PERMISSION_MAPPING).forEach(k => delete FULL_PERMISSION_MAPPING[k]);
+          Object.assign(FULL_PERMISSION_MAPPING, permsRes.data.full_mapping);
+        }
         hasFetched.current = true;
       }
     } catch (error) {

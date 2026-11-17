@@ -8713,6 +8713,9 @@ async def get_all_schedule_lectures(
     current_user: dict = Depends(get_current_user)
 ):
     """جلب محاضرات يوم محدد فقط - للجدول الأسبوعي"""
+    # 🔒 صلاحية صريحة: عرض/إدارة الجدول أو إدارة الحضور — المعلم يرى محاضراته فقط (مُفلترة أدناه)
+    if current_user["role"] != UserRole.TEACHER and not any(has_permission(current_user, p) for p in ("view_schedule", "manage_schedule", "manage_attendance")):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية عرض الجدول الدراسي")
     
     # إذا لم يُحدد تاريخ، نستخدم اليوم
     if not date:
@@ -18649,6 +18652,7 @@ async def get_available_permissions(current_user: dict = Depends(get_current_use
     visible_perms = [p for p in ALL_PERMISSIONS if not p.get("hidden", False)]
     return {
         "permissions": visible_perms,
+        "full_mapping": FULL_PERMISSION_MAPPING,
         "scope_types": [
             {"key": "global", "label": "عامة (كل النظام)"},
             {"key": "department", "label": "قسم معين"},

@@ -66,7 +66,11 @@ function TeacherSearchBox({ teachers, selectedId, onSelect, placeholder }: { tea
 }
 
 export default function WeeklySchedulePage() {
-  const { user } = useAuth();
+  const { user, hasAnyPermission } = useAuth();
+  const canViewSchedule = hasAnyPermission(['view_schedule', 'manage_schedule']);
+  useEffect(() => {
+    if (user && !canViewSchedule) router.replace({ pathname: '/no-permission', params: { reason: 'ليس لديك صلاحية عرض الجدول الأسبوعي' } } as any);
+  }, [user, canViewSchedule]);
   const [activeTab, setActiveTab] = useState<'schedule' | 'rooms' | 'settings' | 'prefs'>('schedule');
   const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);

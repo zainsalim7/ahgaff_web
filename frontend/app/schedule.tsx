@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { settingsAPI, lecturesAPI } from '../src/services/api';
 import { useAuthStore } from '../src/store/authStore';
+import { useAuth } from '../src/contexts/AuthContext';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import api from '../src/services/api';
 import { DayShiftModal } from '../src/components/DayShiftModal';
@@ -52,6 +53,11 @@ function shiftDate(dateStr: string, days: number): string {
 export default function ScheduleScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const { hasAnyPermission } = useAuth();
+  const canViewSchedule = user?.role === 'teacher' || hasAnyPermission(['view_schedule', 'manage_schedule']);
+  useEffect(() => {
+    if (user && !canViewSchedule) router.replace({ pathname: '/no-permission', params: { reason: 'ليس لديك صلاحية عرض الجدول الدراسي' } } as any);
+  }, [user, canViewSchedule]);
   const [lectures, setLectures] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');

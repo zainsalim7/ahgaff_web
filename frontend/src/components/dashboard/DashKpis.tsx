@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useAuth } from '../../contexts/AuthContext';
 import { DASH, NUM_FONT, dashStyles } from './dashTheme';
 
 interface Numbers {
@@ -15,13 +16,15 @@ interface Kpi { key: string; label: string; value: string | number; sub?: string
 
 export const DashKpis = ({ n, periodLabel, compact }: { n: Numbers; periodLabel: string; compact: boolean }) => {
   const router = useRouter();
+  const { hasAnyPermission } = useAuth();
+  const canSchedule = hasAnyPermission(['view_schedule', 'manage_schedule']);
   const rate = n.attendance_rate;
   const rateColor = rate === null ? DASH.muted : rate >= 75 ? DASH.green : rate >= 60 ? DASH.orange : DASH.red;
   const kpis: Kpi[] = [
     { key: 'students', label: 'الطلاب النشطون', value: n.students, icon: 'people', color: DASH.blue, route: '/students', sub: `${n.departments} قسم · ${n.faculties} كلية` },
     { key: 'teachers', label: 'الأساتذة', value: n.teachers, icon: 'person', color: DASH.teal, route: '/manage-teachers' },
     { key: 'courses', label: 'مقررات الفصل النشط', value: n.courses, icon: 'book', color: DASH.purple, route: '/(tabs)/courses' },
-    { key: 'today', label: 'محاضرات اليوم', value: n.lectures_today, icon: 'calendar', color: DASH.orange, route: '/schedule', sub: `منفَّذة ${n.today_done} · قادمة ${n.today_upcoming} · ملغاة ${n.today_cancelled}` },
+    { key: 'today', label: 'محاضرات اليوم', value: n.lectures_today, icon: 'calendar', color: DASH.orange, route: canSchedule ? '/schedule' : undefined, sub: `منفَّذة ${n.today_done} · قادمة ${n.today_upcoming} · ملغاة ${n.today_cancelled}` },
     { key: 'period', label: `محاضرات ${periodLabel}`, value: n.lectures_period, icon: 'layers', color: DASH.navy2, route: '/report-lesson-completion', sub: `منفَّذة ${n.lectures_status?.completed || 0} · ملغاة ${(n.lectures_status?.cancelled || 0) + (n.lectures_status?.absent || 0)}` },
     { key: 'rate', label: 'نسبة الحضور', value: rate === null ? '—' : `${rate}%`, icon: 'pulse', color: rateColor, route: '/report-attendance-overview', sub: `حاضر ${n.present} · متأخر ${n.late} · غائب ${n.absent}` },
   ];

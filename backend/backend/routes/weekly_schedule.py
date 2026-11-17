@@ -902,6 +902,15 @@ async def get_weekly_schedule(
     if current_user.get("advanced_access_real_enforcement"):
         from services.advanced_access_service import real_enforce_guard
         await real_enforce_guard(db, current_user, "schedule_weekly_schedule_get_weekly_schedule", department_id, faculty_id)
+    # 🔒 صلاحية صريحة — استثناء: جدول معلم محدد لمن يدير المعلمين/المقررات، أو المعلم لجدوله هو فقط
+    if not (has_permission(current_user, "view_schedule") or has_permission(current_user, "manage_schedule")):
+        own = False
+        if teacher_id and current_user.get("role") == "teacher":
+            udoc = await db.users.find_one({"_id": ObjectId(current_user["id"])}, {"teacher_record_id": 1})
+            own = teacher_id in {current_user["id"], str((udoc or {}).get("teacher_record_id") or "")}
+        staff = teacher_id and any(has_permission(current_user, p) for p in ("manage_teachers", "view_teachers", "manage_courses", "view_courses"))
+        if not (own or staff):
+            raise HTTPException(status_code=403, detail="ليس لديك صلاحية عرض الجدول الدراسي")
     query = {}
     if semester_id:
         query["semester_id"] = semester_id

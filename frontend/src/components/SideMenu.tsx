@@ -417,6 +417,8 @@ export const MenuButton: React.FC<MenuButtonProps> = ({ style }) => {
 export const BottomNavBar: React.FC = () => {
   const user = useAuthStore((state) => state.user);
   const [menuVisible, setMenuVisible] = useState(false);
+  const { hasAnyPermission } = useAuth();
+  const canSchedule = user?.role === 'teacher' || hasAnyPermission(['view_schedule', 'manage_schedule']);
 
   const handleGoBack = () => {
     if (Platform.OS === 'web') {
@@ -447,10 +449,12 @@ export const BottomNavBar: React.FC = () => {
           <Text style={[styles.navItemText, { color: '#1565c0' }]}>الرئيسية</Text>
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/schedule')}>
+        {canSchedule && (
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/schedule')} testID="bottom-nav-schedule">
           <Ionicons name="calendar" size={24} color="#666" />
           <Text style={styles.navItemText}>الجدول</Text>
         </TouchableOpacity>
+        )}
         
         <TouchableOpacity style={styles.navItem} onPress={() => setMenuVisible(true)}>
           <Ionicons name="menu" size={24} color="#666" />
