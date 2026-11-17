@@ -1,0 +1,39 @@
+{
+  "summary": "Tested the view_schedule permission-leak fix on both backend and frontend. Root cause is confirmed fixed: FULL_PERMISSION_MAPPING['manage_courses'] no longer grants manage_schedule, and only manage_schedule expands to view_schedule. /auth/me for Saeed (department_head) and Salim (dean) contains neither view_schedule nor manage_schedule. Backend guards behave as specified: weekly-schedule returns 403 for Saeed and Salim; all-schedule returns 403 for Salim and 200 for Saeed (via manage_attendance); admin gets 200 on both; a teacher gets 200 for their own teacher_id, 403 without teacher_id, and 200 on all-schedule; Saeed's teacher_id lookup is allowed through his course/teacher permissions. Granting and then revoking view_schedule on the role رئيس قسم works end to end (backend and UI), and the role was restored to its exact original permissions. Frontend: for Salim and Saeed the side menu hides الجدول الدراسي, الجدول الأسبوعي and إزاحة اليوم; the dash-kpi-today card does not navigate; /schedule and /weekly-schedule redirect to /no-permission with the right reason. Admin can see and open both pages. /manage-attendance loads for Saeed, and the weekly report modal in /teacher-courses loads for Saeed (weekly-schedule?teacher_id returns 200). The manage-roles audit for رئيس قسم shows menu-schedule and menu-weekly-schedule as غير ممنوحة. One new leak was found: GET /api/weekly-schedule/export-visual/{fmt} has no view_schedule guard.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/weekly-schedule/export-visual/{fmt}", "issue": "Permission bypass. Salim (no view_schedule or manage_schedule) gets 200 and a ~10KB Excel of the whole weekly schedule without any teacher_id. The full schedule can be exported even though GET /api/weekly-schedule correctly returns 403. Apply the same guard as get_weekly_schedule (view_schedule or manage_schedule, with the own-teacher and staff+teacher_id exceptions).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/weekly-schedule/drafts", "issue": "Returns 200 with the draft list (names and notes) to Salim, who has no schedule permissions. It should require manage_schedule (or at least view_schedule)."},
+      {"endpoint": "GET /api/schedule-settings, GET /api/lectures/today", "issue": "Return 200 to Salim without view_schedule. Probably intended (dashboard and settings use them), but under the user's 'strict explicit permissions' requirement these should be reviewed."},
+      {"endpoint": "GET /api/lectures/{lecture_id}", "issue": "An invalid ObjectId (e.g. /api/lectures/month) causes a 500 bson InvalidId error. It should return 400 or 404."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/weekly-schedule (view-only user)", "issues": ["A user with only view_schedule still sees the management tabs (الفترات / القاعات / تفضيلات المعلمين). The page has only a canView guard and no canManage gating. Backend writes are guarded by can_manage_schedule, so this is UX only."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_schedule_permission_leak.py", "/app/backend/tests/ui195_role_toggle.py", "/app/test_reports/pytest/pytest_iter195.xml"],
+  "action_items": [
+    "Add the view_schedule/manage_schedule guard (same exceptions as GET /weekly-schedule) to GET /api/weekly-schedule/export-visual/{fmt}. HIGH: it is the remaining data leak.",
+    "Guard GET /api/weekly-schedule/drafts with manage_schedule.",
+    "Optional: hide the weekly-schedule management tabs for users without manage_schedule.",
+    "Optional: return 400/404 instead of 500 for an invalid ObjectId in /api/lectures/{id}."
+  ],
+  "critical_code_review_comments": [
+    "BottomNavBar in SideMenu.tsx is unused anywhere (dead code), so the canSchedule check on bottom-nav-schedule has no visible effect. The real bottom bar (الرئيسية/الإعدادات/المقررات/حسابي) has no schedule button.",
+    "frontend weekly-schedule.tsx guard has no teacher exception while schedule.tsx does. This is consistent with the backend (a teacher without teacher_id gets 403), but teachers are blocked from web login anyway.",
+    "The staff exception in GET /weekly-schedule (teacher_id + view_courses/view_teachers) lets anyone with view_courses read any teacher's schedule by id. This is by design for /teacher-courses, but should be documented."
+  ],
+  "updated_files": ["/app/backend/tests/test_schedule_permission_leak.py", "/app/backend/tests/ui195_role_toggle.py"],
+  "success_rate": {"backend": "100% of requested checks (10/10 pytest); 1 additional leak found outside the stated scope", "frontend": "100% of requested flows"},
+  "seed_data_creation": "None. The role رئيس قسم (698c93119a944c07ac7f80c3) was temporarily given view_schedule and then restored to the exact original permission list (verified equal).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest tests/test_schedule_permission_leak.py (-p no:xdist -o addopts=''). Teachers (222222) cannot log into the web (backend returns 403 by design), so test teacher paths via the API. /teacher-courses requires ?teacherId=. The dash-kpi-today card is on the 'الأداء الأكاديمي' dashboard tab. Use ui195_role_toggle.py grant/revert for UI grant tests (it stores the original permissions in /tmp/role195_orig.json).",
+  "rca of the issue": "The leak came from implicit expansion: manage_courses -> manage_schedule -> view_schedule in FULL_PERMISSION_MAPPING, so any role with manage_courses (department_head, dean) silently got schedule access. shift_day was never in that chain, which is why it stayed hidden. The fix removes manage_schedule from manage_courses' expansion and adds explicit backend guards. Residual: export-visual was not guarded."
+}

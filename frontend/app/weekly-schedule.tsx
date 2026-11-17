@@ -68,6 +68,7 @@ function TeacherSearchBox({ teachers, selectedId, onSelect, placeholder }: { tea
 export default function WeeklySchedulePage() {
   const { user, hasAnyPermission } = useAuth();
   const canViewSchedule = hasAnyPermission(['view_schedule', 'manage_schedule']);
+  const canManageSchedule = hasAnyPermission(['manage_schedule']);
   useEffect(() => {
     if (user && !canViewSchedule) router.replace({ pathname: '/no-permission', params: { reason: 'ليس لديك صلاحية عرض الجدول الأسبوعي' } } as any);
   }, [user, canViewSchedule]);
@@ -828,7 +829,7 @@ export default function WeeklySchedulePage() {
 
       {/* Tabs - underline style, compact */}
       <View style={st.tabsBar}>
-        {TABS.map(t => (
+        {TABS.filter(t => t.key === 'schedule' || canManageSchedule).map(t => (
           <TouchableOpacity key={t.key} style={[st.tab, activeTab === t.key && st.tabActive]} onPress={() => setActiveTab(t.key as any)}>
             <Ionicons name={t.icon as any} size={13} color={activeTab === t.key ? '#1565c0' : '#5b6678'} />
             <Text style={[st.tabText, activeTab === t.key && st.tabTextActive]}>{t.label}</Text>

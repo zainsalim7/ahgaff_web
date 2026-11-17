@@ -8990,6 +8990,8 @@ async def get_course_lectures(
     current_user: dict = Depends(get_current_user)
 ):
     """الحصول على محاضرات مقرر مع تقسيم صفحات"""
+    if not ObjectId.is_valid(course_id):
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")

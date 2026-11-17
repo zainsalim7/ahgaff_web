@@ -19,13 +19,23 @@ router = APIRouter(tags=["الجدول الأسبوعي"])
 SCHEDULE_ROLES = {"admin", "dean", "department_head", "registrar"}
 
 def can_manage_schedule(user: dict) -> bool:
-    if user.get("role") in SCHEDULE_ROLES:
-        return True
-    if has_permission(user, Permission.MANAGE_SETTINGS):
-        return True
-    if has_permission(user, Permission.MANAGE_COURSES):
-        return True
-    return False
+    """🔒 صلاحية صريحة فقط: إدارة الجدول (المدير العام يملك كل الصلاحيات)."""
+    return has_permission(user, Permission.MANAGE_SCHEDULE)
+
+
+async def assert_view_schedule(db, user: dict, teacher_id: Optional[str] = None, also: tuple = ()):
+    """🔒 عرض الجدول يتطلب view_schedule/manage_schedule صراحةً.
+    استثناءات مقيّدة: المعلم لجدوله هو فقط، أو جدول معلم محدد لمن يدير المعلمين/المقررات."""
+    if any(has_permission(user, p) for p in ("view_schedule", "manage_schedule") + tuple(also)):
+        return
+    if teacher_id:
+        if user.get("role") == "teacher":
+            udoc = await db.users.find_one({"_id": ObjectId(user["id"])}, {"teacher_record_id": 1})
+            if teacher_id in {user["id"], str((udoc or {}).get("teacher_record_id") or "")}:
+                return
+        if any(has_permission(user, p) for p in ("manage_teachers", "view_teachers", "manage_courses", "view_courses")):
+            return
+    raise HTTPException(status_code=403, detail="ليس لديك صلاحية عرض الجدول الدراسي")
 
 
 def _user_faculty_scope(user: dict):
@@ -863,6 +873,7 @@ async def get_schedule_sections(
     current_user: dict = Depends(get_current_user),
 ):
     """🔤 الشعب المتاحة في جدول قسم/مستوى (من الخانات + روابط المقررات المشتركة)"""
+    await assert_view_schedule(get_db(), current_user, None)
     db = get_db()
     q: dict = {"department_id": department_id}
     if level:
@@ -902,15 +913,7 @@ async def get_weekly_schedule(
     if current_user.get("advanced_access_real_enforcement"):
         from services.advanced_access_service import real_enforce_guard
         await real_enforce_guard(db, current_user, "schedule_weekly_schedule_get_weekly_schedule", department_id, faculty_id)
-    # 🔒 صلاحية صريحة — استثناء: جدول معلم محدد لمن يدير المعلمين/المقررات، أو المعلم لجدوله هو فقط
-    if not (has_permission(current_user, "view_schedule") or has_permission(current_user, "manage_schedule")):
-        own = False
-        if teacher_id and current_user.get("role") == "teacher":
-            udoc = await db.users.find_one({"_id": ObjectId(current_user["id"])}, {"teacher_record_id": 1})
-            own = teacher_id in {current_user["id"], str((udoc or {}).get("teacher_record_id") or "")}
-        staff = teacher_id and any(has_permission(current_user, p) for p in ("manage_teachers", "view_teachers", "manage_courses", "view_courses"))
-        if not (own or staff):
-            raise HTTPException(status_code=403, detail="ليس لديك صلاحية عرض الجدول الدراسي")
+    await assert_view_schedule(db, current_user, teacher_id)
     query = {}
     if semester_id:
         query["semester_id"] = semester_id
@@ -1109,6 +1112,7 @@ async def get_schedule_conflicts(
     يُرجع قائمة بكل التعارضات: شعبة، معلم، قاعة.
     كل تعارض يحتوي على IDs الـ slots المتعارضة + التفاصيل.
     """
+    await assert_view_schedule(get_db(), current_user, teacher_id)
     db = get_db()
     query = {}
     if semester_id:
@@ -2968,6 +2972,7 @@ async def export_visual_pdf(
     current_user: dict = Depends(get_current_user),
 ):
     """تصدير PDF بتصميم بصري احترافي حسب الفلاتر"""
+    await assert_view_schedule(get_db(), current_user, teacher_id)
     try:
         from reportlab.lib.pagesizes import landscape, A4
         from reportlab.lib import colors
@@ -3273,6 +3278,7 @@ async def export_visual_excel(
     current_user: dict = Depends(get_current_user),
 ):
     """تصدير Excel بنفس فلاتر PDF"""
+    await assert_view_schedule(get_db(), current_user, teacher_id)
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -3511,6 +3517,7 @@ async def rooms_availability(
     - القاعة كيان فيزيائي: يُفحص إشغالها عبر كل الكليات حتى مع فلتر الكلية
     - المحاضرة المشتركة تظهر بكل شعبها
     """
+    await assert_view_schedule(get_db(), current_user, None, also=('view_reports',))
     if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
@@ -3667,6 +3674,7 @@ async def teachers_availability(
     - مع day + slot: يرجع قائمة الأساتذة الفارغين والمشغولين + ما إذا كان الوقت ضمن تفضيلاتهم
     - بدون فلتر: heatmap كامل
     """
+    await assert_view_schedule(get_db(), current_user, None, also=('view_reports',))
     if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
@@ -5321,6 +5329,7 @@ async def get_master_view(
     current_user: dict = Depends(get_current_user),
 ):
     """العرض الشامل: كل المستويات والشعب × الأيام والفترات + المقررات غير المدرجة"""
+    await assert_view_schedule(get_db(), current_user, None)
     db = get_db()
     result = await _build_master_data(db, faculty_id, department_id)
     result["can_manage"] = can_manage_schedule(current_user)
@@ -5800,6 +5809,7 @@ async def export_master_pdf(
     current_user: dict = Depends(get_current_user),
 ):
     """تصدير PDF ملوّن للعرض الشامل: الشعب صفوفاً × (الأيام × الفترات) أعمدة"""
+    await assert_view_schedule(get_db(), current_user, None)
     try:
         from reportlab.lib.pagesizes import landscape, A3
         from reportlab.lib import colors
@@ -5996,6 +6006,7 @@ async def export_master_excel(
     current_user: dict = Depends(get_current_user),
 ):
     """تصدير Excel ملوّن للعرض الشامل"""
+    await assert_view_schedule(get_db(), current_user, None)
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -6153,6 +6164,7 @@ async def get_free_rooms_for_slot(
     current_user: dict = Depends(get_current_user),
 ):
     """قاعات الكلية مع حالة انشغالها في (يوم، فترة) محددة — الانشغال يُفحص عالمياً عبر كل الجداول وبالوقت الفعلي"""
+    await assert_view_schedule(get_db(), current_user, None)
     db = get_db()
     rooms = await db.rooms.find({"faculty_id": faculty_id, "is_active": True}).to_list(300)
     slot_times = await _faculty_slot_times(db, faculty_id)
@@ -6196,6 +6208,7 @@ async def get_valid_slots(
     current_user: dict = Depends(get_current_user),
 ):
     """حساب الخلايا (يوم×فترة) الصالحة لنقل/إدراج محاضرة دون تعارضات — لإضاءتها بصرياً"""
+    await assert_view_schedule(get_db(), current_user, teacher_id)
     db = get_db()
 
     settings = await db.schedule_settings.find_one({"_id": f"faculty_{faculty_id}"})
