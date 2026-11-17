@@ -1,0 +1,33 @@
+{
+  "summary": "Nationality unification (dropdown everywhere + backend validation/normalization + Excel import nationality_msg). Backend: 11/11 pytest pass. Frontend: all 5 flows verified via Playwright (admin). No functional defects found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "student-details statement modal", "issues": ["Empty option label is hard-coded '— من بيانات الطالب (يمني) —' even when the student has a different nationality; cosmetic/misleading only when value is empty"]}
+    ]
+  },
+  "verified": [
+    "POST /api/students unknown nationality -> 400 'اختر الجنسية من القائمة المعتمدة'; variants يمنية/إندونيسية/يمنى/اليمني normalized; empty allowed",
+    "PUT /api/students/{id}: unknown new value -> 400; مصرية -> مصري; unchanged legacy unknown ('قمري') allowed and kept; unchanged legacy variant ('إندونيسية') normalized to إندونيسي",
+    "POST /api/import/students: nationality_msg lists 'إندونيسية ← إندونيسي (1)، يمنى ← يمني (1)' + '⚠ جنسيات غير موجودة ...: مريخي (1)'; unknown stored as-is; exact approved values not listed; no nationality column -> empty msg",
+    "/students add modal: select add-student-nationality-input with 40 options (empty + 39 approved); created student saved with 'سعودي'",
+    "/students edit modal (row-actions -> تعديل): edit-nationality-input shows 'إندونيسية (غير معتمدة — اختر بديلاً)' preselected; changing to إندونيسي saved (verified in DB)",
+    "/student-details: statement-nationality-input is a select with legacy option preselected; edit modal dropdown change to ماليزي saved and shown in header",
+    "/course-students -> إضافة طلاب -> إنشاء طالب جديد: same dropdown (40 options), no free-text nationality input",
+    "Students page Excel import UI alert shows nationality_msg (corrected + unknown lines)"
+  ],
+  "test_report_links": ["/app/backend/tests/test_nationality_dropdown_iter193.py", "/app/test_reports/pytest/iter193.xml"],
+  "action_items": ["Optional: make statement modal empty label reflect real default instead of hard-coded '(يمني)'"],
+  "critical_code_review_comments": [
+    "_nat_key strips leading 'ال' and trailing ة/ية — fine for the current list, but if an admin adds an approved item that itself ends with ة/ه (e.g. a feminine form) two items could collide on the same key; consider documenting that the list must be masculine forms",
+    "import_students defines async _import_nat inside the row loop and re-reads the nationality list from DB per row (normalize_nationality -> _nationality_list) — N DB queries for N rows; cache the list once per import"
+  ],
+  "updated_files": ["/app/backend/tests/test_nationality_dropdown_iter193.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_N* students (pytest) and TEST_UI9301, TEST_UIM1, TEST_UIM2 (UI) in dept 'قسم اختبار 180155'; all deleted. Students 698ef706d803b27aab012065/066 nationality modified during UI test and restored to 'إندونيسية'. Final DB state: faculty ...a6 72 x 'إندونيسية', faculty ...a4 20 x 'يمني' (same as before).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login by filling placeholders and clicking 'تسجيل الدخول' then window.location to target page. RN-web Pickers render as <select data-testid=...>. Students row edit: [data-testid=row-actions-<id>] then text 'تعديل', save text 'حفظ التغييرات'. Import modal: 2 visible selects (dept, level) then file chooser via 'اختيار ملف Excel والاستيراد'; result shown via window.alert dialog."
+}

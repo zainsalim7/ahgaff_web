@@ -161,3 +161,5 @@
 - زر «تعيين الجنسية» في شريط التحديد بصفحة الطلاب (اختيار من القائمة).
 - APIs: GET/PUT /api/admin/students/nationalities, GET /api/admin/students/nationality-stats, POST /api/admin/students/bulk-set-nationality (صلاحية students_bulk_ops أو manage_students + نطاق المستخدم).
 - Backlog: تحويل حقل الجنسية في إضافة/تعديل طالب إلى قائمة منسدلة من نفس القائمة.
+- 2026-11-17: الجنسية أصبحت قائمة منسدلة (NationalityPicker) في: إضافة طالب (الطلاب + طلاب المقرر)، تعديل طالب (الطلاب + تفاصيل الطالب)، نافذة الإفادة. الخادم يوحّد الصيغ (_nat_key: ال/ة/ى/الهمزات) ويرفض غير المعتمد في الإضافة/التعديل؛ استيراد Excel يصحّح المعروف ويُرجع nationality_msg بغير المعروف.
+- Backlog: استيراد طلاب من صفحة المقرر (/students/import/{course_id}) لا يقرأ عمود الجنسية.

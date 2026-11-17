@@ -2437,7 +2437,7 @@ export default function StudentDetailsScreen() {
               <>
                 <Text style={{ fontSize: 12, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 4 }}>الجنسية (تُجلب تلقائياً من بيانات الطالب — يمكن تعديلها)</Text>
                 <NationalityPicker value={statementNationality} onChange={setStatementNationality}
-                  testID="statement-nationality-input" emptyLabel="— من بيانات الطالب (يمني) —" style={{ marginBottom: 10 }} />
+                  testID="statement-nationality-input" emptyLabel={`— من بيانات الطالب (${(student as any)?.nationality || "يمني"}) —`} style={{ marginBottom: 10 }} />
               </>
             )}
             <Text style={{ fontSize: 12, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 4 }}>الغرض (اختياري)</Text>
