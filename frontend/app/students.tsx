@@ -30,6 +30,7 @@ import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { formatGregorianDate } from '../src/utils/dateUtils';
 import { StudentEditFields, StudentEditValues, emptyStudentEdit, studentToEditValues } from '../src/components/StudentEditFields';
 import { AssignGroupModal } from '../src/components/AssignGroupModal';
+import { BulkNationalityModal } from '../src/components/BulkNationalityModal';
 
 const LEVELS = ['1', '2', '3', '4', '5'];
 
@@ -123,6 +124,7 @@ export default function StudentsScreen() {
   // تحديد متعدد للحذف
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showNatModal, setShowNatModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   
   // عرض تفاصيل الطالب
@@ -1720,6 +1722,10 @@ export default function StudentsScreen() {
                   <Ionicons name="male" size={14} color="#fff" />
                   <Text style={styles.selActionText}>تعيين: ذكر</Text>
                 </TouchableOpacity>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#2e7d32' }]} onPress={() => setShowNatModal(true)} testID="bulk-nationality-btn">
+                  <Ionicons name="earth" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>تعيين الجنسية</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#6a1b9a' }]} onPress={() => setShowAssignGroupModal(true)} testID="bulk-assign-group-btn">
                   <Ionicons name="people" size={14} color="#fff" />
                   <Text style={styles.selActionText}>تعيين مجموعة</Text>
@@ -2304,6 +2310,13 @@ export default function StudentsScreen() {
         </View>
       </Modal>
       )}
+
+      <BulkNationalityModal
+        visible={showNatModal}
+        studentIds={Array.from(selectedIds)}
+        onClose={() => setShowNatModal(false)}
+        onDone={() => { setSelectedIds(new Set()); fetchData(); }}
+      />
 
       <BulkPaymentModal
         visible={showBulkPay}

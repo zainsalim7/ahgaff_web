@@ -13,7 +13,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
-from .deps import get_current_user, get_db, has_permission, log_activity, export_headers, export_filename
+from .deps import get_current_user, get_db, has_permission, log_activity, export_headers, export_filename, get_scope_filter
 from models.permissions import UserRole
 
 router = APIRouter(tags=["أدوات الأدمن"])
@@ -101,6 +101,94 @@ async def bulk_set_nationality(payload: dict, current_user: dict = Depends(get_c
         counts[nat] = counts.get(nat, 0) + 1
 
     return {"message": "تمت التعبئة الجماعية للجنسيات", "updated": sum(counts.values()), "by_nationality": counts}
+
+
+# ==================== 🌍 قائمة الجنسيات المعتمدة + التعيين الجماعي ====================
+DEFAULT_NATIONALITIES = ["يمني", "سعودي", "عماني", "إماراتي", "كويتي", "قطري", "بحريني", "مصري", "سوداني", "صومالي",
+                         "جيبوتي", "إرتيري", "إثيوبي", "سوري", "أردني", "فلسطيني", "عراقي", "لبناني", "ليبي", "تونسي",
+                         "جزائري", "مغربي", "موريتاني", "إندونيسي", "ماليزي", "تايلندي", "فلبيني", "باكستاني", "هندي",
+                         "بنغلاديشي", "أفغاني", "تركي", "نيجيري", "تشادي", "كيني", "تنزاني", "روسي", "أمريكي", "بريطاني"]
+
+
+def _require_bulk(user: dict):
+    if not (has_permission(user, "students_bulk_ops") or has_permission(user, "manage_students")):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+
+async def _nationality_list(db) -> list:
+    doc = await db.settings.find_one({"type": "student_nationalities"})
+    return (doc or {}).get("items") or DEFAULT_NATIONALITIES
+
+
+async def _scope_query(db, faculty_id: Optional[str], department_id: Optional[str]) -> dict:
+    if department_id:
+        return {"department_id": department_id}
+    if faculty_id:
+        dept_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+        return {"$or": [{"faculty_id": faculty_id}, {"department_id": {"$in": dept_ids}}]}
+    return {}
+
+
+@router.get("/admin/students/nationalities")
+async def get_nationalities(current_user: dict = Depends(get_current_user)):
+    return {"items": await _nationality_list(get_db())}
+
+
+@router.put("/admin/students/nationalities")
+async def save_nationalities(payload: dict, current_user: dict = Depends(get_current_user)):
+    if not has_permission(current_user, "manage_settings"):
+        raise HTTPException(status_code=403, detail="تعديل القائمة يتطلب صلاحية إدارة الإعدادات")
+    items, seen = [], set()
+    for n in payload.get("items") or []:
+        n = str(n).strip()
+        if n and n not in seen:
+            seen.add(n)
+            items.append(n)
+    if not items:
+        raise HTTPException(status_code=400, detail="القائمة لا يمكن أن تكون فارغة")
+    await get_db().settings.update_one({"type": "student_nationalities"}, {"$set": {"items": items}}, upsert=True)
+    return {"items": items, "message": "تم حفظ قائمة الجنسيات"}
+
+
+@router.get("/admin/students/nationality-stats")
+async def nationality_stats(faculty_id: Optional[str] = None, department_id: Optional[str] = None,
+                            current_user: dict = Depends(get_current_user)):
+    _require_bulk(current_user)
+    db = get_db()
+    q = {"$and": [await _scope_query(db, faculty_id, department_id), await get_scope_filter(current_user, "students")]}
+    counts: dict = {}
+    async for s in db.students.find(q, {"nationality": 1}):
+        n = (s.get("nationality") or "").strip()
+        counts[n] = counts.get(n, 0) + 1
+    allowed = set(await _nationality_list(db))
+    stats = [{"nationality": k, "count": v, "in_list": k in allowed} for k, v in sorted(counts.items(), key=lambda x: -x[1])]
+    return {"total": sum(counts.values()), "stats": stats}
+
+
+@router.post("/admin/students/bulk-set-nationality")
+async def bulk_set_student_nationality(payload: dict, current_user: dict = Depends(get_current_user)):
+    """body: {nationality, student_ids? | department_id? | faculty_id?, from_nationality?}"""
+    _require_bulk(current_user)
+    db = get_db()
+    nat = (payload.get("nationality") or "").strip()
+    if nat not in await _nationality_list(db):
+        raise HTTPException(status_code=400, detail="اختر جنسية من القائمة المعتمدة")
+    ids = payload.get("student_ids") or []
+    if ids:
+        q = {"_id": {"$in": [ObjectId(i) for i in ids if ObjectId.is_valid(i)]}}
+    elif payload.get("department_id") or payload.get("faculty_id"):
+        q = await _scope_query(db, payload.get("faculty_id"), payload.get("department_id"))
+    else:
+        raise HTTPException(status_code=400, detail="حدد طلاباً أو قسماً أو كلية")
+    if "from_nationality" in payload and payload["from_nationality"] is not None:
+        src = str(payload["from_nationality"]).strip()
+        cond = {"$or": [{"nationality": {"$exists": False}}, {"nationality": None}, {"nationality": ""}]} if not src else {"nationality": src}
+        q = {"$and": [q, cond]}
+    q = {"$and": [q, await get_scope_filter(current_user, "students")]}
+    r = await db.students.update_many(q, {"$set": {"nationality": nat}})
+    await log_activity(current_user, "students_bulk_set_nationality", "students", "", f"تعيين الجنسية «{nat}» لـ {r.matched_count} طالب",
+                       {"nationality": nat, "faculty_id": payload.get("faculty_id"), "department_id": payload.get("department_id"), "count": r.matched_count})
+    return {"updated": r.matched_count, "message": f"تم تعيين الجنسية «{nat}» لـ {r.matched_count} طالب"}
 
 
 # ==================== Lecture Semester Backfill ====================
