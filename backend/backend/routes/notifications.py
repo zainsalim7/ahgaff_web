@@ -502,9 +502,11 @@ async def cancel_scheduled_notification(sid: str, current_user: dict = Depends(g
 async def run_due_scheduled_notifications(db) -> int:
     sent = 0
     now_iso = datetime.now(timezone.utc).isoformat()
+    stale = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    await db.scheduled_notifications.update_many({"status": "processing", "processing_at": {"$lt": stale}}, {"$set": {"status": "pending"}})
     while True:
         doc = await db.scheduled_notifications.find_one_and_update(
-            {"status": "pending", "scheduled_at": {"$lte": now_iso}}, {"$set": {"status": "processing"}})
+            {"status": "pending", "scheduled_at": {"$lte": now_iso}}, {"$set": {"status": "processing", "processing_at": now_iso}})
         if not doc:
             return sent
         try:
@@ -564,7 +566,9 @@ async def delete_notification_template(tid: str, current_user: dict = Depends(ge
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
     if not ObjectId.is_valid(tid):
         raise HTTPException(status_code=404, detail="غير موجود")
-    await get_db().notification_templates.delete_one({"_id": ObjectId(tid)})
+    r = await get_db().notification_templates.delete_one({"_id": ObjectId(tid)})
+    if not r.deleted_count:
+        raise HTTPException(status_code=404, detail="القالب غير موجود")
     return {"message": "تم حذف القالب"}
 
 

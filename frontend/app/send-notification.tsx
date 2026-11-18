@@ -524,7 +524,7 @@ export default function SendNotification() {
           <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: previewCount ? '#e8f5e9' : '#fff3e0', borderRadius: 10, padding: 10, marginBottom: 8 }} testID="notification-preview">
             <Ionicons name={previewCount ? 'people' : 'warning'} size={18} color={previewCount ? '#2e7d32' : '#e65100'} />
             <Text style={{ fontSize: 13, fontWeight: '700', color: previewCount ? '#2e7d32' : '#e65100', textAlign: 'right', flex: 1 }}>
-              {previewCount ? `سيصل إلى ${previewCount} مستخدم — ${previewDesc}` : 'لا يوجد مستلمون بهذا الاختيار'}
+              {previewCount ? `سيصل إلى ${previewCount} ${previewCount >= 3 && previewCount <= 10 ? 'مستخدمين' : 'مستخدم'} — ${previewDesc}` : 'لا يوجد مستلمون بهذا الاختيار'}
             </Text>
           </View>
         )}

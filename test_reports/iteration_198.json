@@ -1,0 +1,33 @@
+{
+  "summary": "Iter198: Tested the new /send-notification features on backend and frontend: level/section audience, templates, scheduling, and the cron runner. Backend: 13/13 pytest pass. Level preview for dept 698e5009 level 1: all=22, teachers=2, students=20. Section 'أ' at level 1: all=3, teachers=2, students=1. A faculty-only level target with teachers=2. Regression counts unchanged: faculty all=30, role teacher in faculty=10. Templates: create, then the same name upserts to a single record with the updated title/body, then delete; blank name or title returns 400; no token returns 401/403. Scheduling: a past time returns 400 'وقت الجدولة يجب أن يكون في المستقبل' and a bad format returns 400. A Yemen-local time is stored correctly in UTC (08:30 is saved as 05:30Z). The list shows status pending with users_estimate. Cancelling works and a second cancel returns 400. Cron run: no Bearer or a wrong Bearer returns 401; the correct secret returns {accepted:true}. After the run, the due item became sent with users_sent=2, and 2 db.notifications + 1 notification_history were created. The cancelled item was not sent. Frontend (mobile 390px): audience-card shows for level and section, and the preview text matches the API. Templates: save-template-toggle shows the name input; saving with an empty title/body gives 'اكتب العنوان والنص أولاً'; the save succeeded, the chip appeared, applying it filled the title and body, and delete removed it after confirm. Schedule: schedule-later shows the datetime-local input and the button reads 'جدولة الإشعار'. An empty date gives 'اختر تاريخ ووقت الإرسال' and a past date shows the backend 400 message. Scheduling succeeded: the button reset to 'إرسال الإشعار' and the item appears in scheduled-list as 'بانتظار الإرسال'; cancelling turned it to 'أُلغي'. Immediate send to level teachers reached 2 users. All test data was cleaned up.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "run_due_scheduled_notifications", "issue": "An item is set to 'processing' before delivery. If the process dies mid-delivery it stays 'processing' forever, with no recovery or timeout. Optional: re-queue items stuck in processing for more than ~30 min."},
+      {"endpoint": "DELETE /api/notifications/templates/{id}", "issue": "Returns 200 even when the template does not exist. Could return 404 when deleted_count == 0."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "send-notification", "issues": ["The web datetime-local input has no min attribute, so past dates can be picked; the backend rejects them correctly.", "Template delete errors are swallowed silently (.catch(() => {})).", "The preview says 'سيصل إلى 3 مستخدم'. Minor Arabic number agreement: 'مستخدمين' would read better for 3-10."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_notif_sched_tpl_iter198.py", "/app/test_reports/pytest/pytest_iter198.xml"],
+  "action_items": [
+    "Optional: recover scheduled items stuck in 'processing'",
+    "Optional: add min to the datetime-local input and show an error on template delete failure"
+  ],
+  "critical_code_review_comments": [
+    "The scheduled list (GET /notifications/scheduled) is global: any user with send_notifications sees and can cancel everyone's scheduled items. This is acceptable if intended.",
+    "The sender's permissions are not re-checked at cron delivery time. If a sender loses send_notifications after scheduling, the notification is still sent.",
+    "Due-time matching uses a lexicographic comparison of ISO strings. This works because both sides are UTC isoformat with +00:00. Keep that invariant, or store a datetime instead."
+  ],
+  "updated_files": ["/app/backend/tests/test_notif_sched_tpl_iter198.py"],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100%"},
+  "seed_data_creation": "None persistent. TEST_IT198_* notifications, history, scheduled items and templates were created and then deleted. Verified 0 remaining.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login admin/admin123 by clicking 'تسجيل الدخول'. Run: cd /app/backend && pytest tests/test_notif_sched_tpl_iter198.py -p no:xdist. It uses Mongo directly to move scheduled_at into the past, and teardown deletes TEST_IT198_* data. CourseFilter testIDs: course-filter-faculty/department and course-filter-{kind}-option-{id}."
+}

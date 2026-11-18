@@ -25,7 +25,7 @@ export const TemplatesBar = ({ title, body, onApply }: { title: string; body: st
   };
   const remove = async (t: Tpl) => {
     if (!(await ask(`حذف القالب «${t.name}»؟`))) return;
-    await api.delete(`/notifications/templates/${t.id}`).catch(() => {}); load();
+    await api.delete(`/notifications/templates/${t.id}`).catch((e: any) => notify(e?.response?.data?.detail || 'فشل حذف القالب')); load();
   };
 
   return (
@@ -80,7 +80,7 @@ export const SchedulePicker = ({ value, onChange }: { value: string | null; onCh
     {value !== null && (
       <View style={{ marginTop: 8 }}>
         {Platform.OS === 'web' ? (
-          <input type="datetime-local" value={value} onChange={(e) => onChange(e.target.value)} data-testid="schedule-datetime-input"
+          <input type="datetime-local" value={value} min={new Date(Date.now() + 3 * 3600e3 + 120e3).toISOString().slice(0, 16)} onChange={(e) => onChange(e.target.value)} data-testid="schedule-datetime-input"
             style={{ border: '1px solid #dde3ec', borderRadius: 8, padding: 9, fontSize: 14, direction: 'ltr', fontFamily: 'inherit' }} />
         ) : (
           <TextInput value={value} onChangeText={onChange} placeholder="2026-12-01T08:30" style={s.input} testID="schedule-datetime-input" />
