@@ -1,7 +1,9 @@
 """
 Notifications Routes - مسارات الإشعارات
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
+import os
+import hmac
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
@@ -48,7 +50,8 @@ class SendNotificationRequest(BaseModel):
     department_id: Optional[str] = None
     level: Optional[int] = None
     section: Optional[str] = None
-    audience: Optional[str] = None  # كلية/قسم: all | students | teachers
+    audience: Optional[str] = None  # كلية/قسم/مستوى/شعبة: all | students | teachers
+    scheduled_at: Optional[str] = None  # ISO — بدون منطقة زمنية = توقيت اليمن
 
 
 
@@ -283,6 +286,24 @@ async def _teacher_users(db, faculty_id=None, department_id=None) -> list:
     return list(ids)
 
 
+async def _course_teacher_users(db, faculty_id=None, department_id=None, level=None, section=None) -> list:
+    """معلمو المقررات النشطة لهذا المستوى/الشعبة (ضمن القسم أو الكلية)"""
+    from bson import ObjectId
+    q = {"is_active": {"$ne": False}}
+    if department_id:
+        q["department_id"] = department_id
+    elif faculty_id:
+        depts, _ = await _scope_names(db, faculty_id, None)
+        q["department_id"] = {"$in": depts}
+    if level is not None:
+        q["level"] = int(level)
+    if section:
+        q["section"] = section
+    tids = {c["teacher_id"] async for c in db.courses.find(q, {"teacher_id": 1}) if c.get("teacher_id")}
+    oids = [ObjectId(x) for x in tids if ObjectId.is_valid(x)]
+    return list({str(t["user_id"]) async for t in db.teachers.find({"_id": {"$in": oids}}, {"user_id": 1}) if t.get("user_id")})
+
+
 async def _resolve_targets(db, request) -> tuple[list, str]:
     """🎯 مصدر موحّد لتحديد المستلمين (user_ids, وصف) — يُستخدم للإرسال والمعاينة"""
     from bson import ObjectId
@@ -330,7 +351,18 @@ async def _resolve_targets(db, request) -> tuple[list, str]:
         _, scope = await _scope_names(db, request.faculty_id if t == "faculty" else None, request.department_id)
         return list(dict.fromkeys(uids)), f"{scope} ({' + '.join(parts)})"
     if t in ("level", "section"):
-        return await _resolve_student_users(db, faculty_id=request.faculty_id, department_id=request.department_id, level=request.level, section=request.section)
+        aud = request.audience or "all"
+        uids, parts = [], []
+        s_ids, s_desc = await _resolve_student_users(db, faculty_id=request.faculty_id, department_id=request.department_id, level=request.level, section=request.section)
+        if aud in ("all", "students"):
+            uids += s_ids
+            parts.append(f"{len(s_ids)} طالب")
+        if aud in ("all", "teachers"):
+            t_ids = await _course_teacher_users(db, request.faculty_id, request.department_id, request.level, request.section if t == "section" else None)
+            uids += t_ids
+            parts.append(f"{len(t_ids)} معلم")
+        scope = s_desc.rsplit(" (", 1)[0]
+        return list(dict.fromkeys(uids)), f"{scope} ({' + '.join(parts)})"
     uids = [str(u["_id"]) async for u in db.users.find({}, {"_id": 1})]
     return uids, "الكل"
 
@@ -356,6 +388,30 @@ async def send_notification_api(
     if not check_notification_permission(current_user):
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية إرسال الإشعارات")
 
+    if request.scheduled_at:
+        when = _parse_schedule(request.scheduled_at)
+        if when <= datetime.now(timezone.utc) + timedelta(minutes=1):
+            raise HTTPException(status_code=400, detail="وقت الجدولة يجب أن يكون في المستقبل")
+        uids, desc = await _resolve_targets(db, request)
+        doc = {
+            "payload": request.dict(exclude={"scheduled_at"}),
+            "scheduled_at": when.isoformat(),
+            "status": "pending",
+            "target_desc": desc,
+            "users_estimate": len(uids),
+            "created_by": str(current_user["_id"]),
+            "created_by_name": current_user.get("full_name", current_user.get("username", "")),
+            "created_at": get_yemen_time().isoformat(),
+        }
+        r = await db.scheduled_notifications.insert_one(doc)
+        local = when.astimezone(YEMEN_TIMEZONE).strftime("%Y-%m-%d %H:%M")
+        return {"scheduled": True, "id": str(r.inserted_id), "message": f"تمت جدولة الإشعار إلى {desc} — {local} (توقيت اليمن)"}
+
+    return await _deliver(db, request, str(current_user["_id"]), current_user.get("full_name", current_user.get("username", "")))
+
+
+async def _deliver(db, request, sender_id: str, sender_name: str) -> dict:
+    from services.firebase_service import send_notification_to_many
     target_user_ids, target_desc = await _resolve_targets(db, request)
     query = {"user_id": {"$in": target_user_ids}}
 
@@ -384,8 +440,8 @@ async def send_notification_api(
     await db.notification_history.insert_one({
         "title": request.title,
         "body": request.body,
-        "sent_by": str(current_user["_id"]),
-        "sent_by_name": current_user.get("full_name", current_user.get("username", "")),
+        "sent_by": sender_id,
+        "sent_by_name": sender_name,
         "target_type": request.target_type,
         "target_role": request.target_role,
         "target_desc": target_desc,
@@ -402,6 +458,114 @@ async def send_notification_api(
         "users": len(target_user_ids),
         **result
     }
+
+
+def _parse_schedule(v: str) -> datetime:
+    try:
+        d = datetime.fromisoformat(v.strip().replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="صيغة وقت الجدولة غير صحيحة")
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=YEMEN_TIMEZONE)
+    return d.astimezone(timezone.utc)
+
+
+@router.get("/notifications/scheduled")
+async def list_scheduled_notifications(current_user: dict = Depends(get_current_user)):
+    if not check_notification_permission(current_user):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+    db = get_db()
+    out = []
+    async for d in db.scheduled_notifications.find({}).sort("scheduled_at", -1).limit(100):
+        out.append({
+            "id": str(d["_id"]), "title": d["payload"].get("title"), "body": d["payload"].get("body"),
+            "scheduled_at": d["scheduled_at"], "status": d.get("status"), "target_desc": d.get("target_desc"),
+            "users_estimate": d.get("users_estimate"), "users_sent": d.get("users_sent"),
+            "created_by_name": d.get("created_by_name"), "error": d.get("error"),
+        })
+    return out
+
+
+@router.delete("/notifications/scheduled/{sid}")
+async def cancel_scheduled_notification(sid: str, current_user: dict = Depends(get_current_user)):
+    from bson import ObjectId
+    if not check_notification_permission(current_user):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+    if not ObjectId.is_valid(sid):
+        raise HTTPException(status_code=404, detail="غير موجود")
+    r = await get_db().scheduled_notifications.update_one({"_id": ObjectId(sid), "status": "pending"}, {"$set": {"status": "cancelled"}})
+    if not r.modified_count:
+        raise HTTPException(status_code=400, detail="لا يمكن إلغاء هذا الإشعار (أُرسل أو أُلغي مسبقاً)")
+    return {"message": "تم إلغاء الإشعار المجدول"}
+
+
+async def run_due_scheduled_notifications(db) -> int:
+    sent = 0
+    now_iso = datetime.now(timezone.utc).isoformat()
+    while True:
+        doc = await db.scheduled_notifications.find_one_and_update(
+            {"status": "pending", "scheduled_at": {"$lte": now_iso}}, {"$set": {"status": "processing"}})
+        if not doc:
+            return sent
+        try:
+            res = await _deliver(db, SendNotificationRequest(**doc["payload"]), doc.get("created_by", ""), doc.get("created_by_name", ""))
+            await db.scheduled_notifications.update_one({"_id": doc["_id"]}, {"$set": {
+                "status": "sent", "sent_at": get_yemen_time().isoformat(), "users_sent": res.get("users", 0)}})
+            sent += 1
+        except Exception as e:
+            logger.exception("scheduled notification failed")
+            await db.scheduled_notifications.update_one({"_id": doc["_id"]}, {"$set": {"status": "failed", "error": str(e)[:300]}})
+
+
+@router.post("/notifications/scheduled/run")
+async def cron_run_scheduled_notifications(request: Request, background_tasks: BackgroundTasks):
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    secret = os.environ.get("WEBHOOK_CRON_SECRET")
+    auth = request.headers.get("authorization", "")
+    token = auth[7:] if auth.lower().startswith("bearer ") else None
+    if not secret or not token or not hmac.compare_digest(token, secret):
+        raise HTTPException(status_code=401, detail="غير مصرح")
+    background_tasks.add_task(run_due_scheduled_notifications, get_db())
+    return {"accepted": True}
+
+
+class NotificationTemplate(BaseModel):
+    name: str
+    title: str
+    body: str
+
+
+@router.get("/notifications/templates")
+async def list_notification_templates(current_user: dict = Depends(get_current_user)):
+    if not check_notification_permission(current_user):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+    return [{"id": str(t["_id"]), "name": t["name"], "title": t["title"], "body": t["body"], "created_by_name": t.get("created_by_name")}
+            async for t in get_db().notification_templates.find({}).sort("name", 1)]
+
+
+@router.post("/notifications/templates")
+async def create_notification_template(data: NotificationTemplate, current_user: dict = Depends(get_current_user)):
+    if not check_notification_permission(current_user):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+    name, title, body = data.name.strip(), data.title.strip(), data.body.strip()
+    if not name or not title or not body:
+        raise HTTPException(status_code=400, detail="الاسم والعنوان والنص مطلوبة")
+    db = get_db()
+    doc = {"title": title, "body": body, "updated_at": get_yemen_time().isoformat(),
+           "created_by_name": current_user.get("full_name", current_user.get("username", ""))}
+    await db.notification_templates.update_one({"name": name}, {"$set": doc, "$setOnInsert": {"name": name}}, upsert=True)
+    return {"message": f"تم حفظ القالب «{name}»"}
+
+
+@router.delete("/notifications/templates/{tid}")
+async def delete_notification_template(tid: str, current_user: dict = Depends(get_current_user)):
+    from bson import ObjectId
+    if not check_notification_permission(current_user):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+    if not ObjectId.is_valid(tid):
+        raise HTTPException(status_code=404, detail="غير موجود")
+    await get_db().notification_templates.delete_one({"_id": ObjectId(tid)})
+    return {"message": "تم حذف القالب"}
 
 
 @router.delete("/notifications/{notification_id}")

@@ -6,3 +6,10 @@ crons:
     endpoint: "{{BASE_URL}}/api/absence-reminders/run"
     method: POST
     enabled: true
+  - name: scheduled-notifs
+    description: "Sends notifications whose scheduled date and time has arrived (checked every 15 minutes)"
+    cron: "*/15 * * * *"
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    endpoint: "{{BASE_URL}}/api/notifications/scheduled/run"
+    method: POST
+    enabled: true

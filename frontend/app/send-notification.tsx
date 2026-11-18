@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import api, { facultiesAPI, departmentsAPI, coursesAPI } from '../src/services/api';
+import { TemplatesBar, SchedulePicker, ScheduledList } from '../src/components/NotificationExtras';
 import { CourseFilter } from '../src/components/CourseFilter';
 
 type TargetType = 'all' | 'role' | 'faculty' | 'department' | 'level' | 'section' | 'course' | 'teacher' | 'student';
@@ -34,6 +35,8 @@ export default function SendNotification() {
   const [roleScope, setRoleScope] = useState<'university' | 'faculty' | 'department'>('university');
   const [audience, setAudience] = useState<'all' | 'teachers' | 'students'>('all');
   const [previewDesc, setPreviewDesc] = useState('');
+  const [scheduleAt, setScheduleAt] = useState<string | null>(null);
+  const [schedRefresh, setSchedRefresh] = useState(0);
   const [sending, setSending] = useState(false);
 
   const canSend = user?.role === 'admin' ||
@@ -197,17 +200,20 @@ export default function SendNotification() {
       payload.faculty_id = selFaculty || undefined;
       payload.department_id = selDept || undefined;
       payload.level = selLevel ? parseInt(selLevel) : undefined;
+      payload.audience = audience;
     } else if (targetType === 'section') {
       payload.faculty_id = selFaculty || undefined;
       payload.department_id = selDept || undefined;
       payload.level = selLevel ? parseInt(selLevel) : undefined;
       payload.section = selSection;
+      payload.audience = audience;
     }
     return payload;
   };
 
   const validate = (): string | null => {
     if (!title.trim() || !body.trim()) return 'يرجى كتابة العنوان والرسالة';
+    if (scheduleAt !== null && !scheduleAt) return 'اختر تاريخ ووقت الإرسال';
     return targetError();
   };
 
@@ -234,7 +240,8 @@ export default function SendNotification() {
     }
     setSending(true);
     try {
-      const res = await api.post('/notifications/send', buildPayload());
+      const res = await api.post('/notifications/send', { ...buildPayload(), scheduled_at: scheduleAt || undefined });
+      if (res.data?.scheduled) { setScheduleAt(null); setSchedRefresh(x => x + 1); }
       const msg = res.data?.message || 'تم إرسال الإشعار بنجاح';
       const det = res.data?.users ? `\nعدد المستلمين: ${res.data.users}` : '';
       if (Platform.OS === 'web') {
@@ -350,7 +357,7 @@ export default function SendNotification() {
           </View>
         )}
 
-        {(targetType === 'faculty' || targetType === 'department') && (
+        {['faculty', 'department', 'level', 'section'].includes(targetType) && (
           <View style={styles.filterCard} testID="audience-card">
             <Text style={styles.fieldLabel}>المستلمون</Text>
             <View style={styles.pillsWrap}>
@@ -521,6 +528,7 @@ export default function SendNotification() {
             </Text>
           </View>
         )}
+        <TemplatesBar title={title} body={body} onApply={(t, b) => { setTitle(t); setBody(b); }} />
         <Text style={styles.label}>عنوان الإشعار</Text>
         <TextInput
           style={styles.input}
@@ -546,6 +554,8 @@ export default function SendNotification() {
         />
         <Text style={styles.charCount}>{body.length}/500</Text>
 
+        <SchedulePicker value={scheduleAt} onChange={setScheduleAt} />
+
         {/* Send button */}
         <TouchableOpacity
           style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
@@ -560,12 +570,13 @@ export default function SendNotification() {
             </>
           ) : (
             <>
-              <Ionicons name="send" size={18} color="#fff" />
-              <Text style={styles.sendBtnText}>إرسال الإشعار</Text>
+              <Ionicons name={scheduleAt !== null ? 'time' : 'send'} size={18} color="#fff" />
+              <Text style={styles.sendBtnText}>{scheduleAt !== null ? 'جدولة الإشعار' : 'إرسال الإشعار'}</Text>
             </>
           )}
         </TouchableOpacity>
 
+        <ScheduledList refreshKey={schedRefresh} />
         <View style={{ height: 30 }} />
       </ScrollView>
 
