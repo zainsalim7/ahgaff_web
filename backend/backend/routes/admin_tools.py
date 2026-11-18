@@ -301,7 +301,6 @@ def _ensure_admin(current_user: dict):
     if (
         current_user["role"] != UserRole.ADMIN
         and not has_permission(current_user, "manage_semesters")
-        and not has_permission(current_user, "manage_courses")
     ):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 

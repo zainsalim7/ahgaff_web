@@ -17624,7 +17624,7 @@ async def get_all_semesters(
 @api_router.post("/semesters")
 async def create_semester(data: SemesterCreate, current_user: dict = Depends(get_current_user)):
     """إنشاء فصل دراسي جديد"""
-    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_semesters"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # التحقق من عدم وجود فصل بنفس الاسم في نفس السنة
@@ -17673,7 +17673,7 @@ async def get_current_semester(current_user: dict = Depends(get_current_user)):
 @api_router.put("/semesters/{semester_id}")
 async def update_semester(semester_id: str, data: SemesterUpdate, current_user: dict = Depends(get_current_user)):
     """تحديث فصل دراسي"""
-    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_semesters"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -17711,7 +17711,7 @@ async def activate_semester(semester_id: str, auto_generate_from_curriculum: boo
     """تفعيل فصل دراسي (جعله الفصل الحالي)
     - إذا auto_generate_from_curriculum=true: يُولّد المقررات تلقائياً من الخطة الدراسية
     """
-    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_semesters"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -17846,7 +17846,7 @@ async def activate_semester(semester_id: str, auto_generate_from_curriculum: boo
 @api_router.post("/semesters/{semester_id}/close")
 async def close_semester(semester_id: str, current_user: dict = Depends(get_current_user)):
     """إغلاق فصل دراسي"""
-    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_semesters"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -17874,7 +17874,7 @@ async def archive_semester(semester_id: str, current_user: dict = Depends(get_cu
     - مع denormalized snapshot لأسماء الطلاب والمعلمين والأقسام وقت الأرشفة
     - يحذف العمليات التشغيلية فقط بعد النسخ (لا يلمس students/teachers/departments/faculties)
     """
-    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_semesters"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -18142,7 +18142,7 @@ async def restore_semester_from_archive(
     - الأسماء (students, teachers, departments, faculties) لم تُلمس أصلاً.
     صلاحية مطلوبة: admin أو manage_courses.
     """
-    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_semesters"):
         raise HTTPException(status_code=403, detail="غير مصرح لك بالاستعادة")
 
     try:
@@ -18263,7 +18263,7 @@ async def get_semester_stats(semester_id: str, current_user: dict = Depends(get_
 @api_router.delete("/semesters/{semester_id}")
 async def delete_semester(semester_id: str, current_user: dict = Depends(get_current_user)):
     """حذف فصل دراسي (فقط إذا لم يكن له مقررات)"""
-    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_semesters"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -18363,7 +18363,7 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
 @api_router.put("/settings")
 async def update_settings(data: SettingsUpdate, current_user: dict = Depends(get_current_user)):
     """تحديث إعدادات النظام - للمدير فقط"""
-    if not has_permission(current_user, "manage_settings") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_settings"):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الإعدادات")
     
     if data.offline_sync_max_hours is not None and not (1 <= data.offline_sync_max_hours <= 8760):
@@ -18383,7 +18383,7 @@ async def update_settings(data: SettingsUpdate, current_user: dict = Depends(get
 @api_router.post("/settings/academic-years")
 async def add_academic_year(year: str = Body(..., embed=True), current_user: dict = Depends(get_current_user)):
     """إضافة سنة أكاديمية جديدة"""
-    if not has_permission(current_user, "manage_academic_years") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_academic_years"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # التحقق من صيغة السنة
@@ -18402,7 +18402,7 @@ async def add_academic_year(year: str = Body(..., embed=True), current_user: dic
 @api_router.delete("/settings/academic-years/{year}")
 async def delete_academic_year(year: str, current_user: dict = Depends(get_current_user)):
     """حذف سنة أكاديمية"""
-    if not has_permission(current_user, "manage_academic_years") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
+    if not has_permission(current_user, "manage_academic_years"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     await db.settings.update_one(
