@@ -106,6 +106,7 @@ export default function ManageRolesScreen() {
 
   // 🕵️ تدقيق الصلاحيات: مقارنة كل دور بالمهام/الميزات الفعلية الظاهرة له
   const [activeTab, setActiveTab] = useState<'roles' | 'audit'>('roles');
+  const [roleSearch, setRoleSearch] = useState('');
   const [auditRoleId, setAuditRoleId] = useState<string>('__admin__');
   
   // Modal states
@@ -497,6 +498,9 @@ export default function ManageRolesScreen() {
 
   // إذا تم تحميل الأدوار بنجاح، عرض الصفحة
   const userRole = user?.role || '';
+  const filteredRoles = roleSearch.trim()
+    ? roles.filter(r => `${r.name} ${r.description || ''}`.toLowerCase().includes(roleSearch.trim().toLowerCase()))
+    : roles;
   const canAccess = userRole === 'admin' || hasPermission('manage_roles') || roles.length > 0;
   
   if (!canAccess) {
@@ -513,191 +517,93 @@ export default function ManageRolesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-forward" size={24} color="#1565c0" />
+      {/* شريط أدوات مضغوط: رجوع + تبويبات + بحث + إنشاء */}
+      <View style={styles.toolbar} testID="manage-roles-tab-bar">
+        <TouchableOpacity onPress={() => goBack()} style={styles.tbIcon} testID="manage-roles-back-btn">
+          <Ionicons name="arrow-forward" size={20} color="#1565c0" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>إدارة الأدوار</Text>
-        <TouchableOpacity onPress={openAddModal} style={styles.addBtn} data-testid="add-role-btn">
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
-      {/* 🕵️ تبويب تدقيق الصلاحيات */}
-      <View style={styles.tabBar} testID="manage-roles-tab-bar">
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'roles' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('roles')}
-          testID="manage-roles-tab-roles"
-        >
-          <Ionicons name="shield" size={16} color={activeTab === 'roles' ? '#fff' : '#64748b'} />
-          <Text style={[styles.tabBtnText, activeTab === 'roles' && styles.tabBtnTextActive]}>الأدوار</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, activeTab === 'audit' && styles.tabBtnActive]}
-          onPress={() => setActiveTab('audit')}
-          testID="manage-roles-tab-audit"
-        >
-          <Ionicons name="search" size={16} color={activeTab === 'audit' ? '#fff' : '#64748b'} />
-          <Text style={[styles.tabBtnText, activeTab === 'audit' && styles.tabBtnTextActive]}>تدقيق الصلاحيات</Text>
+        <View style={styles.segment}>
+          {([['roles', 'shield', `الأدوار (${roles.length})`], ['audit', 'search', 'تدقيق الصلاحيات']] as const).map(([k, ic, lbl]) => (
+            <TouchableOpacity key={k} style={[styles.segBtn, activeTab === k && styles.segBtnOn]} onPress={() => setActiveTab(k)} testID={`manage-roles-tab-${k}`}>
+              <Ionicons name={ic as any} size={14} color={activeTab === k ? '#fff' : '#475569'} />
+              <Text style={[styles.segTx, activeTab === k && { color: '#fff' }]}>{lbl}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {activeTab === 'roles' && (
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={15} color="#94a3b8" />
+            <TextInput value={roleSearch} onChangeText={setRoleSearch} placeholder="ابحث عن دور..." placeholderTextColor="#94a3b8"
+              style={styles.searchInput} testID="roles-search-input" />
+          </View>
+        )}
+        <TouchableOpacity onPress={openAddModal} style={styles.newBtn} data-testid="add-role-btn" testID="add-role-btn">
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.newBtnTx}>دور جديد</Text>
         </TouchableOpacity>
       </View>
 
       {activeTab === 'roles' && (
-      <>
-      {/* Info Card */}
-      <View style={styles.infoCard}>
-        <Ionicons name="information-circle" size={24} color="#1565c0" />
-        <Text style={styles.infoText}>
-          أنشئ أدواراً مخصصة وحدد الصلاحيات لكل دور، ثم أسند الأدوار للمستخدمين
-        </Text>
-      </View>
-
-      {/* 🏢 أدوار شؤون الموظفين الجاهزة */}
-      <View style={[styles.infoCard, { backgroundColor: '#f3e8ff', justifyContent: 'space-between' }]} testID="hr-presets-card">
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.infoText, { fontWeight: '800', color: '#4c1d95' }]}>أدوار شؤون الموظفين الجاهزة</Text>
-          <Text style={[styles.infoText, { fontSize: 11.5 }]}>مدير شؤون الموظفين · المدير المالي · مدير الخدمات · سكرتير المدير · الموظف العادي (مقيّدون تلقائياً بوحدتهم فقط) · أخصائي · مسؤول الحضور · مسؤول المراسلات · مراقب (اطّلاع). يمكن تعديل صلاحياتها لاحقاً.</Text>
-        </View>
-        <TouchableOpacity
-          onPress={async () => {
-            try {
-              const r = await rolesAPI.createHrPresets();
-              if (Platform.OS === 'web') window.alert(r.data.message); else Alert.alert('تم', r.data.message);
-              hasFetched.current = false; setRoles([]); fetchData();
-            } catch (e: any) {
-              const msg = e?.response?.data?.detail || 'فشل إنشاء الأدوار';
-              if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
-            }
-          }}
-          style={{ backgroundColor: '#6d28d9', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }} testID="create-hr-presets-btn">
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12.5 }}>إنشاء / تحديث</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 🧩 الأدوار الإدارية الجاهزة */}
-      <View style={[styles.infoCard, { backgroundColor: '#e0f2fe', justifyContent: 'space-between' }]} testID="admin-presets-card">
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.infoText, { fontWeight: '800', color: '#0c4a6e' }]}>الأدوار الإدارية الجاهزة (صلاحيات مفصّلة لكل مهمة)</Text>
-          <Text style={[styles.infoText, { fontSize: 11.5 }]}>مسؤول القبول والتسجيل · مسؤول الجداول والمحاضرات · مسؤول الاستيراد والبيانات · مدقق السجلات · مهندس نظام · مسؤول طباعة البطاقات · مسؤول المراسلات. يمكن تعديل صلاحياتها لاحقاً أو إسناد صلاحيات فردية لأي مستخدم.</Text>
-        </View>
-        <TouchableOpacity
-          onPress={async () => {
-            try {
-              const r = await rolesAPI.createAdminPresets();
-              if (Platform.OS === 'web') window.alert(r.data.message); else Alert.alert('تم', r.data.message);
-              hasFetched.current = false; setRoles([]); fetchData();
-            } catch (e: any) {
-              const msg = e?.response?.data?.detail || 'فشل إنشاء الأدوار';
-              if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
-            }
-          }}
-          style={{ backgroundColor: '#0369a1', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }} testID="create-admin-presets-btn">
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12.5 }}>إنشاء / تحديث</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Roles List */}
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        contentContainerStyle={styles.grid}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        testID="roles-grid"
       >
-        {roles.map((role) => {
-          // 🔒 فلترة الصلاحيات المخفية (مثل صلاحيات المحاضرات المدمجة تحت manage_courses)
-          // لا تُعرض في القائمة لأنها تُمنح تلقائياً عبر الصلاحية الأم
+        {filteredRoles.map((role) => {
           const visibleKeys = new Set(allPermissions.map(p => p.key));
           const visiblePerms = (role.permissions || []).filter(p => visibleKeys.has(p));
-
           return (
-          <View key={role.id} style={styles.roleCard}>
-            <View style={styles.roleHeader}>
-              <View style={styles.roleInfo}>
-                <View style={styles.roleTitleRow}>
-                  <Ionicons 
-                    name={role.is_system ? "shield-checkmark" : "shield"} 
-                    size={24} 
-                    color={role.is_system ? "#4caf50" : "#1565c0"} 
-                  />
-                  <Text style={styles.roleName}>{role.name}</Text>
-                  {role.is_system && (
-                    <View style={styles.systemBadge}>
-                      <Text style={styles.systemBadgeText}>نظامي</Text>
-                    </View>
-                  )}
+          <View key={role.id} style={styles.rCard} testID={`role-card-${role.id}`}>
+            <View style={styles.rHead}>
+              <View style={[styles.rIcon, { backgroundColor: role.is_system ? '#dcfce7' : '#e0edff' }]}>
+                <Ionicons name={role.is_system ? 'shield-checkmark' : 'shield'} size={16} color={role.is_system ? '#16a34a' : '#1565c0'} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.rName} numberOfLines={1}>{role.name}</Text>
+                  {role.is_system && <Text style={styles.sysBadge}>نظامي</Text>}
                 </View>
-                <Text style={styles.roleDescription}>{role.description}</Text>
-                <View style={styles.roleStats}>
-                  <View style={styles.statItem}>
-                    <Ionicons name="people" size={16} color="#666" />
-                    <Text style={styles.statText}>{role.users_count} مستخدم</Text>
-                  </View>
-                  <View style={styles.statItem}>
-                    <Ionicons name="key" size={16} color="#666" />
-                    <Text style={styles.statText}>{visiblePerms.length} صلاحية</Text>
-                  </View>
+                <View style={{ flexDirection: 'row-reverse', gap: 12, marginTop: 2 }}>
+                  <View style={styles.metaItem}><Ionicons name="people" size={12} color="#64748b" /><Text style={styles.rMeta} testID={`role-users-${role.id}`}>{role.users_count} مستخدم</Text></View>
+                  <View style={styles.metaItem}><Ionicons name="key" size={12} color="#64748b" /><Text style={styles.rMeta}>{visiblePerms.length} صلاحية</Text></View>
                 </View>
               </View>
-              
-              {/* أزرار التعديل - متاحة لجميع الأدوار، الحذف فقط للأدوار غير النظامية */}
-              <View style={styles.roleActions}>
-                <TouchableOpacity 
-                  style={styles.actionBtn}
-                  onPress={() => openEditModal(role)}
-                  accessibilityLabel="تعديل"
-                >
-                  <Ionicons name="pencil" size={20} color="#1565c0" />
+              <TouchableOpacity style={styles.rAct} onPress={() => openEditModal(role)} accessibilityLabel="تعديل" testID={`edit-role-${role.id}`}>
+                <Ionicons name="create-outline" size={17} color="#1565c0" />
+              </TouchableOpacity>
+              {!role.is_system && (
+                <TouchableOpacity style={[styles.rAct, { backgroundColor: '#fef2f2' }]} onPress={() => handleDelete(role)} accessibilityLabel="حذف" testID={`delete-role-${role.id}`}>
+                  <Ionicons name="trash-outline" size={17} color="#dc2626" />
                 </TouchableOpacity>
-                {!role.is_system && (
-                  <TouchableOpacity 
-                    style={[styles.actionBtn, styles.deleteBtn]}
-                    onPress={() => handleDelete(role)}
-                    accessibilityLabel="حذف"
-                  >
-                    <Ionicons name="trash" size={20} color="#f44336" />
-                  </TouchableOpacity>
-                )}
-              </View>
+              )}
             </View>
-            
-            {/* Permissions Preview */}
-            <View style={styles.permissionsPreview}>
-              <Text style={styles.permissionsLabel}>الصلاحيات:</Text>
-              <View style={styles.permissionsTags}>
-                {visiblePerms.slice(0, 5).map((perm) => {
-                  const permInfo = allPermissions.find(p => p.key === perm);
-                  return (
-                    <View key={perm} style={styles.permTag}>
-                      <Text style={styles.permTagText}>
-                        {permInfo?.label || perm}
-                      </Text>
-                    </View>
-                  );
-                })}
-                {visiblePerms.length > 5 && (
-                  <View style={[styles.permTag, styles.moreTag]}>
-                    <Text style={styles.permTagText}>+{visiblePerms.length - 5}</Text>
-                  </View>
-                )}
-              </View>
+            {role.description ? <Text style={styles.rDesc} numberOfLines={1}>{role.description}</Text> : null}
+            <View style={styles.rTags}>
+              {visiblePerms.slice(0, 4).map((perm) => (
+                <Text key={perm} style={styles.rTag} numberOfLines={1}>{allPermissions.find(p => p.key === perm)?.label || perm}</Text>
+              ))}
+              {visiblePerms.length > 4 && (
+                <TouchableOpacity onPress={() => openEditModal(role)}><Text style={[styles.rTag, styles.rTagMore]}>+{visiblePerms.length - 4}</Text></TouchableOpacity>
+              )}
+              {visiblePerms.length === 0 && <Text style={[styles.rTag, { color: '#b45309', backgroundColor: '#fffbeb' }]}>بدون صلاحيات</Text>}
             </View>
           </View>
           );
         })}
 
-        {roles.length === 0 && (
+        {filteredRoles.length === 0 && (
           <View style={styles.emptyState}>
-            <Ionicons name="folder-open-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>لا توجد أدوار</Text>
-            <TouchableOpacity style={styles.emptyBtn} onPress={openAddModal}>
-              <Text style={styles.emptyBtnText}>إنشاء دور جديد</Text>
-            </TouchableOpacity>
+            <Ionicons name="folder-open-outline" size={56} color="#ccc" />
+            <Text style={styles.emptyText}>{roleSearch ? 'لا توجد أدوار مطابقة' : 'لا توجد أدوار'}</Text>
+            {!roleSearch && (
+              <TouchableOpacity style={styles.emptyBtn} onPress={openAddModal}>
+                <Text style={styles.emptyBtnText}>إنشاء دور جديد</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>
-      </>
       )}
 
       {activeTab === 'audit' && (
@@ -1037,6 +943,29 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 0,
   },
+  toolbar: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0', flexWrap: 'wrap' },
+  tbIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eff6ff' },
+  segment: { flexDirection: 'row-reverse', backgroundColor: '#f1f5f9', borderRadius: 10, padding: 3, gap: 2 },
+  segBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8 },
+  segBtnOn: { backgroundColor: '#1565c0' },
+  segTx: { fontSize: 13, fontWeight: '700', color: '#475569' },
+  searchBox: { flex: 1, minWidth: 180, flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 10, height: 36 },
+  searchInput: { flex: 1, fontSize: 13, textAlign: 'right', outlineStyle: 'none' as any, color: '#0f172a' },
+  newBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: '#1565c0', paddingHorizontal: 14, height: 36, borderRadius: 10, marginRight: 'auto' as any },
+  newBtnTx: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  grid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10, padding: 12 },
+  rCard: { flexGrow: 1, flexBasis: 340, maxWidth: 560, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', padding: 12, gap: 8 },
+  rHead: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
+  rIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  rName: { fontSize: 14.5, fontWeight: '800', color: '#0f172a', textAlign: 'right', flexShrink: 1 },
+  sysBadge: { fontSize: 10, fontWeight: '700', color: '#16a34a', backgroundColor: '#dcfce7', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, overflow: 'hidden' },
+  rMeta: { fontSize: 11.5, color: '#64748b', textAlign: 'right' },
+  metaItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4 },
+  rAct: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: '#eff6ff' },
+  rDesc: { fontSize: 12, color: '#64748b', textAlign: 'right' },
+  rTags: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 5 },
+  rTag: { fontSize: 11, color: '#334155', backgroundColor: '#f1f5f9', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden', maxWidth: 170 },
+  rTagMore: { color: '#1565c0', backgroundColor: '#e0edff', fontWeight: '700' },
   roleCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
