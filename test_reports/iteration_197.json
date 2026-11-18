@@ -1,0 +1,36 @@
+{
+  "summary": "Iter197: Tested the /send-notification role scope, the faculty/department audience and the recipients preview, on both backend and frontend. Backend: 13 of 14 pytest tests pass. All expected counts match. Role teacher across the whole university = 12. Role teacher in faculty 698e4f92 = 10, role student in that faculty = 20. Role student in dept 698e5009 = 20, role teacher in that dept = 10. Faculty audience: teachers 10, students 20, all 30. Department audience: students 20, all 30. Role employee/dean/department_head with a faculty scope = 3/1/5. The older target types (all, level, section) still work. Send creates exactly the resolved db.notifications and a notification_history entry whose target_desc matches the preview. A teacher without the permission gets 403 on both preview and send. The one failure: an invalid faculty_id returns 500. Frontend (mobile, 390px): the role pills and the 3 scope pills render. Faculty and department are picked through the CourseFilter dropdown. The messages 'اختر الكلية' and 'اختر القسم' appear when a selection is missing. audience-card appears for faculty and department targets, with default 'all'. The preview text updates correctly. A UI send to a department with audience 'all' reached 30 users. Main bug: the live preview only appears once the title and body are filled, and typing them does not trigger it.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/notifications/preview & /send", "issue": "An invalid faculty_id or department_id (for example 'bad') returns 500. _resolve_student_users calls ObjectId(faculty_id) and ObjectId(department_id) without checking ObjectId.is_valid, while _scope_names does check. Validate the ids and return 400, or skip the name lookup."},
+      {"endpoint": "POST /api/notifications/*", "issue": "For target_type faculty/department, a missing audience defaults to 'students' on the backend but to 'all' in the UI. The UI always sends audience, so nothing breaks today. Align the defaults so API clients get the same behaviour."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "send-notification preview", "issue": "The preview useEffect returns early when validate() fails, and validate() requires title and body. Title and body are not in the effect's dependencies. So the preview never shows until the user changes the target after typing. If the user picks the target first and then types (the natural order), there is no preview at all. Example: 'الجميع' never shows a preview. After a successful send the title and body are cleared, so the preview disappears. Fix: run the preview with only the target validation (drop the title/body check), or add title and body to the dependencies.", "selector": "[data-testid=notification-preview]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "send-notification (role scope = faculty, and target 'كلية كاملة')", "issues": ["CourseFilter shows a disabled 'القسم *' dropdown marked required when only a faculty is needed. This is confusing. Hide the department field (pass a flag/showDepartment=false)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_notifications_scope_iter197.py", "/app/test_reports/pytest/pytest_iter197.xml"],
+  "action_items": [
+    "Make the notification-preview independent of title/body, or add title/body to the effect dependencies",
+    "Guard ObjectId conversions in _resolve_student_users (return 400 for an invalid id instead of 500)",
+    "Hide the disabled required 'القسم' dropdown when only a faculty is required",
+    "Optionally align the backend audience default ('students') with the UI default ('all')"
+  ],
+  "critical_code_review_comments": [
+    "notifications.py _teacher_users mixes the teachers collection with users.role=teacher. Role teacher across the whole university counts only users.role=teacher, while a faculty scope can also include teacher records linked to other roles. Counts are consistent in the current data.",
+    "selFaculty, selDept and audience persist across target-type switches. This is helpful, but a user may unknowingly carry a stale selection into another target."
+  ],
+  "updated_files": ["/app/backend/tests/test_notifications_scope_iter197.py"],
+  "success_rate": {"backend": "93% (13/14)", "frontend": "90%"},
+  "seed_data_creation": "None. Test notifications with titles starting 'TEST_IT197_' were sent (10+20 from the API, 30 from the UI). All were deleted from db.notifications and db.notification_history, and the cleanup was checked.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login admin/admin123 by clicking 'تسجيل الدخول'. CourseFilter testIDs: course-filter-faculty / course-filter-department, and options course-filter-{kind}-option-{id}. The preview requires title and body to be filled BEFORE choosing the target. Run: pytest tests/test_notifications_scope_iter197.py -p no:xdist"
+}

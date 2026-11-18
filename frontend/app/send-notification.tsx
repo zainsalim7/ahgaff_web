@@ -163,7 +163,7 @@ export default function SendNotification() {
   // Reset previewCount when target changes
   useEffect(() => {
     setPreviewCount(null); setPreviewDesc('');
-    if (validate()) return;
+    if (targetError()) return;
     const h = setTimeout(() => {
       api.post('/notifications/preview', { title: '-', body: '-', ...buildPayload() })
         .then(res => { setPreviewCount(res.data.users); setPreviewDesc(res.data.target_desc); })
@@ -208,6 +208,10 @@ export default function SendNotification() {
 
   const validate = (): string | null => {
     if (!title.trim() || !body.trim()) return 'يرجى كتابة العنوان والرسالة';
+    return targetError();
+  };
+
+  const targetError = (): string | null => {
     if (targetType === 'role' && !selectedRole) return 'اختر الدور';
     if (targetType === 'role' && roleScope !== 'university' && !selFaculty) return 'اختر الكلية';
     if (targetType === 'role' && roleScope === 'department' && !selDept) return 'اختر القسم';
@@ -332,6 +336,7 @@ export default function SendNotification() {
                   courses={[]}
                   facultyId={selFaculty}
                   departmentId={roleScope === 'department' ? selDept : ''}
+                  showDepartment={roleScope === 'department'}
                   courseId=""
                   onFacultyChange={(v: string) => { setSelFaculty(v); setSelDept(''); }}
                   onDepartmentChange={roleScope === 'department' ? setSelDept : () => {}}
@@ -372,6 +377,7 @@ export default function SendNotification() {
               onDepartmentChange={() => {}}
               onCourseChange={() => {}}
               showCourse={false}
+              showDepartment={false}
               required
               loading={metaLoading}
             />

@@ -234,11 +234,11 @@ async def _resolve_student_users(db, *, faculty_id=None, department_id=None, lev
         if not department_id:
             depts = [str(x["_id"]) async for x in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
             s_query["$or"] = [{"faculty_id": faculty_id}, {"department_id": {"$in": depts}}]
-        f = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
+        f = await db.faculties.find_one({"_id": ObjectId(faculty_id)}) if ObjectId.is_valid(faculty_id) else None
         if f: parts.append(_pref("كلية", f.get('name', '')))
     if department_id:
         s_query["department_id"] = department_id
-        d = await db.departments.find_one({"_id": ObjectId(department_id)})
+        d = await db.departments.find_one({"_id": ObjectId(department_id)}) if ObjectId.is_valid(department_id) else None
         if d: parts.append(_pref("قسم", d.get('name', '')))
     if level is not None:
         s_query["level"] = int(level)
@@ -317,7 +317,7 @@ async def _resolve_targets(db, request) -> tuple[list, str]:
     if t == "users" and request.user_ids:
         return list(request.user_ids), f"{len(request.user_ids)} مستخدم"
     if t in ("faculty", "department"):
-        aud = request.audience or "students"
+        aud = request.audience or "all"
         uids, parts = [], []
         if aud in ("all", "students"):
             s_ids, _ = await _resolve_student_users(db, faculty_id=request.faculty_id if t == "faculty" else None, department_id=request.department_id)

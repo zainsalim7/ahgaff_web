@@ -182,6 +182,7 @@ interface CourseFilterProps {
   onDepartmentChange: (id: string) => void;
   onCourseChange: (id: string) => void;
   showCourse?: boolean; // إذا false: فقط الكلية والقسم
+  showDepartment?: boolean;
   required?: boolean;
   horizontal?: boolean; // افتراضي true — صف أفقي مدمج
   loading?: boolean; // إظهار مؤشر تحميل أثناء جلب البيانات
@@ -199,6 +200,7 @@ export const CourseFilter: React.FC<CourseFilterProps> = ({
   onDepartmentChange,
   onCourseChange,
   showCourse = true,
+  showDepartment = true,
   required = true,
   horizontal = true,
   loading = false,
@@ -233,7 +235,7 @@ export const CourseFilter: React.FC<CourseFilterProps> = ({
             testID="course-filter-faculty"
           />
         </View>
-        <View style={s.cell}>
+        {showDepartment && <View style={s.cell}>
           <SearchableDropdown
             label="القسم"
             value={departmentId}
@@ -248,7 +250,7 @@ export const CourseFilter: React.FC<CourseFilterProps> = ({
             searchable={filteredDepts.length > 5}
             testID="course-filter-department"
           />
-        </View>
+        </View>}
         {showCourse && (
           <View style={[s.cell, { flex: 1.5 }]}>
             <SearchableDropdown
