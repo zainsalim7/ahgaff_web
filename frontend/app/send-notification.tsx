@@ -31,6 +31,9 @@ export default function SendNotification() {
   const [body, setBody] = useState('');
   const [targetType, setTargetType] = useState<TargetType>('all');
   const [selectedRole, setSelectedRole] = useState('');
+  const [roleScope, setRoleScope] = useState<'university' | 'faculty' | 'department'>('university');
+  const [audience, setAudience] = useState<'all' | 'teachers' | 'students'>('all');
+  const [previewDesc, setPreviewDesc] = useState('');
   const [sending, setSending] = useState(false);
 
   const canSend = user?.role === 'admin' ||
@@ -158,11 +161,25 @@ export default function SendNotification() {
   }, [courses, selFaculty, selDept, selLevel]);
 
   // Reset previewCount when target changes
-  useEffect(() => { setPreviewCount(null); }, [targetType, selFaculty, selDept, selLevel, selSection, selCourse, selectedTeacher, selectedStudent, selectedRole]);
+  useEffect(() => {
+    setPreviewCount(null); setPreviewDesc('');
+    if (validate()) return;
+    const h = setTimeout(() => {
+      api.post('/notifications/preview', { title: '-', body: '-', ...buildPayload() })
+        .then(res => { setPreviewCount(res.data.users); setPreviewDesc(res.data.target_desc); })
+        .catch(() => {});
+    }, 350);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetType, selFaculty, selDept, selLevel, selSection, selCourse, selectedTeacher, selectedStudent, selectedRole, roleScope, audience]);
 
   const buildPayload = () => {
     const payload: any = { title, body, target_type: targetType };
-    if (targetType === 'role') payload.target_role = selectedRole;
+    if (targetType === 'role') {
+      payload.target_role = selectedRole;
+      if (roleScope !== 'university') payload.faculty_id = selFaculty || undefined;
+      if (roleScope === 'department') payload.department_id = selDept || undefined;
+    }
     else if (targetType === 'course') payload.course_id = selCourse;
     else if (targetType === 'teacher') payload.teacher_user_id = selectedTeacher?.user_id;
     else if (targetType === 'student') {
@@ -171,9 +188,11 @@ export default function SendNotification() {
     }
     else if (targetType === 'faculty') {
       payload.faculty_id = selFaculty;
+      payload.audience = audience;
     } else if (targetType === 'department') {
       payload.faculty_id = selFaculty || undefined;
       payload.department_id = selDept;
+      payload.audience = audience;
     } else if (targetType === 'level') {
       payload.faculty_id = selFaculty || undefined;
       payload.department_id = selDept || undefined;
@@ -190,6 +209,8 @@ export default function SendNotification() {
   const validate = (): string | null => {
     if (!title.trim() || !body.trim()) return 'يرجى كتابة العنوان والرسالة';
     if (targetType === 'role' && !selectedRole) return 'اختر الدور';
+    if (targetType === 'role' && roleScope !== 'university' && !selFaculty) return 'اختر الكلية';
+    if (targetType === 'role' && roleScope === 'department' && !selDept) return 'اختر القسم';
     if (targetType === 'course' && !selCourse) return 'اختر المقرر';
     if (targetType === 'teacher' && !selectedTeacher) return 'اختر المعلم';
     if (targetType === 'student' && !selectedStudent) return 'اختر الطالب';
@@ -291,6 +312,47 @@ export default function SendNotification() {
                   testID={`role-${r.v}`}
                 >
                   <Text style={[styles.pillText, selectedRole === r.v && styles.pillTextActive]}>{r.l}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>النطاق</Text>
+            <View style={styles.pillsWrap}>
+              {([['university', 'كل الجامعة'], ['faculty', 'كلية كاملة'], ['department', 'قسم في كلية']] as const).map(([v, l]) => (
+                <TouchableOpacity key={v} onPress={() => { setRoleScope(v); if (v !== 'department') setSelDept(''); }}
+                  style={[styles.smallPill, roleScope === v && styles.smallPillActive]} testID={`role-scope-${v}`}>
+                  <Text style={[styles.pillText, roleScope === v && styles.pillTextActive]}>{l}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {roleScope !== 'university' && (
+              <View style={{ marginTop: 10 }}>
+                <CourseFilter
+                  faculties={faculties}
+                  departments={roleScope === 'department' ? departments : []}
+                  courses={[]}
+                  facultyId={selFaculty}
+                  departmentId={roleScope === 'department' ? selDept : ''}
+                  courseId=""
+                  onFacultyChange={(v: string) => { setSelFaculty(v); setSelDept(''); }}
+                  onDepartmentChange={roleScope === 'department' ? setSelDept : () => {}}
+                  onCourseChange={() => {}}
+                  showCourse={false}
+                  required
+                  loading={metaLoading}
+                />
+              </View>
+            )}
+          </View>
+        )}
+
+        {(targetType === 'faculty' || targetType === 'department') && (
+          <View style={styles.filterCard} testID="audience-card">
+            <Text style={styles.fieldLabel}>المستلمون</Text>
+            <View style={styles.pillsWrap}>
+              {([['all', 'الطلاب والمعلمون'], ['teachers', 'المعلمون فقط'], ['students', 'الطلاب فقط']] as const).map(([v, l]) => (
+                <TouchableOpacity key={v} onPress={() => setAudience(v)}
+                  style={[styles.smallPill, audience === v && styles.smallPillActive]} testID={`audience-${v}`}>
+                  <Text style={[styles.pillText, audience === v && styles.pillTextActive]}>{l}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -445,6 +507,14 @@ export default function SendNotification() {
         )}
 
         {/* Title & body */}
+        {previewCount !== null && (
+          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: previewCount ? '#e8f5e9' : '#fff3e0', borderRadius: 10, padding: 10, marginBottom: 8 }} testID="notification-preview">
+            <Ionicons name={previewCount ? 'people' : 'warning'} size={18} color={previewCount ? '#2e7d32' : '#e65100'} />
+            <Text style={{ fontSize: 13, fontWeight: '700', color: previewCount ? '#2e7d32' : '#e65100', textAlign: 'right', flex: 1 }}>
+              {previewCount ? `سيصل إلى ${previewCount} مستخدم — ${previewDesc}` : 'لا يوجد مستلمون بهذا الاختيار'}
+            </Text>
+          </View>
+        )}
         <Text style={styles.label}>عنوان الإشعار</Text>
         <TextInput
           style={styles.input}

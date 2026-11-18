@@ -48,6 +48,7 @@ class SendNotificationRequest(BaseModel):
     department_id: Optional[str] = None
     level: Optional[int] = None
     section: Optional[str] = None
+    audience: Optional[str] = None  # كلية/قسم: all | students | teachers
 
 
 
@@ -219,19 +220,26 @@ async def unregister_device_token(
     return {"message": "تم إلغاء تسجيل الجهاز"}
 
 
+def _pref(word: str, name: str) -> str:
+    name = (name or "").strip()
+    return name if name.startswith(word) else f"{word} {name}"
+
+
 async def _resolve_student_users(db, *, faculty_id=None, department_id=None, level=None, section=None) -> tuple[list, str]:
     """يبني فلتراً للطلاب حسب (كلية/قسم/مستوى/شعبة) ويرجع (user_ids, وصف)"""
     from bson import ObjectId
     s_query = {"is_active": True}
     parts = []
     if faculty_id:
-        s_query["faculty_id"] = faculty_id
+        if not department_id:
+            depts = [str(x["_id"]) async for x in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+            s_query["$or"] = [{"faculty_id": faculty_id}, {"department_id": {"$in": depts}}]
         f = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
-        if f: parts.append(f"كلية {f.get('name','')}")
+        if f: parts.append(_pref("كلية", f.get('name', '')))
     if department_id:
         s_query["department_id"] = department_id
         d = await db.departments.find_one({"_id": ObjectId(department_id)})
-        if d: parts.append(f"قسم {d.get('name','')}")
+        if d: parts.append(_pref("قسم", d.get('name', '')))
     if level is not None:
         s_query["level"] = int(level)
         parts.append(f"المستوى {level}")
@@ -242,6 +250,97 @@ async def _resolve_student_users(db, *, faculty_id=None, department_id=None, lev
     user_ids = [s.get("user_id") for s in students if s.get("user_id")]
     desc = " - ".join(parts) if parts else "طلاب"
     return user_ids, f"{desc} ({len(user_ids)} طالب)"
+
+
+ROLE_LABELS = {"admin": "المديرين", "teacher": "المعلمين", "student": "الطلاب", "employee": "الموظفين",
+               "department_head": "رؤساء الأقسام", "dean": "العمداء"}
+
+
+async def _scope_names(db, faculty_id=None, department_id=None) -> tuple[list, str]:
+    """يرجع (أقسام النطاق, وصف النطاق)"""
+    from bson import ObjectId
+    if department_id:
+        d = await db.departments.find_one({"_id": ObjectId(department_id)}) if ObjectId.is_valid(department_id) else None
+        return [department_id], _pref("قسم", (d or {}).get('name', ''))
+    if faculty_id:
+        f = await db.faculties.find_one({"_id": ObjectId(faculty_id)}) if ObjectId.is_valid(faculty_id) else None
+        depts = [str(x["_id"]) async for x in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+        return depts, _pref("كلية", (f or {}).get('name', ''))
+    return [], ""
+
+
+async def _teacher_users(db, faculty_id=None, department_id=None) -> list:
+    depts, _ = await _scope_names(db, faculty_id, department_id)
+    ors = [{"department_id": {"$in": depts}}, {"department_ids": {"$in": depts}}]
+    if faculty_id and not department_id:
+        ors.append({"faculty_id": faculty_id})
+    ids = set()
+    async for t in db.teachers.find({"$or": ors, "is_active": {"$ne": False}}, {"user_id": 1}):
+        if t.get("user_id"):
+            ids.add(str(t["user_id"]))
+    async for u in db.users.find({"role": "teacher", "$or": [{"department_id": {"$in": depts}}, {"faculty_id": faculty_id or "__none__"}]}, {"_id": 1}):
+        ids.add(str(u["_id"]))
+    return list(ids)
+
+
+async def _resolve_targets(db, request) -> tuple[list, str]:
+    """🎯 مصدر موحّد لتحديد المستلمين (user_ids, وصف) — يُستخدم للإرسال والمعاينة"""
+    from bson import ObjectId
+    t = request.target_type
+    if t == "student" and request.student_user_id:
+        return [request.student_user_id], f"طالب: {request.student_name or request.student_user_id}"
+    if t == "teacher" and request.teacher_user_id:
+        u = await db.users.find_one({"_id": ObjectId(request.teacher_user_id)}) if ObjectId.is_valid(request.teacher_user_id) else None
+        return [request.teacher_user_id], f"معلم: {(u or {}).get('full_name', '')}"
+    if t == "course" and request.course_id:
+        sids = [e["student_id"] async for e in db.enrollments.find({"course_id": request.course_id}, {"student_id": 1})]
+        uids = [s["user_id"] async for s in db.students.find({"_id": {"$in": [ObjectId(x) for x in sids if ObjectId.is_valid(x)]}}, {"user_id": 1}) if s.get("user_id")]
+        c = await db.courses.find_one({"_id": ObjectId(request.course_id)}) if ObjectId.is_valid(request.course_id) else None
+        return uids, f"طلاب مقرر: {(c or {}).get('name', '')} ({len(uids)} طالب)"
+    if t == "role" and request.target_role:
+        role = request.target_role
+        label = ROLE_LABELS.get(role, role)
+        if not (request.faculty_id or request.department_id):
+            uids = [str(u["_id"]) async for u in db.users.find({"role": role}, {"_id": 1})]
+            return uids, f"{label} (كل الجامعة)"
+        depts, scope = await _scope_names(db, request.faculty_id, request.department_id)
+        if role == "student":
+            uids, _ = await _resolve_student_users(db, faculty_id=request.faculty_id, department_id=request.department_id)
+        elif role == "teacher":
+            uids = await _teacher_users(db, request.faculty_id, request.department_id)
+        else:
+            ors = [{"department_id": {"$in": depts}}]
+            if request.faculty_id and not request.department_id:
+                ors.append({"faculty_id": request.faculty_id})
+            uids = [str(u["_id"]) async for u in db.users.find({"role": role, "$or": ors}, {"_id": 1})]
+        return uids, f"{label} - {scope}"
+    if t == "users" and request.user_ids:
+        return list(request.user_ids), f"{len(request.user_ids)} مستخدم"
+    if t in ("faculty", "department"):
+        aud = request.audience or "students"
+        uids, parts = [], []
+        if aud in ("all", "students"):
+            s_ids, _ = await _resolve_student_users(db, faculty_id=request.faculty_id if t == "faculty" else None, department_id=request.department_id)
+            uids += s_ids
+            parts.append(f"{len(s_ids)} طالب")
+        if aud in ("all", "teachers"):
+            t_ids = await _teacher_users(db, request.faculty_id if t == "faculty" else None, request.department_id)
+            uids += t_ids
+            parts.append(f"{len(t_ids)} معلم")
+        _, scope = await _scope_names(db, request.faculty_id if t == "faculty" else None, request.department_id)
+        return list(dict.fromkeys(uids)), f"{scope} ({' + '.join(parts)})"
+    if t in ("level", "section"):
+        return await _resolve_student_users(db, faculty_id=request.faculty_id, department_id=request.department_id, level=request.level, section=request.section)
+    uids = [str(u["_id"]) async for u in db.users.find({}, {"_id": 1})]
+    return uids, "الكل"
+
+
+@router.post("/notifications/preview")
+async def preview_notification_targets(request: SendNotificationRequest, current_user: dict = Depends(get_current_user)):
+    if not check_notification_permission(current_user):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية إرسال الإشعارات")
+    uids, desc = await _resolve_targets(get_db(), request)
+    return {"users": len(uids), "target_desc": desc}
 
 
 @router.post("/notifications/send")
@@ -257,75 +356,8 @@ async def send_notification_api(
     if not check_notification_permission(current_user):
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية إرسال الإشعارات")
 
-    query = {}
-    target_desc = "الكل"
-
-    if request.target_type == "student" and request.student_user_id:
-        query["user_id"] = request.student_user_id
-        target_desc = f"طالب: {request.student_name or request.student_user_id}"
-    elif request.target_type == "teacher" and request.teacher_user_id:
-        query["user_id"] = request.teacher_user_id
-        # جلب اسم المعلم
-        teacher_user = await db.users.find_one({"_id": __import__('bson').ObjectId(request.teacher_user_id)})
-        teacher_name = teacher_user.get("full_name", "") if teacher_user else ""
-        target_desc = f"معلم: {teacher_name}"
-    elif request.target_type == "course" and request.course_id:
-        # إرسال لجميع طلاب المقرر
-        enrollments = await db.enrollments.find({"course_id": request.course_id}).to_list(5000)
-        student_ids = [e["student_id"] for e in enrollments]
-        students = await db.students.find({"_id": {"$in": [__import__('bson').ObjectId(sid) for sid in student_ids]}}).to_list(5000)
-        user_ids = [s["user_id"] for s in students if s.get("user_id")]
-        query["user_id"] = {"$in": user_ids} if user_ids else {"$in": []}
-        course = await db.courses.find_one({"_id": __import__('bson').ObjectId(request.course_id)})
-        course_name = course.get("name", "") if course else ""
-        target_desc = f"طلاب مقرر: {course_name} ({len(user_ids)} طالب)"
-    elif request.target_type == "role" and request.target_role:
-        users = await db.users.find({"role": request.target_role}, {"_id": 1}).to_list(10000)
-        user_ids = [str(u["_id"]) for u in users]
-        query["user_id"] = {"$in": user_ids}
-        role_labels = {"admin": "المديرين", "teacher": "المعلمين", "student": "الطلاب", "employee": "الموظفين"}
-        target_desc = role_labels.get(request.target_role, request.target_role)
-    elif request.target_type == "users" and request.user_ids:
-        query["user_id"] = {"$in": request.user_ids}
-        target_desc = f"{len(request.user_ids)} مستخدم"
-    elif request.target_type in ("faculty", "department", "level", "section"):
-        # شجرة طلاب: كلية → قسم → مستوى → شعبة
-        user_ids, target_desc = await _resolve_student_users(
-            db,
-            faculty_id=request.faculty_id,
-            department_id=request.department_id,
-            level=request.level,
-            section=request.section,
-        )
-        query["user_id"] = {"$in": user_ids} if user_ids else {"$in": []}
-
-    # جمع user_ids المستهدفين لحفظ الإشعارات داخل التطبيق
-    target_user_ids = []
-    if request.target_type == "student" and request.student_user_id:
-        target_user_ids = [request.student_user_id]
-    elif request.target_type == "teacher" and request.teacher_user_id:
-        target_user_ids = [request.teacher_user_id]
-    elif request.target_type == "course" and request.course_id:
-        enrollments = await db.enrollments.find({"course_id": request.course_id}).to_list(5000)
-        student_ids = [e["student_id"] for e in enrollments]
-        students_list = await db.students.find({"_id": {"$in": [__import__('bson').ObjectId(sid) for sid in student_ids]}}).to_list(5000)
-        target_user_ids = [s["user_id"] for s in students_list if s.get("user_id")]
-    elif request.target_type == "role" and request.target_role:
-        users = await db.users.find({"role": request.target_role}, {"_id": 1}).to_list(10000)
-        target_user_ids = [str(u["_id"]) for u in users]
-    elif request.target_type == "all":
-        all_users = await db.users.find({}, {"_id": 1}).to_list(50000)
-        target_user_ids = [str(u["_id"]) for u in all_users]
-    elif request.target_type == "users" and request.user_ids:
-        target_user_ids = request.user_ids
-    elif request.target_type in ("faculty", "department", "level", "section"):
-        target_user_ids, _ = await _resolve_student_users(
-            db,
-            faculty_id=request.faculty_id,
-            department_id=request.department_id,
-            level=request.level,
-            section=request.section,
-        )
+    target_user_ids, target_desc = await _resolve_targets(db, request)
+    query = {"user_id": {"$in": target_user_ids}}
 
     # حفظ الإشعار داخل التطبيق لكل مستخدم مستهدف
     in_app_notifications = []
