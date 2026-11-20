@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../src/contexts/AuthContext';
 import api, { facultiesAPI, departmentsAPI, coursesAPI } from '../src/services/api';
 import { TemplatesBar, SchedulePicker, ScheduledList } from '../src/components/NotificationExtras';
+import { useAcademicScope } from '../src/hooks/useAcademicScope';
 import { CourseFilter } from '../src/components/CourseFilter';
 
 type TargetType = 'all' | 'role' | 'faculty' | 'department' | 'level' | 'section' | 'course' | 'teacher' | 'student';
@@ -33,6 +34,8 @@ export default function SendNotification() {
   const [targetType, setTargetType] = useState<TargetType>('all');
   const [selectedRole, setSelectedRole] = useState('');
   const [roleScope, setRoleScope] = useState<'university' | 'faculty' | 'department'>('university');
+  const { scope, restricted, filterFaculties, filterDepartments } = useAcademicScope();
+  const fullFaculty = !restricted || (scope?.full_faculty_ids || []).length > 0;
   const [audience, setAudience] = useState<'all' | 'teachers' | 'students'>('all');
   const [previewDesc, setPreviewDesc] = useState('');
   const [scheduleAt, setScheduleAt] = useState<string | null>(null);
@@ -44,13 +47,21 @@ export default function SendNotification() {
     user?.permissions?.includes('manage_notifications');
 
   // Cascading data
-  const [faculties, setFaculties] = useState<any[]>([]);
-  const [departments, setDepartments] = useState<any[]>([]);
+  const [allFaculties, setFaculties] = useState<any[]>([]);
+  const [allDepartments, setDepartments] = useState<any[]>([]);
+  const faculties = useMemo(() => filterFaculties(allFaculties), [allFaculties, scope]);
+  const departments = useMemo(() => filterDepartments(allDepartments), [allDepartments, scope]);
   const [courses, setCourses] = useState<any[]>([]);
   const [metaLoading, setMetaLoading] = useState(true);
 
   // Selected cascading values
   const [selFaculty, setSelFaculty] = useState('');
+  useEffect(() => {
+    if (!restricted) return;
+    if (targetType === 'all') setTargetType(fullFaculty ? 'faculty' : 'department');
+    if (roleScope === 'university') setRoleScope(fullFaculty ? 'faculty' : 'department');
+    if (!selFaculty && faculties.length === 1) setSelFaculty(faculties[0].id);
+  }, [restricted, fullFaculty, faculties, targetType, roleScope, selFaculty]);
   const [selDept, setSelDept] = useState('');
   const [selLevel, setSelLevel] = useState<string>('');
   const [selSection, setSelSection] = useState('');
@@ -291,7 +302,7 @@ export default function SendNotification() {
         {/* Target type pills */}
         <Text style={styles.label}>اختر الفئة المستهدفة:</Text>
         <View style={styles.pillsWrap}>
-          {TARGET_OPTIONS.map(opt => (
+          {TARGET_OPTIONS.filter(o => !restricted || (o.value !== 'all' && (o.value !== 'faculty' || fullFaculty))).map(opt => (
             <TouchableOpacity
               key={opt.value}
               onPress={() => setTargetType(opt.value)}
@@ -328,7 +339,7 @@ export default function SendNotification() {
             </View>
             <Text style={[styles.fieldLabel, { marginTop: 12 }]}>النطاق</Text>
             <View style={styles.pillsWrap}>
-              {([['university', 'كل الجامعة'], ['faculty', 'كلية كاملة'], ['department', 'قسم في كلية']] as const).map(([v, l]) => (
+              {([['university', 'كل الجامعة'], ['faculty', 'كلية كاملة'], ['department', 'قسم في كلية']] as const).filter(([v]) => !restricted || (v !== 'university' && (v !== 'faculty' || fullFaculty))).map(([v, l]) => (
                 <TouchableOpacity key={v} onPress={() => { setRoleScope(v); if (v !== 'department') setSelDept(''); }}
                   style={[styles.smallPill, roleScope === v && styles.smallPillActive]} testID={`role-scope-${v}`}>
                   <Text style={[styles.pillText, roleScope === v && styles.pillTextActive]}>{l}</Text>

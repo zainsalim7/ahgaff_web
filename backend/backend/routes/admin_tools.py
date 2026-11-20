@@ -200,6 +200,24 @@ async def _scope_query(db, faculty_id: Optional[str], department_id: Optional[st
     return {}
 
 
+@router.get("/me/academic-scope")
+async def my_academic_scope(current_user: dict = Depends(get_current_user)):
+    """🔒 نطاق المستخدم الأكاديمي لتقييد قوائم الكليات/الأقسام في الواجهة"""
+    from .deps import get_own_department_ids
+    depts = await get_own_department_ids(current_user)
+    if depts is None:
+        return {"restricted": False, "faculty_ids": [], "department_ids": []}
+    db = get_db()
+    oids = [ObjectId(d) for d in depts if ObjectId.is_valid(d)]
+    facs = {d.get("faculty_id") async for d in db.departments.find({"_id": {"$in": oids}}, {"faculty_id": 1}) if d.get("faculty_id")}
+    full = []
+    for f in facs:
+        all_d = {str(x["_id"]) async for x in db.departments.find({"faculty_id": f}, {"_id": 1})}
+        if all_d and all_d <= set(depts):
+            full.append(f)
+    return {"restricted": True, "faculty_ids": sorted(facs), "full_faculty_ids": sorted(full), "department_ids": list(depts)}
+
+
 @router.get("/admin/students/nationalities")
 async def get_nationalities(current_user: dict = Depends(get_current_user)):
     return {"items": await _nationality_list(get_db())}

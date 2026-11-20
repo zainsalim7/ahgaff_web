@@ -7,6 +7,7 @@ import { Picker } from '@react-native-picker/picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { goBack } from '../src/utils/navigation';
+import { useAcademicScope } from '../src/hooks/useAcademicScope';
 import api, { teachersAPI, departmentsAPI, facultiesAPI } from '../src/services/api';
 import { OvertimeSheet, lvl } from '../src/components/reports/OvertimeSheet';
 import { OvertimePolicyModal } from '../src/components/reports/OvertimePolicyModal';
@@ -38,10 +39,14 @@ export default function TeacherWorkloadReport() {
   const compact = width < 900;
 
   const [teachers, setTeachers] = useState<any[]>([]);
-  const [departments, setDepartments] = useState<any[]>([]);
-  const [faculties, setFaculties] = useState<any[]>([]);
+  const [allDepartments, setDepartments] = useState<any[]>([]);
+  const [allFaculties, setFaculties] = useState<any[]>([]);
+  const { scope, restricted, filterFaculties, filterDepartments } = useAcademicScope();
+  const faculties = useMemo(() => filterFaculties(allFaculties), [allFaculties, scope]);
+  const departments = useMemo(() => filterDepartments(allDepartments), [allDepartments, scope]);
   const [fac, setFac] = useState('');
   const [dept, setDept] = useState('');
+  useEffect(() => { if (restricted && !fac && faculties.length >= 1) setFac(faculties[0].id); }, [restricted, faculties, fac]);
   const [deptMode, setDeptMode] = useState<'org' | 'teach'>('org');
   const [revealDeptNumbers, setRevealDeptNumbers] = useState(false);
   const [view, setView] = useState<'summary' | 'sheet'>('summary');
@@ -235,7 +240,7 @@ export default function TeacherWorkloadReport() {
     return list;
   }, [data, search, sort]);
 
-  const deptName = (id: string) => departments.find((d) => d.id === id)?.name || '';
+  const deptName = (id: string) => allDepartments.find((d) => d.id === id)?.name || '';
   const facDepts = departments.filter((d) => !fac || d.faculty_id === fac);
   const filteredTeachers = teachers.filter((t) => (!dept || deptMode === 'teach' || t.department_id === dept) && (!fac || t.faculty_id === fac || facDepts.some((d) => d.id === t.department_id)) && (!teacherQ || matchAr(t.full_name, teacherQ))).slice(0, 8);
   const customFilteredTeachers = teachers.filter((t) => !customTeacherQ || matchAr(t.full_name, customTeacherQ)).slice(0, 8);
@@ -305,7 +310,7 @@ export default function TeacherWorkloadReport() {
                 <Text style={styles.label}>الكلية</Text>
                 <View style={styles.pickerBox}>
                   <Picker selectedValue={fac} onValueChange={(v) => { setFac(String(v)); setDept(''); setTeacherId(''); setTeacherQ(''); }} style={styles.picker} testID="tw-faculty-picker">
-                    <Picker.Item label="جميع الكليات" value="" />
+                    {!restricted && <Picker.Item label="جميع الكليات" value="" />}
                     {faculties.map((f) => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
                   </Picker>
                 </View>
@@ -314,7 +319,7 @@ export default function TeacherWorkloadReport() {
                 <Text style={styles.label}>القسم</Text>
                 <View style={styles.pickerBox}>
                   <Picker selectedValue={dept} onValueChange={(v) => { setDept(String(v)); setTeacherId(''); setTeacherQ(''); }} style={styles.picker} testID="tw-dept-picker">
-                    <Picker.Item label="جميع الأقسام" value="" />
+                    <Picker.Item label={restricted ? 'كل أقسام نطاقي' : 'جميع الأقسام'} value="" />
                     {facDepts.map((d) => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                   </Picker>
                 </View>

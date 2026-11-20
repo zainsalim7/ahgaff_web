@@ -529,10 +529,13 @@ async def select_teachers(db, current_user: dict, teacher_id: Optional[str], fac
     elif specific_id:
         q["_id"] = specific_id
     elif department_id:
-        q["$or"] = [{"department_id": department_id}, {"department_ids": department_id}]
+        # 🆕 يشمل من يُدرّس مقررات في القسم وإن كان من قسم/كلية أخرى تنظيمياً
+        _t = [ObjectId(x) for x in await db.courses.distinct("teacher_id", {"department_id": department_id, "is_active": True}) if x and ObjectId.is_valid(x)]
+        q["$or"] = [{"department_id": department_id}, {"department_ids": department_id}, {"_id": {"$in": _t}}]
     elif faculty_id:
         dep_ids = [str(d["_id"]) for d in await db.departments.find({"faculty_id": faculty_id}, {"_id": 1}).to_list(500)]
-        q["$or"] = [{"faculty_id": faculty_id}, {"department_id": {"$in": dep_ids}}, {"department_ids": {"$in": dep_ids}}]
+        _t = [ObjectId(x) for x in await db.courses.distinct("teacher_id", {"department_id": {"$in": dep_ids}, "is_active": True}) if x and ObjectId.is_valid(x)]
+        q["$or"] = [{"faculty_id": faculty_id}, {"department_id": {"$in": dep_ids}}, {"department_ids": {"$in": dep_ids}}, {"_id": {"$in": _t}}]
     if not skip_scope and not current_user.get("advanced_access_real_enforcement"):
         from .deps import get_scope_filter
         own_scope = await get_scope_filter(current_user, "teachers")

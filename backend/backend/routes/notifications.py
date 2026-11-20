@@ -367,10 +367,57 @@ async def _resolve_targets(db, request) -> tuple[list, str]:
     return uids, "الكل"
 
 
+async def _enforce_scope(db, current_user: dict, request):
+    """🔒 المستخدم المقيَّد بكلية/قسم لا يرسل إلا داخل نطاقه"""
+    from bson import ObjectId
+    from .deps import get_own_department_ids
+    allowed = await get_own_department_ids(current_user)
+    if allowed is None:
+        return
+    allowed = set(allowed)
+    deny = HTTPException(status_code=403, detail="نطاق صلاحيتك محدود بكليتك/قسمك — اختر كلية أو قسماً ضمن نطاقك")
+    t = request.target_type
+    if t in ("all", "users") or not t:
+        raise deny
+    if t == "student":
+        st = await db.students.find_one({"user_id": request.student_user_id}, {"department_id": 1})
+        if not st or st.get("department_id") not in allowed:
+            raise deny
+        return
+    if t == "teacher":
+        tr = await db.teachers.find_one({"user_id": request.teacher_user_id}, {"department_id": 1, "department_ids": 1})
+        own = {(tr or {}).get("department_id")} | set((tr or {}).get("department_ids") or [])
+        teaches = await db.courses.count_documents({"teacher_id": str((tr or {}).get("_id", "")), "department_id": {"$in": list(allowed)}}) if tr else 0
+        if not tr or not (own & allowed or teaches):
+            raise deny
+        return
+    if t == "course":
+        c = await db.courses.find_one({"_id": ObjectId(request.course_id)}, {"department_id": 1}) if request.course_id and ObjectId.is_valid(request.course_id) else None
+        if not c or c.get("department_id") not in allowed:
+            raise deny
+        return
+    if request.department_id:
+        if request.department_id not in allowed:
+            raise deny
+        return
+    if request.faculty_id:
+        fdepts = {str(d["_id"]) async for d in db.departments.find({"faculty_id": request.faculty_id}, {"_id": 1})}
+        if not fdepts or not fdepts <= allowed:
+            raise deny
+        return
+    raise deny
+
+
+async def _scope_dept_ids(current_user: dict):
+    from .deps import get_own_department_ids
+    return await get_own_department_ids(current_user)
+
+
 @router.post("/notifications/preview")
 async def preview_notification_targets(request: SendNotificationRequest, current_user: dict = Depends(get_current_user)):
     if not check_notification_permission(current_user):
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية إرسال الإشعارات")
+    await _enforce_scope(get_db(), current_user, request)
     uids, desc = await _resolve_targets(get_db(), request)
     return {"users": len(uids), "target_desc": desc}
 
@@ -387,6 +434,7 @@ async def send_notification_api(
 
     if not check_notification_permission(current_user):
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية إرسال الإشعارات")
+    await _enforce_scope(db, current_user, request)
 
     if request.scheduled_at:
         when = _parse_schedule(request.scheduled_at)
@@ -635,6 +683,11 @@ async def search_students_for_notification(
     ]}
 
     projection = {"_id": 0, "user_id": 1, "student_id": 1, "full_name": 1}
+    _sd = await _scope_dept_ids(current_user)
+    if _sd is not None:
+        exact_query = {"$and": [exact_query, {"department_id": {"$in": _sd}}]}
+        starts_with_query = {"$and": [starts_with_query, {"department_id": {"$in": _sd}}]}
+        contains_query = {"$and": [contains_query, {"department_id": {"$in": _sd}}]}
 
     # نتائج مطابقة تماماً أولاً
     exact = await db.students.find(exact_query, projection).to_list(5)
@@ -667,23 +720,32 @@ async def search_teachers_for_notification(
         return []
 
     projection = {"_id": 0, "user_id": 1, "teacher_id": 1, "full_name": 1}
+    _sd = await _scope_dept_ids(current_user)
+    _tscope = {}
+    if _sd is not None:
+        from bson import ObjectId
+        _taught = [ObjectId(x) for x in await db.courses.distinct("teacher_id", {"department_id": {"$in": _sd}}) if x and ObjectId.is_valid(x)]
+        _tscope = {"$or": [{"department_id": {"$in": _sd}}, {"department_ids": {"$in": _sd}}, {"_id": {"$in": _taught}}]}
 
-    exact = await db.teachers.find({"$or": [
+    def _w(qq):
+        return {"$and": [qq, _tscope]} if _tscope else qq
+
+    exact = await db.teachers.find(_w({"$or": [
         {"teacher_id": q}, {"full_name": q}
-    ]}, projection).to_list(5)
+    ]}), projection).to_list(5)
     exact_ids = {t.get("teacher_id") for t in exact}
 
-    starts = await db.teachers.find({"$or": [
+    starts = await db.teachers.find(_w({"$or": [
         {"full_name": {"$regex": f"^{q}", "$options": "i"}},
         {"teacher_id": {"$regex": f"^{q}", "$options": "i"}},
-    ]}, projection).to_list(10)
+    ]}), projection).to_list(10)
     starts = [t for t in starts if t.get("teacher_id") not in exact_ids]
     all_ids = exact_ids | {t.get("teacher_id") for t in starts}
 
-    contains = await db.teachers.find({"$or": [
+    contains = await db.teachers.find(_w({"$or": [
         {"full_name": {"$regex": q, "$options": "i"}},
         {"teacher_id": {"$regex": q, "$options": "i"}},
-    ]}, projection).to_list(15)
+    ]}), projection).to_list(15)
     contains = [t for t in contains if t.get("teacher_id") not in all_ids]
 
     return exact + starts + contains
@@ -699,7 +761,11 @@ async def get_courses_for_notification(
     if not check_notification_permission(current_user):
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
 
-    courses = await db.courses.find({"is_active": True}).to_list(200)
+    _cq = {"is_active": True}
+    _sd = await _scope_dept_ids(current_user)
+    if _sd is not None:
+        _cq["department_id"] = {"$in": _sd}
+    courses = await db.courses.find(_cq).to_list(200)
     result = []
     for c in courses:
         enrollments_count = await db.enrollments.count_documents({"course_id": str(c["_id"])})
