@@ -719,7 +719,7 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool =
     doc = {**(await _compose(db, data, settings)), "auto_table": not per_person, "serial": seq, "number_display": format_number(series.get("format"), seq, year) + " (معاينة)", "year": year,
            "verify_url": "DRAFT-PREVIEW", "issued_at": datetime.now(timezone.utc).isoformat()}
     if data.draft_id and ObjectId.is_valid(data.draft_id) and not doc.get("people"):
-        ex = await db.letters.find_one({"_id": ObjectId(data.draft_id)})
+        ex = await db.letters.find_one({"_id": ObjectId(data.draft_id), **(await _visible_filter(db, current_user))})
         if ex and ex.get("custom_table"):
             doc["table"] = ex.get("table")  # 👁️ جدول مخصص محفوظ (مثل كشف الساعات الإضافية) — يُعرض في المعاينة الحية كما سيظهر في PDF النهائي، بدل عرض {جدول_الأسماء} حرفياً
             if not (doc["table"] or {}).get("rows"):

@@ -440,7 +440,7 @@ export default function LettersPage() {
       {tab === 'log' && (
         <div style={card} data-testid="letters-log">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-            <div><b style={{ fontSize: 15, color: '#0f2440' }}>🗂 سجل الخطابات</b><span style={{ fontSize: 11.5, color: '#94a3b8', marginRight: 8 }}>{user?.role === 'admin' ? 'أرشيف كل الخطابات والمسودات في الجامعة' : 'خطاباتك ومسوداتك أنت فقط'}</span></div>
+            <div><b style={{ fontSize: 15, color: '#0f2440' }}>🗂 سجل الخطابات</b><span style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginRight: 8 }}>{user?.role === 'admin' ? 'أرشيف كل الخطابات والمسودات في الجامعة' : 'خطاباتك ومسوداتك أنت فقط'}</span></div>
             <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 700 }} data-testid="letters-log-count">{log.length} خطاب{log.length >= 300 ? ' (أول 300 — ضيّق الفلاتر)' : ''}</div>
           </div>
           <div style={{ position: 'relative', marginBottom: 10 }}>

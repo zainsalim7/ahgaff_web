@@ -1,0 +1,33 @@
+{
+  "summary": "Tested the rule that non-admin users see only their own letters, on both backend and frontend. Backend: 8/8 pytest tests pass. Salim and Saeed each see 0 letters at baseline and admin sees 127. Every letter returned to a non-admin has issued_by or created_by equal to that user's id. Salim created a draft: he sees it and admin sees it, but Saeed does not see it in the list (default or limit=1000) and gets 403 on GET, pdf, docx, duplicate, delete, finalize, revoke, restore and on editing the draft via POST /letters/draft with draft_id. After those attempts the draft was unchanged. Salim can duplicate, finalize, download docx and revoke his own draft. QR verify (/api/verify/letter/{token}) is public: it returned valid=true after issue and valid=false after revoke. A letter issued by admin is 403 for Salim and not in his list. /api/letters/people returns the same results for Salim and admin for student, teacher and employee (not limited by faculty). The overtime letters register is GET /api/reports/teacher-workload/letters; it filters by $or issued_by/created_by for non-admin and returned 200 with count 0 for Salim and Saeed. Admin also has 0 overtime letters, so the filter could not be checked on real rows. Frontend /letters log tab: Salim sees the subtitle 'خطاباتك ومسوداتك أنت فقط' and 0 letters, then 1 after his draft, which appears with its actions. Saeed sees 0 and not Salim's draft. Admin sees 'أرشيف كل الخطابات والمسودات في الجامعة' and 127 letters.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/letters/preview-pdf (draft_id)", "issue": "This endpoint loads the draft with a plain db.letters.find_one and skips _load_visible. A non-admin who knows another user's draft id can see that draft's custom/overtime table in the preview. Low risk because ids are hard to guess, but it does not follow the own-only rule. Use _load_visible (or the visibility filter) here."},
+      {"endpoint": "GET /api/reports/teacher-workload/raised", "issue": "find_raised returns letter numbers for teachers raised in any user's letters, not only the caller's. This is probably intended (to prevent raising the same teacher twice), but it shows other users' letter numbers. Product decision."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/letters log header", "issues": ["The scope subtitle is color #94a3b8 at 11.5px on white, which is low contrast for an important scope hint. Consider #64748b."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_letters_own_only_iter200.py", "/app/test_reports/pytest/iter200.xml"],
+  "action_items": [
+    "Optional: in preview-pdf, check access to draft_id through _load_visible.",
+    "Optional: darken the log scope subtitle colour."
+  ],
+  "critical_code_review_comments": [
+    "_visible_filter and _load_visible are applied to list, get, pdf, docx, duplicate, delete, finalize, revoke, restore, draft edit, batch pdf, attachments and pdf-with-attachments. Coverage is complete except preview-pdf.",
+    "created_by and issued_by are stored as current_user['id'], which is the same value as user_id_of(user), so the filter matches.",
+    "letters.py is 851 lines, over the 700-line guideline."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_own_only_iter200.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_OWN200_* and TEST_UI200_draft letters. Drafts were deleted via the API. The 2 issued test letters were deleted from Mongo by their exact _ids (6b00a6b95e10b23176c9c6ad, 6b00a6bb5e10b23176c9c6b3). Issuing consumed 2 serial numbers in the general series.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with -p no:xdist -o addopts=\"\" on test_letters_own_only_iter200.py. Issued letters cannot be deleted through the API (only revoked), so clean them up by id in Mongo. Baseline: Salim and Saeed own 0 letters, admin sees 127, and no overtime letters exist."
+}
