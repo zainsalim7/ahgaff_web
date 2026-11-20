@@ -524,7 +524,8 @@ async def list_scheduled_notifications(current_user: dict = Depends(get_current_
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
     db = get_db()
     out = []
-    async for d in db.scheduled_notifications.find({}).sort("scheduled_at", -1).limit(100):
+    _sq = {} if await _scope_dept_ids(current_user) is None else {"created_by": str(current_user["_id"])}
+    async for d in db.scheduled_notifications.find(_sq).sort("scheduled_at", -1).limit(100):
         out.append({
             "id": str(d["_id"]), "title": d["payload"].get("title"), "body": d["payload"].get("body"),
             "scheduled_at": d["scheduled_at"], "status": d.get("status"), "target_desc": d.get("target_desc"),
@@ -541,7 +542,10 @@ async def cancel_scheduled_notification(sid: str, current_user: dict = Depends(g
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
     if not ObjectId.is_valid(sid):
         raise HTTPException(status_code=404, detail="غير موجود")
-    r = await get_db().scheduled_notifications.update_one({"_id": ObjectId(sid), "status": "pending"}, {"$set": {"status": "cancelled"}})
+    _cq = {"_id": ObjectId(sid), "status": "pending"}
+    if await _scope_dept_ids(current_user) is not None:
+        _cq["created_by"] = str(current_user["_id"])
+    r = await get_db().scheduled_notifications.update_one(_cq, {"$set": {"status": "cancelled"}})
     if not r.modified_count:
         raise HTTPException(status_code=400, detail="لا يمكن إلغاء هذا الإشعار (أُرسل أو أُلغي مسبقاً)")
     return {"message": "تم إلغاء الإشعار المجدول"}
@@ -646,8 +650,9 @@ async def get_notification_history(
     if not check_notification_permission(current_user):
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية عرض الإشعارات")
 
+    _hq = {} if await _scope_dept_ids(current_user) is None else {"sent_by": str(current_user["_id"])}
     notifications = await db.notification_history.find(
-        {},
+        _hq,
         {"_id": 0}
     ).sort("created_at", -1).to_list(100)
 

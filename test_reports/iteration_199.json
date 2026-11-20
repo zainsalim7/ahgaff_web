@@ -1,0 +1,33 @@
+{
+  "summary": "Tested the academic-scope restriction for faculty-limited users (Salim, dean of faculty 698e4f9297fef774e66e93a4) against the admin account. Backend: 37 of 37 pytest checks passed. They cover /me/academic-scope, notification preview, send and scheduled-send scope checks (14 kinds of denied target, 6 allowed in-scope targets, plus counts 20, 30 and 125), search-students, search-teachers and courses scoping, and the workload report's select_teachers including visiting teachers. Frontend: Salim's send-notification page hides 'الجميع' and 'كل الجامعة', defaults to كلية كاملة, auto-selects his faculty (only 1 option), and lists only his 3 departments. Preview showed 20 for the students role and 30 for the faculty. Salim's workload report has no 'جميع الكليات'; his faculty is auto-selected and the department list shows 'كل أقسام نطاقي' plus his 3 departments. Running it lists the visiting teacher حسن صالح and does not list Saeed. As admin, 'الجميع', 'كل الجامعة' and 'جميع الكليات' are all visible and preview for الجميع is 125. The letters log is unchanged: not in the diff, and Salim gets 200 with 2 letters.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/reports/teacher-workload?faculty_id=<own>", "issue": "A visiting teacher (حسن صالح, who belongs to كلية البنات) is now listed, but his row shows all 4 of his courses and 8.5 weekly hours. Two of those courses (دراسات حضرموت, لغة إنجليزية - اختبار) are in the other faculty's الدراسات الإسلامية department. So Salim sees course and hours data from outside his scope, and the visitor's required load and overtime are counted university-wide inside Salim's faculty report. Confirm whether visitors should be limited to the courses taught in the selected faculty or department (as teach_department_id mode does)."},
+      {"endpoint": "GET /api/notifications/history, GET /api/notifications/scheduled, DELETE /api/notifications/scheduled/{id}", "issue": "These are not scoped. Salim sees the whole university's sending history (62 rows, including targets of 'الكل') and all scheduled notifications, and he can cancel scheduled notifications created by an admin or another faculty."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "report-teacher-workload", "issues": ["The date range uses the browser's native date input instead of a styled calendar. This was already there before this change and was not introduced by it."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter199_scope_notifications_workload.py", "/app/test_reports/pytest/iter199.xml"],
+  "action_items": [
+    "Decide whether visiting teachers in a faculty-scoped workload report should show only the courses taught in that faculty, or keep the full university-wide load, and document the choice.",
+    "Optional: scope /notifications/history and /notifications/scheduled (list and cancel) to the sender or the user's scope for restricted users."
+  ],
+  "critical_code_review_comments": [
+    "In _enforce_scope, the teacher check counts courses of any status (no is_active filter), while select_teachers only counts active courses. Minor inconsistency.",
+    "In _enforce_scope, a request with both faculty_id (out of scope) and department_id (in scope) passes on department_id alone. Harmless, because _resolve_student_users filters on both, but faculty_id could be checked as well.",
+    "useAcademicScope keeps its result in a module-level cache. After a user switch in the same tab it briefly shows the previous user's scope until the refetch finishes. The server still enforces scope, so this is cosmetic."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter199_scope_notifications_workload.py"],
+  "success_rate": {"backend": "100% (37/37)", "frontend": "100%"},
+  "seed_data_creation": "None. All send attempts were denied or preview-only, and no TEST_scope notifications, history or scheduled records were created (verified in the DB). The temporary send_notifications permission was removed from Salim; his custom_permissions are now [manage_fee_receipts, hr_manage_tasks, hr_manage_appraisals].",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Rerun the pytest file. Salim needs the send_notifications custom permission for the notification tests, so add it temporarily and remove it afterwards. Faculty a4 = 698e4f9297fef774e66e93a4 (Salim's), a6 = 698e4fb497fef774e66e93a6. The visiting teacher is حسن صالح (user 698f85b8539792f8917b7be0). Log in through /login with the inputs and the 'تسجيل الدخول' button."
+}
