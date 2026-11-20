@@ -84,29 +84,12 @@ async def _isolation_scope(db, user: dict) -> list | None:
 
 
 async def _visible_filter(db, user: dict) -> dict:
-    """نطاق السجل: الأدمن الكل؛ غيره: ما أصدره + العامة (بلا أشخاص) + ما يخص كلياته + موظفو نطاقه الإداري.
-    🔒 عزل الوحدات الإدارية: إن كان نطاق hr_scope للمستخدم مقيَّداً بكليات محددة، تُعزل الخطابات «العامة» (بلا أشخاص)
-    أيضاً — لا يراها إلا من أصدرها، أو مَن نطاقه يشمل كلية مُصدرها، أو مَن أصدرها مستخدم غير مقيَّد (خطاب جامعة-عام)."""
+    """🔒 نطاق السجل (قرار صريح 2026-11): كل مستخدم يرى خطاباته هو فقط (ما أصدره أو أنشأه)؛ المدير العام يرى الكل.
+    إضافة أي طالب/معلم/موظف إلى الخطاب متاحة للجميع، لكن الخطاب يبقى ضمن نطاق مُصدره."""
     if user.get("role") == "admin":
         return {}
     uid = user_id_of(user)
-    ors: list = [{"issued_by": uid}, {"created_by": uid}]
-    general_cond = {"$or": [{"people": {"$size": 0}}, {"people": {"$exists": False}}]}
-    fac_scope = await _isolation_scope(db, user) if has_any_permission(user, HR_PERMS + ["issue_letters"]) else None
-    if fac_scope is None:
-        ors.append(general_cond)
-    else:
-        ors.append({"$and": [general_cond, {"$or": [
-            {"created_by_faculty_ids": {"$exists": False}}, {"created_by_faculty_ids": {"$size": 0}},
-            {"created_by_faculty_ids": {"$in": fac_scope}},
-        ]}]})
-    fids = _user_faculties(user)
-    if fids:
-        ors.append({"people": {"$elemMatch": {"kind": {"$in": ["student", "teacher"]}, "faculty_id": {"$in": fids}}}})
-    if has_any_permission(user, HR_PERMS):
-        emp_ids = await scope_employee_ids(db, user)
-        ors.append({"people.kind": "employee"} if emp_ids is None else {"people": {"$elemMatch": {"kind": "employee", "id": {"$in": emp_ids}}}})
-    return {"$or": ors}
+    return {"$or": [{"issued_by": uid}, {"created_by": uid}]}
 
 
 async def _load_visible(db, user: dict, lid: str) -> dict:

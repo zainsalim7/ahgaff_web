@@ -158,8 +158,9 @@ async def overtime_letters_register(q: Optional[str] = None, teacher_id: Optiona
         raise HTTPException(status_code=403, detail="غير مصرح لك — تحتاج صلاحية تقرير نصاب المدرسين")
     db = get_db()
     f: dict = {"linked_report.type": "overtime"}
-    if not (current_user.get("role") == UserRole.ADMIN or has_permission(current_user, Permission.MANAGE_SETTINGS)):
-        f["linked_report.faculty_id"] = current_user.get("faculty_id") or "__none__"
+    if current_user.get("role") != UserRole.ADMIN:
+        _uid = str(current_user.get("id") or current_user.get("_id") or "")
+        f["$or"] = [{"issued_by": _uid}, {"created_by": _uid}]
     if teacher_id:
         f["linked_report.teachers_list.teacher_id"] = teacher_id
     if status == "revoked":
