@@ -460,6 +460,10 @@ async def _compose(db, data: IssueIn, settings: dict, user: Optional[dict] = Non
     if not (sig_pid or (data.signatory_name or "").strip() or (data.signatory_title or "").strip()) and user:
         from .correspondence_positions import default_signer_for
         sig_pid = await default_signer_for(db, user) or ""
+    if sig_pid and user and ObjectId.is_valid(sig_pid):
+        from .correspondence_positions import visible_query
+        if not await db.correspondence_positions.find_one({"_id": ObjectId(sig_pid), **(await visible_query(db, user))}, {"_id": 1}):
+            raise HTTPException(status_code=403, detail="الموقّع المختار خارج نطاقك")
     sig_name, sig_title = await _resolve_sig(db, sig_pid, data.signatory_name, data.signatory_title, settings)
     ctx = {**ctx, "اسم_الموقع": sig_name, "صفة_الموقع": sig_title, **{str(k): str(v) for k, v in (data.extra_vars or {}).items() if k}}
     raw_secs = data.sections if data.sections is not None else await _effective_sections(db, settings, data.template_id)

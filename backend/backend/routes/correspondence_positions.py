@@ -80,7 +80,9 @@ async def default_signer_for(db, user: dict) -> Optional[str]:
     """الموقّع الافتراضي: موقّع كلية المُصدر (إن كان مقيَّداً بكلية واحدة) ← الموقّع الافتراضي العام"""
     facs = await user_faculty_ids(db, user)
     if facs:
-        p = await db.correspondence_positions.find_one({"is_default_signer": True, "is_active": {"$ne": False}, "faculty_id": {"$in": facs}})
+        pf = str(user.get("faculty_id") or "")
+        p = (await db.correspondence_positions.find_one({"is_default_signer": True, "is_active": {"$ne": False}, "faculty_id": pf}) if pf in facs else None) \
+            or await db.correspondence_positions.find_one({"is_default_signer": True, "is_active": {"$ne": False}, "faculty_id": {"$in": facs}}, sort=[("faculty_id", 1)])
         if p:
             return str(p["_id"])
     p = await db.correspondence_positions.find_one({"is_default_signer": True, "is_active": {"$ne": False}, "faculty_id": {"$in": [None, ""]}})
@@ -93,9 +95,9 @@ async def _guard_scope(db, ctx: CorrContext, faculty_id: Optional[str]):
         return _guard(ctx)
     if ctx.is_super or ctx.user.get("role") == "admin":
         return
-    from .letters import _can
+    from .deps import has_permission
     facs = await user_faculty_ids(db, ctx.user)
-    if not _can(ctx.user) or (facs is not None and faculty_id not in facs):
+    if ctx.user.get("role") in ("teacher", "student") or not has_permission(ctx.user, "issue_letters") or (facs is not None and faculty_id not in facs):
         raise HTTPException(status_code=403, detail="لا يمكنك إدارة مناصب هذه الكلية (خارج نطاقك أو بلا صلاحية إصدار الخطابات)")
 
 

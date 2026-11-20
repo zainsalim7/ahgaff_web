@@ -1,0 +1,32 @@
+{
+  "summary": "Faculty-scoped correspondence positions tested. Backend 16/17 pass: visibility filters (admin all; Salim general+faculty a4; Saeed general+faculty a6) on /correspondence/positions (incl kind=INTERNAL) and /letters/recipients; guards (Salim 403 on general and other-faculty create/edit/disable and on moving scope; Salim/Saeed can create/edit/disable own faculty); admin manages general; default signer unique per faculty without touching general default; drafts without signatory use faculty default (Salim) or fall back to رئيس الجامعة (Saeed); explicit signatory works. 1 fail: a restricted user can still use an isolated position from another faculty as signatory by passing its id. Frontend: Salim opens /corr-positions from letters-positions-btn, scope select shows only his faculty (no general), saves faculty position with default signer, badges '🏛 كلية الشريعة والقانون' + 'الموقِّع الافتراضي للكلية' / '🌐 عام' + 'الموقِّع الافتراضي للجامعة' show, edit/disable only on his own row. Saeed does not see Salim's row and only sees كلية البنات in the scope list. Admin sees the general option, both faculties and edit buttons on every row, and disabling works. All test data has been cleaned up.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/letters/draft, /letters/issue (signatory_position_id)", "issue": "Isolation leak: _compose/_resolve_sig -> statements.resolve_signatory -> load_position does not apply visible_query. Salim (faculty a4) can pass the id of a position from faculty a6 and his letter is signed with it. Recipient ids are not checked either. Fix: in _compose, check sig_pid against visible_query(db,user) and ignore it or return 403 if it is not visible."},
+      {"endpoint": "_guard_scope (correspondence_positions.py)", "issue": "Uses letters._can, which also allows HR permission holders (HR_PERMS) without issue_letters. On the frontend, canFaculty only checks issue_letters, so the backend and frontend rules do not match."},
+      {"endpoint": "default_signer_for", "issue": "A user scoped to more than one faculty gets an arbitrary faculty default signer (find_one with $in, no sort)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [{"screen": "/corr-positions top app bar", "issues": ["Top bar shows the raw route name 'corr-positions' instead of an Arabic title (probably no Stack screen title is registered)"]}]
+  },
+  "test_report_links": ["/app/backend/tests/test_corr_positions_faculty_iter201.py", "/app/test_reports/pytest/iter201.xml"],
+  "action_items": [
+    "Check that signatory_position_id (and recipient position id) is visible to the issuing user (visible_query) in _compose for draft/issue/issue-batch",
+    "Make the _guard_scope permission (issue_letters vs HR perms) match the frontend canFaculty",
+    "Optional: add a screen title for corr-positions"
+  ],
+  "critical_code_review_comments": [
+    "resolve_signatory/load_position bypass faculty isolation",
+    "default_signer_for is not deterministic for users scoped to more than one faculty"
+  ],
+  "updated_files": ["/app/backend/tests/test_corr_positions_faculty_iter201.py"],
+  "success_rate": {"backend": "94% (16/17)", "frontend": "100%"},
+  "seed_data_creation": "Created TEST201_* positions and drafts and a TEST201UI position. All were deleted by id. DB is back to 2 general positions (رئيس الجامعة default=True, وزير...).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest backend/tests/test_corr_positions_faculty_iter201.py (does not support -n). Its teardown deletes the test positions by id from the DB and resets رئيس الجامعة's is_default_signer. Faculty a4=كلية الشريعة والقانون (Salim), a6=كلية البنات (Saeed)."
+}
