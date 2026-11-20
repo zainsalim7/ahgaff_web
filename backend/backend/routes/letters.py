@@ -230,7 +230,8 @@ async def recipients(current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
     out = []
-    for p in await db.correspondence_positions.find({"is_active": {"$ne": False}}).sort([("kind", 1), ("sort_order", 1)]).to_list(500):
+    from .correspondence_positions import visible_query
+    for p in await db.correspondence_positions.find({"is_active": {"$ne": False}, **(await visible_query(db, current_user))}).sort([("kind", 1), ("sort_order", 1)]).to_list(500):
         org = ""
         if p.get("organization_id") and ObjectId.is_valid(p["organization_id"]):
             org = ((await db.org_units.find_one({"_id": ObjectId(p["organization_id"])}, {"name": 1})) or {}).get("name", "")
@@ -452,17 +453,21 @@ async def _resolve_sig(db, position_id, name, title, settings: dict) -> tuple:
     return (n or settings.get("default_signatory_name") or "").strip(), (t or settings.get("default_signatory_title") or "").strip()
 
 
-async def _compose(db, data: IssueIn, settings: dict) -> dict:
+async def _compose(db, data: IssueIn, settings: dict, user: Optional[dict] = None) -> dict:
     """الجزء المشترك: تعبئة المتغيرات + الجدول + بيانات المرسَل إليه والموقّع (بلا ترقيم)"""
     ctx, table, people = await _build_ctx(db, data.recipient or {}, data.subject or "", data.people)
-    sig_name, sig_title = await _resolve_sig(db, data.signatory_position_id, data.signatory_name, data.signatory_title, settings)
+    sig_pid = data.signatory_position_id
+    if not (sig_pid or (data.signatory_name or "").strip() or (data.signatory_title or "").strip()) and user:
+        from .correspondence_positions import default_signer_for
+        sig_pid = await default_signer_for(db, user) or ""
+    sig_name, sig_title = await _resolve_sig(db, sig_pid, data.signatory_name, data.signatory_title, settings)
     ctx = {**ctx, "اسم_الموقع": sig_name, "صفة_الموقع": sig_title, **{str(k): str(v) for k, v in (data.extra_vars or {}).items() if k}}
     raw_secs = data.sections if data.sections is not None else await _effective_sections(db, settings, data.template_id)
     sections = {k: _apply_vars(v, ctx) for k, v in (raw_secs or {}).items() if k in SECTION_KEYS and v is not None}
     return {"subject": _apply_vars((data.subject or "").strip(), ctx), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people, "sections": sections,
             "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
             "template_id": data.template_id, "template_name": data.template_name or "", "notes": data.notes or "",
-            "signatory_name": sig_name, "signatory_title": sig_title, "signatory_position_id": data.signatory_position_id or "",
+            "signatory_name": sig_name, "signatory_title": sig_title, "signatory_position_id": sig_pid or "",
             "layout": data.layout or None, "valid_days": data.valid_days,
             "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id, "sections": raw_secs or {}, "extra_vars": data.extra_vars or {}}}
 
@@ -551,7 +556,7 @@ async def issue_letter(data: IssueIn, current_user: dict = Depends(get_current_u
     db = get_db()
     _validate(data)
     settings, series = await _lh_series(db, current_user, data)
-    doc = {**(await _compose(db, data, settings)), **(await _finalize_fields(db, series, data.base_url, data.valid_days, current_user)), **_lh_fields(settings, series)}
+    doc = {**(await _compose(db, data, settings, current_user)), **(await _finalize_fields(db, series, data.base_url, data.valid_days, current_user)), **_lh_fields(settings, series)}
     r = await db.letters.insert_one(doc)
     await log_activity(current_user, "issue_letter", "letter", str(r.inserted_id), doc["subject"], {"number": doc["number_display"], "to": doc["recipient"].get("name") or doc["recipient"].get("title")})
     return {"id": str(r.inserted_id), "number": doc["number_display"], "verify_url": doc["verify_url"], "token": doc["verify_token"]}
@@ -577,7 +582,7 @@ async def issue_batch(data: IssueIn, current_user: dict = Depends(get_current_us
         d = await _per_person_data(db, data, person)
         if not d:
             skipped.append(person.get("id", "")); continue
-        doc = {**(await _compose(db, d, settings)), **(await _finalize_fields(db, series, data.base_url, data.valid_days, current_user)), **_lh_fields(settings, series),
+        doc = {**(await _compose(db, d, settings, current_user)), **(await _finalize_fields(db, series, data.base_url, data.valid_days, current_user)), **_lh_fields(settings, series),
                "batch_id": batch_id, "batch_index": i + 1, "batch_total": len(data.people), "person_as_recipient": data.person_as_recipient, "auto_table": False}
         r = await db.letters.insert_one(doc)
         out.append({"id": str(r.inserted_id), "number": doc["number_display"], "name": (doc["people"] or [{}])[0].get("name", ""), "verify_url": doc["verify_url"]})
@@ -614,7 +619,7 @@ async def save_draft(data: IssueIn, current_user: dict = Depends(get_current_use
     if not data.body.strip():
         raise HTTPException(status_code=400, detail="المتن مطلوب لحفظ المسودة")
     settings, series = await _lh_series(db, current_user, data)
-    doc = {**(await _compose(db, data, settings)), **_lh_fields(settings, series), "status": "draft", "is_revoked": False, "updated_at": datetime.now(timezone.utc).isoformat(),
+    doc = {**(await _compose(db, data, settings, current_user)), **_lh_fields(settings, series), "status": "draft", "is_revoked": False, "updated_at": datetime.now(timezone.utc).isoformat(),
            "updated_by_name": current_user.get("full_name", "")}
     if data.draft_id and ObjectId.is_valid(data.draft_id):
         ex = await _load_visible(db, current_user, data.draft_id)
@@ -716,7 +721,7 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool =
     year = datetime.now(timezone.utc).year
     cur = (series.get("counters") or {}).get(str(year), 0) if series.get("reset_yearly", True) else series.get("seq", 0)
     seq = max(cur + 1, int(series.get("start_at") or 1))
-    doc = {**(await _compose(db, data, settings)), "auto_table": not per_person, "serial": seq, "number_display": format_number(series.get("format"), seq, year) + " (معاينة)", "year": year,
+    doc = {**(await _compose(db, data, settings, current_user)), "auto_table": not per_person, "serial": seq, "number_display": format_number(series.get("format"), seq, year) + " (معاينة)", "year": year,
            "verify_url": "DRAFT-PREVIEW", "issued_at": datetime.now(timezone.utc).isoformat()}
     if data.draft_id and ObjectId.is_valid(data.draft_id) and not doc.get("people"):
         ex = await db.letters.find_one({"_id": ObjectId(data.draft_id), **(await _visible_filter(db, current_user))})
