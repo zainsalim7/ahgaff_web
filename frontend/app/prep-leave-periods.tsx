@@ -27,6 +27,7 @@ interface PrepPeriod {
   scope_id?: string | null;
   scope_name: string;
   scope_label: string;
+  mode?: 'exclude' | 'present';
   reason: string;
   created_at?: string;
   created_by_name: string;
@@ -46,12 +47,19 @@ const showAlert = (title: string, msg: string) => {
   else Alert.alert(title, msg);
 };
 
-const askConfirm = async (title: string, msg: string): Promise<boolean> => {
+const MODES = {
+  exclude: { label: 'استبعاد', icon: 'remove-circle-outline', color: '#7c3aed',
+    desc: 'تُستبعد المحاضرات من حساب الطالب (لا حضور ولا غياب) ولا تُحتسب في نصاب تنفيذ المدرس.' },
+  present: { label: 'احتساب حضور', icon: 'checkmark-circle-outline', color: '#16a34a',
+    desc: 'يُحتسب كل الطلاب حاضرين (حتى الغائب والمعذور) ولا تُحتسب في نصاب تنفيذ المدرس.' },
+} as const;
+
+const askConfirm = async (title: string, msg: string, ok = 'حذف'): Promise<boolean> => {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${msg}`);
   return new Promise((resolve) => {
     Alert.alert(title, msg, [
       { text: 'إلغاء', style: 'cancel', onPress: () => resolve(false) },
-      { text: 'حذف', style: 'destructive', onPress: () => resolve(true) },
+      { text: ok, style: 'destructive', onPress: () => resolve(true) },
     ]);
   });
 };
@@ -95,6 +103,7 @@ export default function PrepLeavePeriodsScreen() {
   const [formScope, setFormScope] = useState('all');
   const [formScopeId, setFormScopeId] = useState('');
   const [formReason, setFormReason] = useState('');
+  const [formMode, setFormMode] = useState<'exclude' | 'present'>('exclude');
 
   const canManage = user?.role === 'admin' || hasPermission('manage_prep_leave');
 
@@ -139,6 +148,7 @@ export default function PrepLeavePeriodsScreen() {
     setFormScope('all');
     setFormScopeId('');
     setFormReason('');
+    setFormMode('exclude');
   };
 
   const scopeOptions = (): SimpleOption[] => {
@@ -165,10 +175,16 @@ export default function PrepLeavePeriodsScreen() {
       showAlert('تنبيه', 'حدد الكلية/القسم/المقرر المستهدف');
       return;
     }
+    const opt = scopeOptions().find((o) => o.id === formScopeId);
+    const scopeTxt = formScope === 'all' ? 'الجامعة بالكامل' : (opt?.name || '');
+    const m = MODES[formMode];
+    const ok = await askConfirm(`تأكيد «${m.label}»`,
+      `⚠️ سيُطبَّق على كل محاضرات الفترة ${formFrom} ← ${formTo}\nالنطاق: ${scopeTxt}\n\n${m.desc}\n\nيمكن التراجع لاحقاً بحذف الفترة.`, 'تنفيذ');
+    if (!ok) return;
     setSaving(true);
     try {
-      const opt = scopeOptions().find((o) => o.id === formScopeId);
       await api.post('/prep-leave-periods', {
+        mode: formMode,
         date_from: formFrom,
         date_to: formTo,
         scope: formScope,
@@ -212,7 +228,7 @@ export default function PrepLeavePeriodsScreen() {
         <View style={styles.infoBox}>
           <Ionicons name="information-circle" size={18} color="#1565c0" />
           <Text style={styles.infoText}>
-            أي محاضرة ضمن الفترة والنطاق المحدَّدين تُستبعد من احتساب الغياب لكل الطلاب تلقائياً (لا تُعد نقصاً ولا غياباً).
+            «استبعاد»: محاضرات الفترة لا تُحتسب للطالب حضوراً ولا غياباً · «احتساب حضور»: يُحتسب كل الطلاب حاضرين. وفي الحالتين لا تدخل في نصاب تنفيذ المدرس.
           </Text>
         </View>
 
@@ -238,7 +254,12 @@ export default function PrepLeavePeriodsScreen() {
                   <Text style={styles.scopeBadgeText}>{p.scope_label}{p.scope_name ? `: ${p.scope_name}` : ''}</Text>
                 </View>
                 <View style={styles.cardBody}>
-                  <Text style={styles.cardDates}>{p.date_from} ← {p.date_to}</Text>
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                    <Text style={styles.cardDates}>{p.date_from} ← {p.date_to}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '800', color: MODES[p.mode || 'exclude'].color, borderWidth: 1, borderColor: MODES[p.mode || 'exclude'].color, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 }} testID={`prep-mode-${p.id}`}>
+                      {MODES[p.mode || 'exclude'].label}
+                    </Text>
+                  </View>
                   {p.reason ? <Text style={styles.cardReason}>{p.reason}</Text> : null}
                   <Text style={styles.cardMeta}>بواسطة {p.created_by_name}</Text>
                 </View>
@@ -267,6 +288,24 @@ export default function PrepLeavePeriodsScreen() {
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>إلى تاريخ *</Text>
                   <DateField value={formTo} onChange={setFormTo} testID="form-to-input" />
+                </View>
+                <View style={styles.formGroup}>
+                  <Text style={styles.label}>نوع الإجراء *</Text>
+                  <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+                    {(Object.keys(MODES) as ('exclude' | 'present')[]).map((k) => {
+                      const m = MODES[k]; const on = formMode === k;
+                      return (
+                        <TouchableOpacity key={k} onPress={() => setFormMode(k)} testID={`form-mode-${k}`}
+                          style={{ flex: 1, borderWidth: 2, borderColor: on ? m.color : '#e2e8f0', backgroundColor: on ? m.color + '12' : '#fff', borderRadius: 12, padding: 10, gap: 4 }}>
+                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                            <Ionicons name={m.icon as any} size={18} color={m.color} />
+                            <Text style={{ fontWeight: '800', color: m.color, fontSize: 14 }}>{m.label}</Text>
+                          </View>
+                          <Text style={{ fontSize: 11.5, color: '#475569', textAlign: 'right', lineHeight: 17 }}>{m.desc}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>النطاق</Text>

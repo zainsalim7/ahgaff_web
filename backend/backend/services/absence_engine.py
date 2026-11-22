@@ -91,7 +91,19 @@ async def executed_lectures(db, course_id: str, date_from: str = None, date_to: 
 
 
 async def prep_excluded_dates(db, course: dict) -> set:
-    """📅 أيام «إجازة التحضير» المُعلَنة يدوياً قبيل الاختبارات — تُستبعد محاضراتها من احتساب الغياب لهذا المقرر."""
+    """أيام وضع «استبعاد» فقط (الوضع الافتراضي للفترات القديمة)."""
+    return (await prep_dates_by_mode(db, course))["exclude"]
+
+
+async def prep_teacher_free_dates(db, course: dict) -> set:
+    """أيام الفترات بكلا الوضعين — لا تُحتسب في نصاب/تنفيذ المدرس."""
+    m = await prep_dates_by_mode(db, course)
+    return m["exclude"] | m["present"]
+
+
+async def prep_dates_by_mode(db, course: dict) -> dict:
+    """📅 فترات «إجازة التحضير» لهذا المقرر مقسومة حسب الوضع:
+    exclude = تُستبعد محاضراتها من حساب الطالب · present = يُحتسب فيها كل الطلاب حاضرين (حتى المعذور/الغائب)."""
     cid = str(course["_id"])
     dep_id = course.get("department_id")
     fac_id = course.get("faculty_id")
@@ -103,15 +115,16 @@ async def prep_excluded_dates(db, course: dict) -> set:
         ors.append({"scope": "department", "scope_id": dep_id})
     if fac_id:
         ors.append({"scope": "faculty", "scope_id": fac_id})
-    out = set()
+    out = {"exclude": set(), "present": set()}
     async for p in db.prep_leave_periods.find({"$or": ors}):
+        bucket = out["present" if p.get("mode") == "present" else "exclude"]
         try:
             d = datetime.strptime(p["date_from"], "%Y-%m-%d").date()
             last = datetime.strptime(p["date_to"], "%Y-%m-%d").date()
         except Exception:
             continue
         while d <= last:
-            out.add(d.strftime("%Y-%m-%d"))
+            bucket.add(d.strftime("%Y-%m-%d"))
             d += timedelta(days=1)
     return out
 
@@ -135,7 +148,8 @@ async def course_profiles(db, course: dict, student_ids: Optional[List[str]] = N
     cid = str(course["_id"])
     limits = limits or await course_limits(db, course)
     lecs = await executed_lectures(db, cid, date_from=date_from, date_to=date_to)
-    excluded_dates = await prep_excluded_dates(db, course)
+    _pm = await prep_dates_by_mode(db, course)
+    excluded_dates, present_dates = _pm["exclude"], _pm["present"]
     if excluded_dates:
         lecs = [l for l in lecs if str(l.get("date", ""))[:10] not in excluded_dates]
     if student_ids is None:
@@ -155,6 +169,8 @@ async def course_profiles(db, course: dict, student_ids: Optional[List[str]] = N
         exec_h = exec_n = unexc = exc = 0.0
         for lid, h in hours.items():
             st = recs.get(sid, {}).get(lid)
+            if present_dates and str(dates.get(lid, ""))[:10] in present_dates:
+                st = "present"  # 🟢 حضور معتمد إداري
             if st is None and en_date and dates.get(lid, "") < en_date:
                 continue  # محاضرة سبقت تسجيل الطالب
             exec_h += h; exec_n += 1

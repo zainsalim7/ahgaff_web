@@ -30,12 +30,14 @@ class PrepPeriodCreate(BaseModel):
     scope: str = "all"  # all | faculty | department | course
     scope_id: Optional[str] = None
     scope_name: Optional[str] = ""
+    mode: str = "exclude"  # exclude: استبعاد من حساب الطالب · present: احتساب حضور لكل الطلاب
     reason: Optional[str] = ""
 
 
 def _serialize(doc: dict) -> dict:
     return {
         "id": str(doc["_id"]), "date_from": doc.get("date_from"), "date_to": doc.get("date_to"),
+        "mode": doc.get("mode", "exclude"),
         "scope": doc.get("scope", "all"), "scope_id": doc.get("scope_id"), "scope_name": doc.get("scope_name") or "",
         "scope_label": SCOPE_LABELS.get(doc.get("scope", "all"), doc.get("scope", "all")),
         "reason": doc.get("reason", ""), "created_at": doc.get("created_at"),
@@ -54,6 +56,8 @@ async def list_prep_periods(current_user: dict = Depends(get_current_user)):
 async def create_prep_period(data: PrepPeriodCreate, current_user: dict = Depends(get_current_user)):
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتحديد أيام تحضيرية")
+    if data.mode not in ("exclude", "present"):
+        raise HTTPException(status_code=400, detail="الوضع غير صحيح")
     if data.scope not in ("all", "faculty", "department", "course"):
         raise HTTPException(status_code=400, detail="نطاق غير صالح")
     if data.scope != "all" and not data.scope_id:
@@ -68,7 +72,7 @@ async def create_prep_period(data: PrepPeriodCreate, current_user: dict = Depend
 
     db = get_db()
     doc = {
-        "date_from": data.date_from, "date_to": data.date_to, "scope": data.scope,
+        "date_from": data.date_from, "date_to": data.date_to, "scope": data.scope, "mode": data.mode,
         "scope_id": data.scope_id if data.scope != "all" else None,
         "scope_name": (data.scope_name or "").strip(), "reason": (data.reason or "").strip(),
         "created_at": _now(), "created_by": current_user.get("id"), "created_by_name": current_user.get("full_name", ""),

@@ -329,6 +329,16 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 "status": LectureStatus.CANCELLED, "cancellation_reason_type": "college",
             }).to_list(1000)
             college_cancel_hours = round(sum(_lec_hours(l) for l in college_cancelled), 2)
+            # 📅 فترات إجازة التحضير (استبعاد/احتساب): لا تُحتسب في نصاب التنفيذ — تُخصم من الافتراضية ولا تُضاف للمنفَّذ
+            from services.absence_engine import prep_teacher_free_dates
+            _pfree = await prep_teacher_free_dates(db, course)
+            prep_hours = 0.0
+            if _pfree:
+                _pl = [l for l in lectures if str(l.get("date"))[:10] in _pfree]
+                prep_hours = round(sum(_lec_hours(l) for l in _pl), 2)
+                lectures = [l for l in lectures if str(l.get("date"))[:10] not in _pfree]
+                college_cancelled = [l for l in college_cancelled if str(l.get("date"))[:10] not in _pfree]
+                college_cancel_hours = round(sum(_lec_hours(l) for l in college_cancelled), 2)
             lec_ids = [str(l["_id"]) for l in lectures]
             executed_ids = set(await db.attendance.distinct("lecture_id", {"lecture_id": {"$in": lec_ids}})) if lec_ids else set()
             # محاضرات تقع في إجازة رسمية ولم تُنفَّذ تُستبعد من المجدولة (لا تُعد نقصاً)
@@ -363,7 +373,9 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
             taught_hours = actual_hours
             actual_hours = round(actual_hours + holiday_hours, 2)
             # 🏛️ إلغاء بسبب الكلية: يُخصم من الافتراضية (لا يُعد نقصاً) دون إضافته لساعات المدرّس المنفَّذة — لا يُحتسب إضافياً ولا يُضاعَف مع الإجازات الرسمية
-            expected = round(max(0.0, weekly * course_weeks - excused_hours - college_cancel_hours), 2)
+            expected = round(max(0.0, weekly * course_weeks - excused_hours - college_cancel_hours - prep_hours), 2)
+            if prep_hours:
+                notes.append(f"إجازة تحضير/حضور معتمد {prep_hours:g} س (خُصمت من الافتراضية — لا تُحتسب تنفيذاً)")
             if excused_hours:
                 notes.append(f"غياب بعذر {excused_hours:g} س (خُصم من الافتراضية)")
             if holiday_hours:
