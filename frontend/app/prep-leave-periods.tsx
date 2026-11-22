@@ -183,7 +183,7 @@ export default function PrepLeavePeriodsScreen() {
     if (!ok) return;
     setSaving(true);
     try {
-      await api.post('/prep-leave-periods', {
+      const res = await api.post('/prep-leave-periods', {
         mode: formMode,
         date_from: formFrom,
         date_to: formTo,
@@ -195,6 +195,7 @@ export default function PrepLeavePeriodsScreen() {
       setShowModal(false);
       resetForm();
       await fetchItems();
+      if (formMode === 'present') showAlert('تم', `تم تسجيل الحضور لـ ${res.data?.applied_records ?? 0} سجل طالب. المحاضرات القادمة ضمن الفترة تُسجَّل تلقائياً عند حلول موعدها.`);
     } catch (e: any) {
       showAlert('خطأ', e?.response?.data?.detail || 'فشل الحفظ');
     } finally {

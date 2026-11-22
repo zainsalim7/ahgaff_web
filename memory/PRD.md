@@ -175,3 +175,7 @@
 - 2026-11-18: دليل المناصب والأسماء: faculty_id (عام/كلية)، عزل الرؤية visible_query (القوائم والمرسَل إليهم والموقّع)، إدارة مناصب الكلية لمن لديه issue_letters ضمن نطاقه، موقّع افتراضي لكل كلية (default_signer_for) مع الرجوع للعام؛ رفض موقّع خارج النطاق. زر 📇 في صفحة الخطابات.
 - 2026-11-22: إصلاح: صفحتا إجازة التحضير ومجلس الكلية كانتا تفحصان الدور (admin/dean/department_head) في الواجهة بدل الصلاحية — صارتا manage_prep_leave / manage_faculty_board.
 - 2026-11-22: إجازة التحضير: حقل mode (exclude|present). exclude = استبعاد من حساب الطالب، present = حضور معتمد لكل الطلاب (حتى الغائب/المعذور) في محرك الغياب absence_engine.course_profiles. كلا الوضعين يُستبعدان من نصاب تنفيذ المدرس (compute_workload: تُخصم من الافتراضية ولا تُضاف للمنفَّذ). تأكيد قبل التنفيذ في الواجهة.
+
+## 2026-06 — Fix: Prep Leave «present» mode
+- Root cause: mode only adjusted absence_engine on the fly; lecture screen/reports/student pages read raw attendance & lectures auto-marked "absent" by cron.
+- Fix: routes/prep_leave.py apply_present_period writes real "present" attendance (method=prep_leave, tagged prep_present_period_id) and sets lecture completed (prev status saved); delete reverts; sync runs on create, list, and hourly absence-reminders cron. Teacher workload still excludes these dates (teacher_overtime).

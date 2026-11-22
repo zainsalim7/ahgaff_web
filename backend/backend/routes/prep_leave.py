@@ -45,9 +45,90 @@ def _serialize(doc: dict) -> dict:
     }
 
 
+def _period_matches(period: dict, course: dict, fac_id) -> bool:
+    sc, sid = period.get("scope", "all"), period.get("scope_id")
+    return (sc == "all" or (sc == "course" and sid == str(course["_id"]))
+            or (sc == "department" and sid == course.get("department_id")) or (sc == "faculty" and sid and sid == fac_id))
+
+
+async def apply_present_period(db, period: dict) -> int:
+    """🟢 وضع «حضور»: يُسجَّل فعلياً حضور كل طلاب المحاضرات الواقعة في الفترة (حتى اليوم) — قابل للتكرار بأمان."""
+    if period.get("mode") != "present":
+        return 0
+    pid = str(period["_id"])
+    until = min(period["date_to"], _now().strftime("%Y-%m-%d"))
+    if until < period["date_from"]:
+        return 0
+    lecs = await db.lectures.find({
+        "date": {"$gte": period["date_from"], "$lte": until},
+        "is_cancelled": {"$ne": True}, "status": {"$ne": "cancelled"},
+    }).to_list(20000)
+    courses, facs, applied = {}, {}, 0
+    for lec in lecs:
+        cid = lec.get("course_id")
+        if cid not in courses:
+            courses[cid] = await db.courses.find_one({"_id": ObjectId(cid)}) if ObjectId.is_valid(cid or "") else None
+        course = courses[cid]
+        if not course:
+            continue
+        dep_id = course.get("department_id")
+        fac_id = course.get("faculty_id")
+        if not fac_id and dep_id:
+            if dep_id not in facs:
+                dep = await db.departments.find_one({"_id": ObjectId(dep_id)}, {"faculty_id": 1}) if ObjectId.is_valid(dep_id) else None
+                facs[dep_id] = (dep or {}).get("faculty_id")
+            fac_id = facs[dep_id]
+        if not _period_matches(period, course, fac_id):
+            continue
+        lid = str(lec["_id"])
+        if lec.get("status") != "completed":
+            await db.lectures.update_one({"_id": lec["_id"]}, {"$set": {
+                "status": "completed", "prep_present_period_id": pid, "prep_prev_status": lec.get("status")}})
+        try:
+            lec_dt = datetime.strptime(f"{str(lec['date'])[:10]} {lec.get('start_time') or '00:00'}", "%Y-%m-%d %H:%M")
+        except Exception:
+            lec_dt = datetime.strptime(str(lec["date"])[:10], "%Y-%m-%d")
+        q = {"course_id": cid, **({"group": lec["group"]} if lec.get("group") else {})}
+        sids = [e["student_id"] async for e in db.enrollments.find(q, {"student_id": 1}) if e.get("student_id")]
+        existing = {r["student_id"]: r async for r in db.attendance.find({"lecture_id": lid, "student_id": {"$in": sids}})}
+        for sid in sids:
+            r = existing.get(sid)
+            if r is None:
+                await db.attendance.insert_one({
+                    "lecture_id": lid, "course_id": cid, "student_id": sid, "status": "present", "date": lec_dt,
+                    "recorded_by": period.get("created_by"), "method": "prep_leave", "notes": "حضور معتمد — إجازة تحضير",
+                    "created_at": _now(), "prep_present_period_id": pid,
+                })
+                applied += 1
+            elif r.get("status") != "present" and not r.get("prep_present_period_id"):
+                await db.attendance.update_one({"_id": r["_id"]}, {"$set": {
+                    "status": "present", "prep_present_period_id": pid, "prep_prev_status": r.get("status")}})
+                applied += 1
+    return applied
+
+
+async def revert_present_period(db, pid: str) -> None:
+    await db.attendance.delete_many({"prep_present_period_id": pid, "method": "prep_leave"})
+    async for r in db.attendance.find({"prep_present_period_id": pid}):
+        await db.attendance.update_one({"_id": r["_id"]}, {"$set": {"status": r.get("prep_prev_status") or "absent"},
+                                                             "$unset": {"prep_present_period_id": "", "prep_prev_status": ""}})
+    async for l in db.lectures.find({"prep_present_period_id": pid}):
+        await db.lectures.update_one({"_id": l["_id"]}, {"$set": {"status": l.get("prep_prev_status") or "scheduled"},
+                                                          "$unset": {"prep_present_period_id": "", "prep_prev_status": ""}})
+
+
+async def sync_present_periods(db) -> int:
+    today = _now().strftime("%Y-%m-%d")
+    n = 0
+    async for p in db.prep_leave_periods.find({"mode": "present", "date_from": {"$lte": today}}):
+        n += await apply_present_period(db, p)
+    return n
+
+
 @router.get("")
 async def list_prep_periods(current_user: dict = Depends(get_current_user)):
     db = get_db()
+    await sync_present_periods(db)
     items = [_serialize(d) async for d in db.prep_leave_periods.find({}).sort("date_from", -1)]
     return {"items": items}
 
@@ -83,7 +164,8 @@ async def create_prep_period(data: PrepPeriodCreate, current_user: dict = Depend
         f"{data.date_from} → {data.date_to} ({SCOPE_LABELS.get(data.scope, data.scope)})",
     )
     doc["_id"] = res.inserted_id
-    return _serialize(doc)
+    applied = await apply_present_period(db, doc)
+    return {**_serialize(doc), "applied_records": applied}
 
 
 @router.delete("/{period_id}")
@@ -99,5 +181,7 @@ async def delete_prep_period(period_id: str, current_user: dict = Depends(get_cu
     if not doc:
         raise HTTPException(status_code=404, detail="الفترة غير موجودة")
     await db.prep_leave_periods.delete_one({"_id": oid})
+    if doc.get("mode") == "present":
+        await revert_present_period(db, period_id)
     await log_activity(current_user, "delete_prep_leave_period", "prep_leave_period", period_id, f"{doc.get('date_from')} → {doc.get('date_to')}")
     return {"message": "تم حذف الفترة التحضيرية"}

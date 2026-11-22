@@ -145,6 +145,10 @@ def build_router(db, get_current_user, has_permission, send_push_many=None) -> A
             if now_ts > end + timedelta(minutes=duration_minutes):
                 await db.lectures.update_one({"_id": lec["_id"]}, {"$set": {"status": STATUS_ABSENT}})
 
+        # 1.5) 🟢 فترات «إجازة التحضير — حضور»: تثبيت حضور الطلاب للمحاضرات التي حلّ موعدها
+        from routes.prep_leave import sync_present_periods
+        await sync_present_periods(db)
+
         # 2) فحص محاضرات absent المؤهلة للتنبيه التلقائي
         candidates = await db.lectures.find({"status": STATUS_ABSENT}).to_list(5000)
         course_ids = list({l["course_id"] for l in candidates if l.get("course_id")})
