@@ -195,7 +195,7 @@ export default function PrepLeavePeriodsScreen() {
       setShowModal(false);
       resetForm();
       await fetchItems();
-      if (formMode === 'present') showAlert('تم', `تم تسجيل الحضور لـ ${res.data?.applied_records ?? 0} سجل طالب. المحاضرات القادمة ضمن الفترة تُسجَّل تلقائياً عند حلول موعدها.`);
+      if (formMode === 'present') showAlert('تم', `تم تسجيل الحضور لـ ${res.data?.applied_records ?? 0} سجل طالب. شمل ذلك كل محاضرات الفترة بما فيها القادمة.`);
     } catch (e: any) {
       showAlert('خطأ', e?.response?.data?.detail || 'فشل الحفظ');
     } finally {

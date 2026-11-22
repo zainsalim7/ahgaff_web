@@ -52,13 +52,11 @@ def _period_matches(period: dict, course: dict, fac_id) -> bool:
 
 
 async def apply_present_period(db, period: dict) -> int:
-    """🟢 وضع «حضور»: يُسجَّل فعلياً حضور كل طلاب المحاضرات الواقعة في الفترة (حتى اليوم) — قابل للتكرار بأمان."""
+    """🟢 وضع «حضور»: يُسجَّل فعلياً حضور كل طلاب المحاضرات الواقعة في الفترة (كامل الفترة فور الحفظ) — قابل للتكرار بأمان."""
     if period.get("mode") != "present":
         return 0
     pid = str(period["_id"])
-    until = min(period["date_to"], _now().strftime("%Y-%m-%d"))
-    if until < period["date_from"]:
-        return 0
+    until = period["date_to"]
     lecs = await db.lectures.find({
         "date": {"$gte": period["date_from"], "$lte": until},
         "is_cancelled": {"$ne": True}, "status": {"$ne": "cancelled"},
@@ -118,9 +116,8 @@ async def revert_present_period(db, pid: str) -> None:
 
 
 async def sync_present_periods(db) -> int:
-    today = _now().strftime("%Y-%m-%d")
     n = 0
-    async for p in db.prep_leave_periods.find({"mode": "present", "date_from": {"$lte": today}}):
+    async for p in db.prep_leave_periods.find({"mode": "present"}):
         n += await apply_present_period(db, p)
     return n
 
