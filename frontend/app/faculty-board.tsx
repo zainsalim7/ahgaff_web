@@ -65,7 +65,7 @@ const DateField = ({ value, onChange, testID }: { value: string; onChange: (v: s
 );
 
 export default function FacultyBoardScreen() {
-  const { user: ctxUser } = useAuth();
+  const { user: ctxUser, hasPermission } = useAuth();
   const storeUser = useAuthStore((s) => s.user);
   const user: any = ctxUser || storeUser;
   const isRealEnforced = !!user?.advanced_access_real_enforcement;
@@ -73,7 +73,7 @@ export default function FacultyBoardScreen() {
   useEffect(() => {
     if (user?.id && isRealEnforced && !advChecked) checkAdvAccess();
   }, [user?.id, isRealEnforced, advChecked, checkAdvAccess]);
-  const canManage = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head'
+  const canManage = user?.role === 'admin' || hasPermission('manage_faculty_board')
     || (isRealEnforced && advKeys.some((k: string) => k.startsWith('councils_')));
 
   const [view, setView] = useState<'candidates' | 'sessions'>('candidates');
