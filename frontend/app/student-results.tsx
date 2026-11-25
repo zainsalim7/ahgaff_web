@@ -47,11 +47,11 @@ export default function ResultsPage() {
     api.get('/settings/academic-years').then((r) => setYears(r.data?.years || [])).catch(() => {});
   }, []);
 
-  const load = useCallback(async (pg = 1) => {
+  const load = useCallback(async (pg = 1, flt = f) => {
     setLoading(true); setErr('');
     try {
       const params: any = { page: pg };
-      Object.entries(f).forEach(([k, v]) => { if (v) params[k] = v; });
+      Object.entries(flt).forEach(([k, v]) => { if (v) params[k] = v; });
       setData((await api.get('/results/students', { params })).data); setPage(pg);
     } catch (e: any) { setErr(e?.response?.data?.detail || 'تعذر جلب الطلاب'); } finally { setLoading(false); }
   }, [f]);
@@ -121,7 +121,7 @@ export default function ResultsPage() {
             <PickerField label="المستوى" options={LEVELS} value={f.level} onChange={(v) => setF({ ...f, level: v })} testID="flt-level" allLabel="الكل" maxWidth={150} />
             <PickerField label="السنة الدراسية" options={years.map((y) => ({ id: y, name: y }))} value={f.academic_year} onChange={(v) => setF({ ...f, academic_year: v })} testID="flt-year" allLabel="كل السنوات" maxWidth={170} />
             <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-              <TouchableOpacity style={st.reset} disabled={!hasFilter} onPress={() => setF(EMPTY)} testID="flt-reset-btn">
+              <TouchableOpacity style={st.reset} disabled={!hasFilter} onPress={() => { setF(EMPTY); if (!f.faculty_id && !f.department_id && !f.level && !f.academic_year) load(1, EMPTY); }} testID="flt-reset-btn">
                 <Ionicons name="refresh" size={13} color={hasFilter ? '#2962ff' : '#a8b1c2'} />
                 <Text style={[st.resetTxt, !hasFilter && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
               </TouchableOpacity>
@@ -165,7 +165,7 @@ const st = StyleSheet.create({
   hBtnTxt: { color: '#fff', fontSize: 13, fontWeight: '600' },
   ghost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
   statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 18, flexWrap: 'wrap' },
-  statCard: { flex: 1, minWidth: 200, backgroundColor: '#fff', borderRadius: 14, padding: 16, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  statCard: { flex: 1, minWidth: 170, flexBasis: '45%' as any, backgroundColor: '#fff', borderRadius: 14, padding: 16, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6' },
   statIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   statLabel: { fontSize: 13, color: '#8a95a8', fontWeight: '500', marginBottom: 4 },
   statValue: { fontSize: 20, color: '#1a2540', fontWeight: '700', marginBottom: 2 },

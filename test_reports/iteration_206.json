@@ -1,0 +1,34 @@
+{
+  "summary": "Tested the redesigned /student-results page, the blank template and the new list fields. Backend: 9/9 pytest cases passed and 1 was skipped (page 2 skipped because there are only 92 students). Covered: the blank xlsx headers رقم القيد|الحالة|المعدل|التقدير with no data rows; 403 on the blank template for view_results and 401/403 without auth; list shape with cur_s1/cur_s2 {status,gpa,grade,hidden}; pages formula with limit 100; filters level/q/faculty/department; view_results can list. Frontend (admin, 1920px): the sidebar order is جدول العبء التدريسي → تقارير العبء → النتائج and the link goes to /student-results. Header, breadcrumb, 4 stat cards and filter card match the /students layout. All flt-* elements are <select>. Faculty narrows the department options and the total (92→20). Level, year, search button and Enter all reload. Reset clears the selects. results-blank-template-btn downloads 'نموذج نتائج فارغ.xlsx' with the correct headers, and so does up-blank-template-btn. Upload wizard: the validation message shows when params are missing. up-template-btn downloads the named template. File label updates. Preview showed counts plus a level warning. Commit saved 1 row, then closing the modal refreshed the list. In history, batch-{id} showed the toggle and undo buttons, undo worked, and batch-undone appeared. The table shows the status badge + gpa·grade or 'لم تصدر' in row-s1/row-s2. The student card opens and closes. View-only Salim (view_results): no upload or blank buttons, no faculty dropdown (scoped, 20 students), no edit/hide/delete in the card, no batch buttons, and the sidebar shows النتائج. Salim with his original permissions: no النتائج in the sidebar, and a direct URL shows the 403 message in results-error. Two issues found: reset does nothing when only the search text is set, and the dense table is unreadable on mobile.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/results/students", "issue": "Includes graduated students: 92 here vs 91 on /students, the difference is one student with status=graduated. Probably intended, since graduates have results, but the two pages show different totals."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "student-results.tsx filter reset", "issue": "If only the search text is set, for example 1001 with 1 result, clicking flt-reset-btn clears the input but the list is not reloaded and still shows 1 student. Cause: the useEffect that reloads only depends on faculty_id/department_id/level/academic_year, and setF(EMPTY) does not change any of them. Fix: in onPress, call load with the empty filters, or add f.q to a reset-triggered reload.", "selector": "[data-testid='flt-reset-btn']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/student-results mobile 390px", "issues": ["The dense table keeps all 8 flex columns in one row, so student names are cut to 1-2 characters and the department is cut too. Add horizontal scroll (minWidth ~900 inside a horizontal ScrollView) or a compact card layout below 600px.", "The 4 stat cards stack full-width and fill the first screen, unlike /students on mobile. Consider a 2x2 grid."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_results_redesign_iter206.py", "/app/test_reports/pytest/iter206.xml"],
+  "action_items": [
+    "Fix flt-reset-btn so it reloads the list when only the search text (q) was set",
+    "Make ResultsTable usable on mobile with horizontal scroll or a card layout"
+  ],
+  "critical_code_review_comments": [
+    "student-results.tsx: the useEffect deps exclude f.q on purpose, so search only runs on submit. Because of that, reset needs to call load explicitly.",
+    "ResultsUploadWizard: academic_year starts from years[0] at mount. This is fine because the modal opens after the years load, but if /settings/academic-years fails it stays ''.",
+    "The list row reports hidden as eye-off, which is good. The badge regex counts 'فصل' as a failure, so any status containing فصل, such as 'الفصل الأول ...', is marked red. Minor."
+  ],
+  "updated_files": ["/app/backend/tests/test_results_redesign_iter206.py"],
+  "success_rate": {"backend": "100%", "frontend": "~92% (1 functional bug, 1 mobile layout issue)"},
+  "seed_data_creation": "Via the UI, committed one import batch (u.xlsx, 2026-2027, level 6, semester 1, dept الشريعة والقانون, student 1001) and then undid it in the history modal, so the level 6 entry count for 1001 is 0. Batch 6b0767040c60cf99b111759b stays in history as 'تم التراجع'. One 'صدرت نتيجتك' notification went to test student 1001. Salim's custom_permissions were set to ['view_results'] and then restored to ['manage_fee_receipts','hr_manage_tasks','hr_manage_appraisals'].",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "UI auth: get access_token from POST /api/auth/login and store localStorage token and user. The hamburger is at roughly (1805,26) at 1920px. window.confirm is used for undo/hide, so accept with page.on('dialog'). The Playwright sandbox has no openpyxl, so save downloads to /tmp and inspect them in bash. Salim permissions helper: python3 backend/tests/results_perm_helper.py set view_results / restore."
+}
