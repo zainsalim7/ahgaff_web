@@ -274,6 +274,7 @@ from routes.statements import router as statements_router
 from routes.letters import router as letters_router, backfill_people_faculty as letters_backfill_people_faculty
 from routes.letterheads import router as letterheads_router, migrate_letterheads
 from routes.grades import router as grades_router
+from routes.student_results import router as student_results_router
 from routes.certificates import router as certificates_router
 from routes.student_cards import router as student_cards_router
 from routes.course_migration import router as course_migration_router
@@ -19913,6 +19914,7 @@ app.include_router(statements_router, prefix="/api")
 app.include_router(letters_router, prefix="/api")
 app.include_router(letterheads_router, prefix="/api")
 app.include_router(grades_router, prefix="/api")
+app.include_router(student_results_router, prefix="/api")
 app.include_router(certificates_router, prefix="/api")
 app.include_router(student_cards_router, prefix="/api")
 app.include_router(course_migration_router, prefix="/api")
@@ -20741,6 +20743,7 @@ async def _ensure_weekly_schedule_unique_indexes(db, dedupe: bool = False):
                     await db.weekly_schedule.drop_index(old_name)
             except Exception:
                 pass
+        await db.student_results.create_index([("reg_no", 1), ("level", 1)], unique=True, name="uniq_reg_level")
         await db.weekly_schedule.create_index(
             [("teacher_id", 1), ("day", 1), ("slot_number", 1), ("merge_key", 1)],
             unique=True,
