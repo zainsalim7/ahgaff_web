@@ -184,7 +184,7 @@ export default function StudentResultsPage() {
             <Ionicons name="search" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
-        <Text style={st.count} testID="results-total">عدد الصفوف: {total}{total > items.length ? ` (يُعرض ${items.length})` : ''}</Text>
+        {!loading && <Text style={st.count} testID="results-total">عدد الصفوف: {total}{total > items.length ? ` (يُعرض ${items.length})` : ''}</Text>}
 
         {loading ? <ActivityIndicator style={{ marginTop: 20 }} /> : items.length === 0 ? (
           <Text style={st.empty} testID="results-empty">لا توجد نتائج مرفوعة</Text>

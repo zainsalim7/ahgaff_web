@@ -144,18 +144,19 @@ async def _analyze(db, rows: list, allowed) -> list:
         else:
             if (reg, lvl) in last:
                 last[(reg, lvl)]["status"] = "duplicate"
+                last[(reg, lvl)].pop("old", None)
             last[(reg, lvl)] = item
             old = await db.student_results.find_one({"reg_no": reg, "level": lvl})
             item["status"] = "new" if not old else ("unchanged" if all(old.get(k) == item[k] for k in COLS) else "changed")
             if old and item["status"] == "changed":
                 item["old"] = {k: old.get(k) for k in COLS}
-        if item["status"] in REASON_AR:
-            item["reason"] = REASON_AR[item["status"]]
         out.append(item)
     regs = list({r["reg_no"] for r in out if r["reg_no"]})
     names = {s["student_id"]: s.get("full_name", "") async for s in db.students.find({"student_id": {"$in": regs}}, {"student_id": 1, "full_name": 1})}
     for r in out:
         r["student_name"] = names.get(r["reg_no"], "")
+        if r["status"] in REASON_AR:
+            r["reason"] = REASON_AR[r["status"]]
     return out
 
 

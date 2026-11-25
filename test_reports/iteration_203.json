@@ -1,0 +1,32 @@
+{
+  "summary": "Tested the student-results preview + notify features end to end. Backend: 7 of 8 pytest tests pass. Preview (commit=false) sorts every row into new/changed/unchanged/invalid/out_of_scope/duplicate, writes nothing to the DB (checked with a DB snapshot) and returns student_name. Changed rows include 'old'. commit=true saves only new/changed rows. When a row repeats, the last one wins (s1_gpa '81' saved). Literal values kept ('77.70', '58.30'). With notify=true exactly one db.notifications type='results' doc is created for student 1001 and notified=1, and the message includes 'أُرسل إشعار صدور النتيجة'. Re-uploading an identical file gives notified=0 and no new doc. notify=false gives none. Student 1001 sees 'صدرت نتيجتك' at GET /api/notifications/my, and /students/me/results returns literal values. Dean Salim (manage_grades added temporarily, then restored) sees 12345 (another faculty) and unregistered TEST_ reg numbers as out_of_scope with a reason; they are not saved, a file with only out-of-scope rows returns 403, and 12345 is hidden from his list. Frontend as admin: all the flows requested work (choose file, preview panel with counts and per-row badges, notify toggle on by default, cancel, new file clears preview, commit saves and refreshes the list). One failure: rows marked duplicate have no 'reason'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/student-results/import (_analyze)", "issue": "Rows marked 'duplicate' have no 'reason' field, which the spec requires. Cause: the reason is set when an item is first appended (status new/changed/unchanged at that point). A later row with the same (reg,lvl) then flips the earlier item to 'duplicate' without setting item['reason'] = REASON_AR['duplicate']. The UI therefore shows the 'مكرر' badge without its explanation. Fix: in the `if (reg, lvl) in last:` branch, also set reason and pop 'old'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PreviewRow (duplicate)", "issue": "No reason text shown for duplicate rows (consequence of the backend issue above)", "selector": "[data-testid^='preview-row-']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/student-results", "issues": ["results-total briefly shows 'عدد الصفوف: 0' while the initial list is loading (cosmetic)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_student_results_preview_notify.py", "/app/test_reports/pytest/iter203.xml"],
+  "action_items": ["In _analyze, when marking an earlier row as duplicate, set its reason to REASON_AR['duplicate'] (and drop 'old')"],
+  "critical_code_review_comments": [
+    "_notify_students runs via asyncio.create_task without keeping a reference or logging errors. The in-app insert can fail silently, and notified is computed before the insert happens. Consider awaiting the DB insert and putting only FCM in the background.",
+    "notified uses count_documents on students. If one student_id has several student docs with user_id, a student gets several notifications. Use distinct user_id.",
+    "_analyze runs one find_one per row (N+1 queries). Fine for small files; for large ones use a single $in query.",
+    "_scope_regs: an admin can save results for reg_nos that are not registered students (status 'new', name blank). This is intentional, but the UI labels these rows '(غير مربوط بطالب)' only in the list, not in the preview."
+  ],
+  "updated_files": ["/app/backend/tests/test_student_results_preview_notify.py"],
+  "success_rate": {"backend": "87.5% (7/8)", "frontend": "100%"},
+  "seed_data_creation": "Rows TEST_PN01, TEST_PN02, 1001/level 7 and TEST_UI203, plus the results notifications for 1001 created during the run, were all deleted afterwards. Salim's custom_permissions were restored to ['manage_fee_receipts','hr_manage_tasks','hr_manage_appraisals'] (verified). Final DB rows: 1001 levels 1,2,5 and 12345 level 1, unchanged. 12345/L1 has s1_status='x', updated by admin at 20:18, before this run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression: cd /app/backend && python -m pytest tests/test_student_results_preview_notify.py -p no:xdist. The suite uses student 1001 (user_id 69a99544650b31fa86440da2) at level 7, and 12345 as the out-of-scope student for dean Salim (faculty 698e4f9297fef774e66e93a4). Student notifications endpoint: GET /api/notifications/my. Login: placeholders 'اسم المستخدم / رقم القيد / الرقم المرجعي' and 'كلمة المرور', then get_by_text('تسجيل الدخول').last."
+}
