@@ -179,3 +179,8 @@
 ## 2026-06 — Fix: Prep Leave «present» mode
 - Root cause: mode only adjusted absence_engine on the fly; lecture screen/reports/student pages read raw attendance & lectures auto-marked "absent" by cron.
 - Fix: routes/prep_leave.py apply_present_period writes real "present" attendance (method=prep_leave, tagged prep_present_period_id) and sets lecture completed (prev status saved); delete reverts; sync runs on create, list, and hourly absence-reminders cron. Teacher workload still excludes these dates (teacher_overtime).
+
+## 2026-06 — Student Results (literal Excel, no calculations)
+- Collection `student_results` (unique reg_no+level): s1_status/s1_gpa/s1_grade/s2_status/s2_gpa/s2_grade as raw text, empty=null.
+- routes/student_results.py: POST /api/student-results/import (xlsx/xls/csv, upsert), GET /api/student-results?q, DELETE /{id}, GET /template (perm manage_grades); GET /api/students/me/results returns rows by student's student_id literally (old computed version removed from grades.py).
+- Frontend page /student-results + dashboard tile "نتائج الطلاب (التطبيق)". Prep-leave «present» now materializes whole period on save.

@@ -1,0 +1,22 @@
+{
+  "summary": "Student results (literal Excel import) feature tested end-to-end. Backend 11/11 pytest + manual empty-levels check pass: xlsx/csv import, upsert by (reg_no+level) with no duplicates, header/blank rows ignored, rows missing reg/level reported in skipped_rows, values literal ('88.4','58.30','3.93','دور ثان'), empty -> null, Arabic level words ('الثالث'->3), 400 on garbage/no valid rows, permissions (student 403 on admin endpoints, admin 403 on /students/me/results, unauth 401/403), delete + 404. /students/me/results for 1001 returns levels sorted [1,2]; returns {levels:[]} 200 after deleting rows (rows then restored from /tmp/r2.xlsx). Frontend: admin login -> dashboard tile 'نتائج الطلاب (التطبيق)' navigates to /student-results; list, upload (success message), search, delete with confirm all work.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "POST /api/student-results/import", "issue": "Numeric Excel cells lose display formatting (a cell typed as number 58.30 is stored '58.3'; percentages/fixed decimals not preserved). Only text-formatted cells are truly literal. Consider reading cell.number_format or advising text format in template (template already sets '@')."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StudentResultsPage file input", "issue": "After successful upload setFile(null) but the native <input type=file> still shows the old filename; clicking upload again shows 'اختر ملف الإكسل أولاً' even though a file appears selected. Reset input value (ref.value='') or use a key to remount.", "selector": "[data-testid='results-file-input']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [{"screen": "/student-results", "issues": ["Native browser file input ('Choose File / No file chosen') in English, unstyled in an Arabic RTL page - consider a styled Arabic button"]}]
+  },
+  "test_report_links": ["/app/backend/tests/test_student_results_iter202.py", "/app/test_reports/pytest/iter202.xml"],
+  "action_items": ["Reset the native file input after successful upload", "Optional: style/Arabize file picker", "Optional: preserve numeric cell display format on import"],
+  "critical_code_review_comments": ["list_results caps at 200 items with no pagination (UI shows '(يُعرض N)' hint - acceptable)", "Search uses unanchored regex on reg_no (partial match) - fine for admin search", "Old /students/me/results removed from grades.py - only one definition remains (verified)"],
+  "updated_files": ["/app/backend/tests/test_student_results_iter202.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "TEST_R9901, TEST_R9902, TEST_UI777 rows created and deleted by id. 1001 rows were temporarily deleted to test {levels:[]} and restored from /tmp/r2.xlsx (levels 1,2 present at end).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login button on /login has no testID; click get_by_text('تسجيل الدخول'). Login API returns access_token. Regression: pytest tests/test_student_results_iter202.py -p no:xdist."
+}

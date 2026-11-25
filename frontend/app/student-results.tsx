@@ -32,6 +32,7 @@ export default function StudentResultsPage() {
   const [loading, setLoading] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [inputKey, setInputKey] = useState(0);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async (query = q) => {
@@ -62,7 +63,7 @@ export default function StudentResultsPage() {
       const fd = new FormData(); fd.append('file', file);
       const res = await api.post('/student-results/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setMsg({ ok: true, text: res.data?.message || 'تم الرفع' });
-      setFile(null);
+      setFile(null); setInputKey((k) => k + 1);
       await load();
     } catch (e: any) {
       setMsg({ ok: false, text: e?.response?.data?.detail || 'فشل الرفع' });
@@ -94,8 +95,11 @@ export default function StudentResultsPage() {
             <Text style={st.btnTxt}>تنزيل النموذج (Excel)</Text>
           </TouchableOpacity>
           {Platform.OS === 'web' && (
-            <input type="file" accept=".xlsx,.xls,.csv" style={{ margin: '10px 0' }} data-testid="results-file-input"
-              onChange={(e: any) => setFile(e.target.files?.[0] || null)} />
+            <label style={{ display: 'block', margin: '10px 0', padding: 10, border: '1.5px dashed #90caf9', borderRadius: 10, textAlign: 'center', cursor: 'pointer', color: '#1565c0', fontWeight: 700, background: '#fff' }} data-testid="results-file-label">
+              {file ? `الملف: ${file.name}` : 'اختر ملف الإكسل (xlsx / xls / csv)'}
+              <input key={inputKey} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} data-testid="results-file-input"
+                onChange={(e: any) => setFile(e.target.files?.[0] || null)} />
+            </label>
           )}
           <TouchableOpacity style={[st.btn, { backgroundColor: '#1565c0', opacity: busy ? 0.6 : 1 }]} onPress={upload} disabled={busy} testID="results-upload-btn">
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={st.btnTxt}>رفع النتائج</Text>}

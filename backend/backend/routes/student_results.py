@@ -52,7 +52,21 @@ def _rows(content: bytes, filename: str):
         return list(csv.reader(io.StringIO(content.decode("utf-8-sig"))))
     import openpyxl
     ws = openpyxl.load_workbook(io.BytesIO(content), data_only=True, read_only=True).active
-    return [list(r) for r in ws.iter_rows(values_only=True)]
+    return [[_shown(c) for c in r] for r in ws.iter_rows()]
+
+
+def _shown(c):
+    """الرقم كما يظهر في الخلية (مثلاً 58.30 بتنسيق 0.00 تبقى «58.30»)"""
+    v = getattr(c, "value", None)
+    fmt = (getattr(c, "number_format", "") or "").split(";")[0]
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and fmt not in ("", "General", "@"):
+        m = re.search(r"0\.(0+)", fmt)
+        dec = len(m.group(1)) if m else 0
+        if "%" in fmt:
+            return f"{v * 100:.{dec}f}%"
+        if re.fullmatch(r"[#,]*0(\.0+)?", fmt):
+            return f"{v:.{dec}f}"
+    return v
 
 
 def _cell(c):
