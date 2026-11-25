@@ -8,6 +8,7 @@ interface Entry { id: string; level: number; semester: number; academic_year: st
 interface Card { student: { id: string; reg_no: string; full_name: string; level: number; department_name: string }; max_level: number; entries: Entry[] }
 
 const yKey = (y: string | null) => Math.max(0, ...((y || '').match(/\d{4}/g) || []).map(Number));
+const lbl = (c: string) => ({ color: c, fontSize: 11.5, fontWeight: '700' as const });
 const confirmBox = async (msg: string) => Platform.OS === 'web' ? window.confirm(msg)
   : new Promise<boolean>((r) => Alert.alert('تأكيد', msg, [{ text: 'إلغاء', onPress: () => r(false) }, { text: 'نعم', onPress: () => r(true) }]));
 
@@ -36,9 +37,9 @@ const SemBox = ({ level, sem, list, years, onSave, onDelete, onHide, canManage }
       <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={{ fontWeight: '700', color: '#475569', fontSize: 12.5 }}>{sem === 1 ? 'الفصل الأول' : 'الفصل الثاني'}</Text>
         {canManage && <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-          {cur && <TouchableOpacity onPress={() => onHide(cur)} testID={`card-hide-L${level}-S${sem}`}><Ionicons name={cur.hidden ? 'eye-outline' : 'eye-off-outline'} size={17} color="#ef6c00" /></TouchableOpacity>}
-          <TouchableOpacity onPress={() => setEdit(!edit)} testID={`card-edit-L${level}-S${sem}`}><Ionicons name="create-outline" size={17} color="#1565c0" /></TouchableOpacity>
-          {cur && <TouchableOpacity onPress={() => onDelete(cur)} testID={`card-delete-L${level}-S${sem}`}><Ionicons name="trash-outline" size={17} color="#c62828" /></TouchableOpacity>}
+          {cur && <TouchableOpacity onPress={() => onHide(cur)} testID={`card-hide-L${level}-S${sem}`}><Text style={lbl('#ef6c00')}><Ionicons name={cur.hidden ? 'eye-outline' : 'eye-off-outline'} size={14} color="#ef6c00" /> {cur.hidden ? 'إظهار' : 'إخفاء'}</Text></TouchableOpacity>}
+          <TouchableOpacity onPress={() => setEdit(!edit)} testID={`card-edit-L${level}-S${sem}`}><Text style={lbl('#1565c0')}><Ionicons name="create-outline" size={14} color="#1565c0" /> تعديل</Text></TouchableOpacity>
+          {cur && <TouchableOpacity onPress={() => onDelete(cur)} testID={`card-delete-L${level}-S${sem}`}><Text style={lbl('#c62828')}><Ionicons name="trash-outline" size={14} color="#c62828" /> حذف</Text></TouchableOpacity>}
         </View>}
       </View>
       {cur?.hidden && <Text style={{ color: '#ef6c00', fontSize: 11.5, textAlign: 'right', fontWeight: '700' }} testID={`card-hidden-L${level}-S${sem}`}>مخفية عن الطالب{cur.hidden_by_batch ? ' (بإخفاء الرفعة كاملة)' : ''}</Text>}

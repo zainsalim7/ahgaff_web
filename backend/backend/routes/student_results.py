@@ -313,7 +313,7 @@ async def _batch_scoped(db, user: dict, batch_id: str) -> dict:
     if not b:
         raise HTTPException(status_code=404, detail="الرفعة غير موجودة")
     sc = await _user_scope(db, user)
-    if sc is not None and not set(b.get("department_ids") or []) <= sc["deps"]:
+    if sc is not None and (not b.get("department_ids") or not set(b["department_ids"]) <= sc["deps"]):
         raise HTTPException(status_code=403, detail="هذه الرفعة خارج نطاقك")
     return b
 
@@ -326,7 +326,7 @@ async def list_batches(current_user: dict = Depends(get_current_user)):
     _guard_view(current_user)
     db = get_db()
     sc = await _user_scope(db, current_user)
-    q = {} if sc is None else {"department_ids": {"$not": {"$elemMatch": {"$nin": list(sc["deps"])}}}}
+    q = {} if sc is None else {"department_ids": {"$not": {"$elemMatch": {"$nin": list(sc["deps"])}}}, "department_ids.0": {"$exists": True}}
     items = []
     async for b in db.result_batches.find(q, {"changes": 0}).sort("created_at", -1).limit(200):
         items.append({
@@ -378,6 +378,9 @@ async def undo_batch(batch_id: str, current_user: dict = Depends(get_current_use
         if before is None:
             await db.result_entries.delete_one(key)
         else:
+            if before.get("batch_id") and ObjectId.is_valid(before["batch_id"]):
+                pb = await db.result_batches.find_one({"_id": ObjectId(before["batch_id"])}, {"hidden": 1})
+                before = {**before, "batch_hidden": bool((pb or {}).get("hidden"))}
             await db.result_entries.update_one(key, {"$set": {**before, "updated_at": datetime.now(timezone.utc)},
                                                      "$setOnInsert": {"created_at": datetime.now(timezone.utc)}}, upsert=True)
         restored += 1

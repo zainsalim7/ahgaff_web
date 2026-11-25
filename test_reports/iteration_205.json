@@ -1,0 +1,34 @@
+{
+  "summary": "Tested the Results v3 features: view_results/manage_results permissions, hiding a whole batch or one entry, undo, the dean's scope on batches, and the history and card UI. Backend: 12/12 pytest cases pass in /app/backend/tests/test_results_perms_hide_undo.py. view_results is read-only (403 on import, entries, delete, both visibility endpoints, undo and template). manage_grades alone gets 403 everywhere. manage_results grants everything, and /auth/me expands it to include view_results. Hiding a batch nulls the cell in /students/me/results and showing it restores it. The card marks entries with hidden and hidden_by_batch. Undo covers new rows (deleted), changed rows (exact prior values and batch_id), skipping entries edited later, manual edit, manual delete, and the all-fields-empty delete. A second undo returns 400, hide on an undone batch returns 400, and undo sends no notification. The scoped dean does not see an out-of-scope batch and gets 403 on its visibility, undo and entry visibility. Frontend: as admin, batch-toggle hide/show (window.confirm) shows batch-hidden and history-msg. card-hide-L7-S1 toggles the card-hidden label. A single-cell card edit creates a manual batch with no hide toggle, and batch-undo moves it to batch-undone with the buttons gone. As Salim with view_results only: no results-tab-upload, no card edit/hide/delete icons, no batch buttons, and the dashboard tile is visible. One edge-case bug was found, confirmed by a script.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/results/batches/{id}/undo + /visibility", "issue": "A batch's hidden state is lost when a later edit is undone. Repro: import batch A (entry X) → manual edit X (batch M) → hide A (affects 0, because X.batch_id is M) → undo M. X is restored to batch_id=A with the snapshot's batch_hidden=False, so the student sees A's result while A shows 'مخفية عن الطلاب'. Fix: when undo restores a snapshot whose batch_id points to a batch, set batch_hidden from that batch's current hidden flag."},
+      {"endpoint": "POST /api/results/import, POST /api/results/entries", "issue": "Neither endpoint resets the per-entry 'hidden' flag. If one result was hidden and then re-uploaded or edited with new values, it stays hidden silently. This may be intended; confirm the product rule or show a hint."},
+      {"endpoint": "GET /api/results/batches (scoped)", "issue": "A batch with an empty department_ids list (a student with no department_id) matches the $not/$elemMatch filter and _batch_scoped's subset check, so every scoped user can see and undo it. Edge case only."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "StudentResultsCard", "issues": ["The hide, edit and delete icons have no text label or tooltip. The eye-off icon (meaning 'hide') can be confused with a status."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_results_perms_hide_undo.py", "/app/backend/tests/results_perm_helper.py", "/app/test_reports/pytest/results_v3.xml"],
+  "action_items": [
+    "Undo: when restoring a snapshot, set batch_hidden to the current hidden flag of the batch it restores to (see the minor backend issue).",
+    "Decide whether a re-import or manual edit should clear the per-entry hidden flag.",
+    "Optional: treat a batch with empty department_ids as admin-only for scoped users."
+  ],
+  "critical_code_review_comments": [
+    "Undoing a manual_delete re-creates the entry with a new _id and a new created_at. This is fine functionally, but card entry ids change.",
+    "Undo is marked done even when every change was skipped (restored=0), so a later retry is impossible. Acceptable, but the UI message could say that nothing was restored."
+  ],
+  "updated_files": ["/app/backend/tests/test_results_perms_hide_undo.py", "/app/backend/tests/results_perm_helper.py"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100%"},
+  "seed_data_creation": "Test data only, at level 7 / year 2098-2099 for 1001 and 12345. All of it was undone or deleted by id, and the test batches were deleted by id. Student 1001 is back to its original 7 entries and result_batches to its original 3. Salim's custom_permissions were restored to ['manage_fee_receipts','hr_manage_tasks','hr_manage_appraisals'].",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_results_perms_hide_undo.py -v. The suite is order-dependent (classes share state at L7/2098-2099). It sets Salim's custom_permissions temporarily, restores them, and cleans up entries and batches by id. For UI auth, inject localStorage token and user from /api/auth/login. Dialogs are window.confirm, so accept them via page.on('dialog')."
+}
