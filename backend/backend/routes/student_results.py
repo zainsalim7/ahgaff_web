@@ -18,7 +18,7 @@ VALS = ["status", "gpa", "grade"]
 HEADERS = ["رقم القيد", "الحالة", "المعدل", "التقدير", "اسم الطالب (للمرجع فقط)"]
 REASON_AR = {
     "invalid": "بلا رقم قيد",
-    "out_of_scope": "الطالب ليس من الكلية/القسم المختار أو خارج نطاقك أو غير مسجّل",
+    "out_of_scope": "الطالب ليس من الكلية/القسم/الشعبة المختارة أو خارج نطاقك أو غير مسجّل",
     "duplicate": "مكرر في الملف — يُعتمد آخر صف",
 }
 
@@ -164,13 +164,16 @@ async def get_my_results(current_user: dict = Depends(get_current_user)):
 # ==================== جدول النتائج (الإدارة) ====================
 @router.get("/results/students")
 async def list_result_students(faculty_id: str = "", department_id: str = "", level: Optional[int] = None,
-                               academic_year: str = "", q: str = "", page: int = 1,
+                               section: str = "", academic_year: str = "", q: str = "", page: int = 1,
                                current_user: dict = Depends(get_current_user)):
     _guard_view(current_user)
     db = get_db()
     query = await _scope_student_query(db, current_user, faculty_id, department_id)
     if level:
         query["level"] = level
+    avail_sections = sorted(x for x in await db.students.distinct("section", query) if x)
+    if section:
+        query["section"] = section
     if q.strip():
         rx = {"$regex": re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"full_name": rx}, {"student_id": rx}]
@@ -197,7 +200,7 @@ async def list_result_students(faculty_id: str = "", department_id: str = "", le
     dep_ids = list({s.get("department_id") for s in studs if s.get("department_id")})
     deps = {str(d["_id"]): d.get("name", "") async for d in db.departments.find(
         {"_id": {"$in": [ObjectId(x) for x in dep_ids if ObjectId.is_valid(x)]}}, {"name": 1})}
-    return {"total": total, "page": page, "pages": (total + limit - 1) // limit, "items": [{
+    return {"total": total, "page": page, "pages": (total + limit - 1) // limit, "sections": avail_sections, "items": [{
         "id": str(s["_id"]), "reg_no": s.get("student_id", ""), "full_name": s.get("full_name", ""),
         "department_name": deps.get(s.get("department_id"), ""), "level": s.get("level"),
         "released_count": len(released.get(s.get("student_id"), ())),
@@ -232,8 +235,9 @@ async def student_results_card(student_db_id: str, current_user: dict = Depends(
     st = await _student_in_scope(db, current_user, student_db_id)
     entries = [_entry_out(e) async for e in db.result_entries.find({"reg_no": st.get("student_id")})]
     entries.sort(key=lambda e: (e["level"], e["semester"], -_year_key(e["academic_year"]), str(e["updated_at"] or "")), reverse=False)
-    dep = await db.departments.find_one({"_id": ObjectId(st["department_id"])}, {"name": 1}) if ObjectId.is_valid(st.get("department_id") or "") else None
-    max_lvl = max([st.get("level") or 1, 4] + [e["level"] for e in entries])
+    dep = await db.departments.find_one({"_id": ObjectId(st["department_id"])}, {"name": 1, "faculty_id": 1}) if ObjectId.is_valid(st.get("department_id") or "") else None
+    fac = await db.faculties.find_one({"_id": ObjectId(dep["faculty_id"])}, {"levels_count": 1}) if dep and ObjectId.is_valid(dep.get("faculty_id") or "") else None
+    max_lvl = max([st.get("level") or 1, int((fac or {}).get("levels_count") or 4)] + [e["level"] for e in entries])
     return {"student": {"id": student_db_id, "reg_no": st.get("student_id"), "full_name": st.get("full_name"),
                         "level": st.get("level"), "department_name": (dep or {}).get("name", "")},
             "max_level": max_lvl, "entries": entries}
@@ -344,7 +348,7 @@ async def list_batches(current_user: dict = Depends(get_current_user)):
         items.append({
             "id": str(b["_id"]), "kind": b["kind"], "kind_name": KIND_AR.get(b["kind"], b["kind"]),
             "academic_year": b.get("academic_year"), "level": b.get("level"), "semester": b.get("semester"),
-            "scope_name": b.get("scope_name", ""), "student_name": b.get("student_name", ""), "file_name": b.get("file_name", ""),
+            "scope_name": (b.get("scope_name", "") + (f" · شعبة {b['section']}" if b.get("section") else "")), "student_name": b.get("student_name", ""), "file_name": b.get("file_name", ""),
             "counts": b.get("counts") or {}, "notified": b.get("notified", 0), "hidden": b.get("hidden", False),
             "undone": b.get("undone", False), "undone_by_name": b.get("undone_by_name", ""),
             "created_by_name": b.get("created_by_name", ""),
@@ -444,7 +448,7 @@ async def results_template_blank(current_user: dict = Depends(get_current_user))
 
 
 @router.get("/results/template")
-async def results_template(academic_year: str, level: int, semester: int, scope: str, scope_id: str,
+async def results_template(academic_year: str, level: int, semester: int, scope: str, scope_id: str, section: str = "",
                            current_user: dict = Depends(get_current_user)):
     """نموذج إكسل بأسماء وأرقام قيد طلاب النطاق والمستوى المختار — يُملأ الحالة/المعدل/التقدير فقط"""
     _guard(current_user)
@@ -452,6 +456,8 @@ async def results_template(academic_year: str, level: int, semester: int, scope:
     year, level, semester = _params(academic_year, level, semester, scope, scope_id)
     q = await _scope_student_query(db, current_user, scope_id if scope == "faculty" else "", scope_id if scope == "department" else "")
     q["level"] = level
+    if section:
+        q["section"] = section
     import openpyxl
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -526,7 +532,7 @@ async def _notify_students(db, user_ids: list) -> None:
 
 @router.post("/results/import")
 async def import_results(file: UploadFile = File(...), academic_year: str = Form(...), level: str = Form(...),
-                         semester: str = Form(...), scope: str = Form(...), scope_id: str = Form(...),
+                         semester: str = Form(...), scope: str = Form(...), scope_id: str = Form(...), section: str = Form(""),
                          commit: str = Form("false"), notify: str = Form("true"),
                          current_user: dict = Depends(get_current_user)):
     """الملف: رقم القيد | الحالة | المعدل | التقدير · commit=false معاينة دون حفظ · commit=true حفظ الجديد/المتغيّر + إشعار"""
@@ -534,6 +540,8 @@ async def import_results(file: UploadFile = File(...), academic_year: str = Form
     db = get_db()
     year, lvl, sem = _params(academic_year, level, semester, scope, scope_id)
     q = await _scope_student_query(db, current_user, scope_id if scope == "faculty" else "", scope_id if scope == "department" else "")
+    if section:
+        q["section"] = section
     try:
         rows = _rows(await file.read(), file.filename)
     except Exception:
@@ -555,7 +563,7 @@ async def import_results(file: UploadFile = File(...), academic_year: str = Form
     scope_doc = await db[("faculties" if scope == "faculty" else "departments")].find_one({"_id": ObjectId(scope_id)}, {"name": 1}) if ObjectId.is_valid(scope_id) else None
     dep_ids = q["department_id"]["$in"] if isinstance(q.get("department_id"), dict) else [q.get("department_id")]
     bid = await _new_batch(db, current_user, "import", {**key, "scope": scope, "scope_id": scope_id, "scope_name": (scope_doc or {}).get("name", ""),
-                                                        "file_name": file.filename or "", "counts": counts}, dep_ids)
+                                                        "section": section or None, "file_name": file.filename or "", "counts": counts}, dep_ids)
     for r in items:
         if r["status_code"] not in ("new", "changed"):
             continue

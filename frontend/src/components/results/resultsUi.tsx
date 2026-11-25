@@ -4,6 +4,15 @@ import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 
 export interface Opt { id: string; name: string }
+export type Fac = Opt & { levels_count?: number; sections?: string[] };
+
+export const levelOpts = (n: number): Opt[] => Array.from({ length: Math.max(1, n || 5) }, (_, i) => ({ id: String(i + 1), name: `المستوى ${i + 1}` }));
+export const facultyMeta = (facs: Fac[], facultyId?: string) => {
+  const list = facultyId ? facs.filter((x) => x.id === facultyId) : facs;
+  const levels = Math.max(0, ...list.map((x) => x.levels_count || 5)) || 5;
+  const sections = Array.from(new Set(list.flatMap((x) => x.sections || [])));
+  return { levels: levelOpts(levels), sections: sections.map((x) => ({ id: x, name: `شعبة ${x}` })) };
+};
 
 export const ChipRow = ({ label, options, value, onChange, testPrefix, allLabel }: {
   label: string; options: Opt[]; value: string; onChange: (v: string) => void; testPrefix: string; allLabel?: string;

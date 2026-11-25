@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
-import { PickerField, LEVELS, SEMS, Opt, rs, val, downloadBlob } from './resultsUi';
+import { PickerField, SEMS, Opt, Fac, facultyMeta, rs, val, downloadBlob } from './resultsUi';
 
 type PRow = { row: number; reg_no: string | null; student_name?: string; status: string | null; gpa: string | null; grade: string | null; status_code: string; reason?: string; warning?: string; old?: any };
 
@@ -29,23 +29,26 @@ const PreviewRow = ({ r }: { r: PRow }) => {
   );
 };
 
-export const ResultsUploadWizard = ({ years, faculties, departments, restrictedFaculty, onDone }: {
-  years: string[]; faculties: Opt[]; departments: (Opt & { faculty_id?: string })[]; restrictedFaculty: boolean; onDone: () => void;
+export const ResultsUploadWizard = ({ years, faculties, departments, restrictedFaculty, onDone, allFaculties }: {
+  years: string[]; faculties: Fac[]; departments: (Opt & { faculty_id?: string })[]; restrictedFaculty: boolean; onDone: () => void; allFaculties?: Fac[];
 }) => {
-  const [p, setP] = useState({ academic_year: years[0] || '', level: '', semester: '', scope: restrictedFaculty ? 'department' : 'faculty', scope_id: '' });
+  const [p, setP] = useState({ academic_year: years[0] || '', level: '', semester: '', scope: restrictedFaculty ? 'department' : 'faculty', scope_id: '', section: '' });
   const [file, setFile] = useState<File | null>(null);
   const [inputKey, setInputKey] = useState(0);
   const [preview, setPreview] = useState<{ counts: any; rows: PRow[] } | null>(null);
   const [notify, setNotify] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const set = (k: string, v: string) => { setP({ ...p, [k]: v, ...(k === 'scope' ? { scope_id: '' } : {}) }); setPreview(null); };
+  const set = (k: string, v: string) => { setP({ ...p, [k]: v, ...(k === 'scope' ? { scope_id: '', level: '', section: '' } : {}), ...(k === 'scope_id' ? { level: '', section: '' } : {}) }); setPreview(null); };
+  const facId = p.scope === 'faculty' ? p.scope_id : (departments.find((d) => d.id === p.scope_id)?.faculty_id || '');
+  const meta = facultyMeta(allFaculties || faculties, facId);
   const ready = p.academic_year && p.level && p.semester && p.scope_id;
+  const params = Object.fromEntries(Object.entries(p).filter(([, v]) => v));
 
   const template = async () => {
     if (!ready) { setMsg({ ok: false, text: 'حدد السنة والمستوى والفصل والكلية/القسم أولاً' }); return; }
     try {
-      const res = await api.get('/results/template', { params: p, responseType: 'blob' });
+      const res = await api.get('/results/template', { params, responseType: 'blob' });
       downloadBlob(res.data, `نتائج المستوى ${p.level} الفصل ${p.semester}.xlsx`);
     } catch { setMsg({ ok: false, text: 'فشل تنزيل النموذج' }); }
   };
@@ -61,7 +64,7 @@ export const ResultsUploadWizard = ({ years, faculties, departments, restrictedF
     setBusy(true); setMsg(null);
     try {
       const fd = new FormData(); fd.append('file', file);
-      Object.entries(p).forEach(([k, v]) => fd.append(k, v));
+      Object.entries(params).forEach(([k, v]) => fd.append(k, v as string));
       fd.append('commit', commit ? 'true' : 'false'); fd.append('notify', notify ? 'true' : 'false');
       const res = await api.post('/results/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       if (!commit) { setPreview(res.data); return; }
@@ -79,10 +82,11 @@ export const ResultsUploadWizard = ({ years, faculties, departments, restrictedF
         <Text style={[rs.title, { marginBottom: 10 }]}>1. حدّد النتيجة المرفوعة</Text>
         <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12 }}>
           <PickerField label="السنة الدراسية" options={years.map((y) => ({ id: y, name: y }))} value={p.academic_year} onChange={(v) => set('academic_year', v)} testID="up-year" />
-          <PickerField label="المستوى" options={LEVELS} value={p.level} onChange={(v) => set('level', v)} testID="up-level" />
           <PickerField label="الفصل" options={SEMS} value={p.semester} onChange={(v) => set('semester', v)} testID="up-sem" />
           <PickerField label="الرفع على" options={[...(restrictedFaculty ? [] : [{ id: 'faculty', name: 'كلية كاملة' }]), { id: 'department', name: 'قسم' }]} value={p.scope} onChange={(v) => set('scope', v)} testID="up-scope" placeholder="اختر..." />
           <PickerField label={p.scope === 'faculty' ? 'الكلية' : 'القسم'} options={scopeOpts} value={p.scope_id} onChange={(v) => set('scope_id', v)} testID="up-target" />
+          <PickerField label="المستوى" options={meta.levels} value={p.level} onChange={(v) => set('level', v)} testID="up-level" enabled={!!p.scope_id} placeholder={p.scope_id ? 'اختر...' : 'اختر الكلية/القسم أولاً'} />
+          {meta.sections.length > 0 && <PickerField label="الشعبة (اختياري)" options={meta.sections} value={p.section} onChange={(v) => set('section', v)} testID="up-section" allLabel="كل الشعب" />}
         </View>
       </View>
       <View style={rs.card}>

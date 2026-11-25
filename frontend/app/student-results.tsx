@@ -6,14 +6,14 @@ import { router } from 'expo-router';
 import api from '../src/services/api';
 import { useAcademicScope } from '../src/hooks/useAcademicScope';
 import { useAuth } from '../src/contexts/AuthContext';
-import { PickerField, ModalShell, LEVELS, Opt, downloadBlob } from '../src/components/results/resultsUi';
+import { PickerField, ModalShell, Opt, Fac, facultyMeta, downloadBlob } from '../src/components/results/resultsUi';
 import { StudentResultsCard } from '../src/components/results/StudentResultsCard';
 import { ResultsUploadWizard } from '../src/components/results/ResultsUploadWizard';
 import { ResultsHistory } from '../src/components/results/ResultsHistory';
 import { ResultsTable, SRow } from '../src/components/results/ResultsTable';
 
 type Dep = Opt & { faculty_id?: string };
-const EMPTY = { faculty_id: '', department_id: '', level: '', academic_year: '', q: '' };
+const EMPTY = { faculty_id: '', department_id: '', level: '', section: '', academic_year: '', q: '' };
 
 const Stat = ({ icon, color, label, value, sub }: { icon: any; color: string; label: string; value: string | number; sub: string }) => (
   <View style={st.statCard}>
@@ -30,11 +30,11 @@ export default function ResultsPage() {
   const { hasPermission } = useAuth();
   const canManage = hasPermission('manage_results');
   const { scope, restricted, filterFaculties, filterDepartments } = useAcademicScope();
-  const [faculties, setFaculties] = useState<Opt[]>([]);
+  const [faculties, setFaculties] = useState<Fac[]>([]);
   const [departments, setDepartments] = useState<Dep[]>([]);
   const [years, setYears] = useState<string[]>([]);
   const [f, setF] = useState(EMPTY);
-  const [data, setData] = useState<{ items: SRow[]; total: number; pages: number }>({ items: [], total: 0, pages: 1 });
+  const [data, setData] = useState<{ items: SRow[]; total: number; pages: number; sections?: string[] }>({ items: [], total: 0, pages: 1 });
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -42,7 +42,7 @@ export default function ResultsPage() {
   const [modal, setModal] = useState<'' | 'upload' | 'history'>('');
 
   useEffect(() => {
-    api.get('/faculties').then((r) => setFaculties((r.data || []).map((x: any) => ({ id: x.id, name: x.name })))).catch(() => {});
+    api.get('/faculties').then((r) => setFaculties((r.data || []).map((x: any) => ({ id: x.id, name: x.name, levels_count: x.levels_count, sections: x.sections })))).catch(() => {});
     api.get('/departments').then((r) => setDepartments((r.data || []).map((x: any) => ({ id: x.id, name: x.name, faculty_id: x.faculty_id })))).catch(() => {});
     api.get('/settings/academic-years').then((r) => setYears(r.data?.years || [])).catch(() => {});
   }, []);
@@ -56,7 +56,7 @@ export default function ResultsPage() {
     } catch (e: any) { setErr(e?.response?.data?.detail || 'تعذر جلب الطلاب'); } finally { setLoading(false); }
   }, [f]);
 
-  useEffect(() => { load(1); }, [f.faculty_id, f.department_id, f.level, f.academic_year]);
+  useEffect(() => { load(1); }, [f.faculty_id, f.department_id, f.level, f.section, f.academic_year]);
 
   const blank = async () => {
     try { downloadBlob((await api.get('/results/template/blank', { responseType: 'blob' })).data, 'نموذج نتائج فارغ.xlsx'); }
@@ -67,6 +67,9 @@ export default function ResultsPage() {
   const myDeps = filterDepartments(departments).filter((d) => !f.faculty_id || d.faculty_id === f.faculty_id);
   const fullFacs = restricted ? faculties.filter((x) => (scope?.full_faculty_ids || []).includes(x.id)) : faculties;
   const hasFilter = Object.values(f).some(Boolean);
+  const metaFac = f.faculty_id || departments.find((d) => d.id === f.department_id)?.faculty_id || '';
+  const baseMeta = facultyMeta(myFacs as Fac[], metaFac);
+  const meta = { ...baseMeta, sections: Array.from(new Set([...baseMeta.sections.map((x) => x.id), ...(data.sections || [])])).map((x) => ({ id: x, name: `شعبة ${x}` })) };
   const depName = departments.find((d) => d.id === f.department_id)?.name;
   const facName = faculties.find((x) => x.id === f.faculty_id)?.name;
 
@@ -102,7 +105,7 @@ export default function ResultsPage() {
         <View style={st.statsGrid}>
           <Stat icon="people" color="#2962ff" label="عدد الطلاب" value={data.total} sub="حسب الفلاتر الحالية" />
           <Stat icon="business" color="#22c55e" label="النطاق" value={depName || facName || 'الكل'} sub={depName ? 'قسم' : facName ? 'كلية' : 'كل نطاقك'} />
-          <Stat icon="school" color="#7c4dff" label="المستوى" value={f.level || 'الكل'} sub="المستوى الحالي" />
+          <Stat icon="school" color="#7c4dff" label="المستوى" value={f.level ? `${f.level}${f.section ? ` · شعبة ${f.section}` : ''}` : 'الكل'} sub={`من ${meta.levels.length} مستويات`} />
           <Stat icon="calendar" color="#f59e0b" label="السنة الدراسية" value={f.academic_year || 'كل السنوات'} sub="لعدّ الفصول الصادرة" />
         </View>
 
@@ -116,12 +119,13 @@ export default function ResultsPage() {
                   onChangeText={(q) => setF({ ...f, q })} onSubmitEditing={() => load(1)} testID="flt-search-input" />
               </View>
             </View>
-            {myFacs.length > 1 && <PickerField label="الكلية" options={myFacs} value={f.faculty_id} onChange={(v) => setF({ ...f, faculty_id: v, department_id: '' })} testID="flt-faculty" allLabel="الكل" />}
-            <PickerField label="القسم" options={myDeps} value={f.department_id} onChange={(v) => setF({ ...f, department_id: v })} testID="flt-department" allLabel="الكل" />
-            <PickerField label="المستوى" options={LEVELS} value={f.level} onChange={(v) => setF({ ...f, level: v })} testID="flt-level" allLabel="الكل" maxWidth={150} />
+            {myFacs.length > 1 && <PickerField label="الكلية" options={myFacs} value={f.faculty_id} onChange={(v) => setF({ ...f, faculty_id: v, department_id: '', level: '', section: '' })} testID="flt-faculty" allLabel="الكل" />}
+            <PickerField label="القسم" options={myDeps} value={f.department_id} onChange={(v) => setF({ ...f, department_id: v, level: '', section: '' })} testID="flt-department" allLabel="الكل" />
+            <PickerField label="المستوى" options={meta.levels} value={f.level} onChange={(v) => setF({ ...f, level: v })} testID="flt-level" allLabel="الكل" maxWidth={150} />
+            {meta.sections.length > 0 && <PickerField label="الشعبة" options={meta.sections} value={f.section} onChange={(v) => setF({ ...f, section: v })} testID="flt-section" allLabel="الكل" maxWidth={140} />}
             <PickerField label="السنة الدراسية" options={years.map((y) => ({ id: y, name: y }))} value={f.academic_year} onChange={(v) => setF({ ...f, academic_year: v })} testID="flt-year" allLabel="كل السنوات" maxWidth={170} />
             <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-              <TouchableOpacity style={st.reset} disabled={!hasFilter} onPress={() => { setF(EMPTY); if (!f.faculty_id && !f.department_id && !f.level && !f.academic_year) load(1, EMPTY); }} testID="flt-reset-btn">
+              <TouchableOpacity style={st.reset} disabled={!hasFilter} onPress={() => { setF(EMPTY); if (!f.faculty_id && !f.department_id && !f.level && !f.section && !f.academic_year) load(1, EMPTY); }} testID="flt-reset-btn">
                 <Ionicons name="refresh" size={13} color={hasFilter ? '#2962ff' : '#a8b1c2'} />
                 <Text style={[st.resetTxt, !hasFilter && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
               </TouchableOpacity>
@@ -139,7 +143,7 @@ export default function ResultsPage() {
 
       {modal === 'upload' && canManage && (
         <ModalShell title="رفع نتائج من Excel" icon="cloud-upload-outline" onClose={() => { setModal(''); load(page); }} testID="results-upload-modal">
-          <ResultsUploadWizard years={years} faculties={fullFacs} departments={filterDepartments(departments)} restrictedFaculty={restricted && !fullFacs.length} onDone={() => load(page)} />
+          <ResultsUploadWizard years={years} faculties={fullFacs} departments={filterDepartments(departments)} restrictedFaculty={restricted && !fullFacs.length} allFaculties={faculties} onDone={() => load(page)} />
         </ModalShell>
       )}
       {modal === 'history' && (

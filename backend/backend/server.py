@@ -19095,6 +19095,8 @@ async def get_faculties(current_user: dict = Depends(get_current_user)):
             "dean_id": faculty.get("dean_id"),
             "dean_name": dean_name,
             "departments_count": departments_count,
+            "levels_count": int(faculty.get("levels_count") or 5),
+            "sections": faculty.get("sections") or [],
             "created_at": faculty.get("created_at", get_yemen_time())
         })
     
