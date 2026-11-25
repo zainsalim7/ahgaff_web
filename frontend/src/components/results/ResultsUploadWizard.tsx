@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
-import { ChipRow, LEVELS, SEMS, Opt, rs, val } from './resultsUi';
+import { PickerField, LEVELS, SEMS, Opt, rs, val, downloadBlob } from './resultsUi';
 
 type PRow = { row: number; reg_no: string | null; student_name?: string; status: string | null; gpa: string | null; grade: string | null; status_code: string; reason?: string; warning?: string; old?: any };
 
@@ -46,10 +46,13 @@ export const ResultsUploadWizard = ({ years, faculties, departments, restrictedF
     if (!ready) { setMsg({ ok: false, text: 'حدد السنة والمستوى والفصل والكلية/القسم أولاً' }); return; }
     try {
       const res = await api.get('/results/template', { params: p, responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const a = document.createElement('a'); a.href = url; a.download = `نتائج المستوى ${p.level} الفصل ${p.semester}.xlsx`; a.click();
-      window.URL.revokeObjectURL(url);
+      downloadBlob(res.data, `نتائج المستوى ${p.level} الفصل ${p.semester}.xlsx`);
     } catch { setMsg({ ok: false, text: 'فشل تنزيل النموذج' }); }
+  };
+
+  const blank = async () => {
+    try { downloadBlob((await api.get('/results/template/blank', { responseType: 'blob' })).data, 'نموذج نتائج فارغ.xlsx'); }
+    catch { setMsg({ ok: false, text: 'فشل تنزيل النموذج' }); }
   };
 
   const send = async (commit: boolean) => {
@@ -73,15 +76,26 @@ export const ResultsUploadWizard = ({ years, faculties, departments, restrictedF
   return (
     <View>
       <View style={rs.card}>
-        <ChipRow label="السنة الدراسية" options={years.map((y) => ({ id: y, name: y }))} value={p.academic_year} onChange={(v) => set('academic_year', v)} testPrefix="up-year" />
-        <ChipRow label="المستوى" options={LEVELS} value={p.level} onChange={(v) => set('level', v)} testPrefix="up-level" />
-        <ChipRow label="الفصل" options={SEMS} value={p.semester} onChange={(v) => set('semester', v)} testPrefix="up-sem" />
-        <ChipRow label="الرفع على" options={[...(restrictedFaculty ? [] : [{ id: 'faculty', name: 'كلية كاملة' }]), { id: 'department', name: 'قسم' }]} value={p.scope} onChange={(v) => set('scope', v)} testPrefix="up-scope" />
-        <ChipRow label={p.scope === 'faculty' ? 'الكلية' : 'القسم'} options={scopeOpts} value={p.scope_id} onChange={(v) => set('scope_id', v)} testPrefix="up-target" />
+        <Text style={[rs.title, { marginBottom: 10 }]}>1. حدّد النتيجة المرفوعة</Text>
+        <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12 }}>
+          <PickerField label="السنة الدراسية" options={years.map((y) => ({ id: y, name: y }))} value={p.academic_year} onChange={(v) => set('academic_year', v)} testID="up-year" />
+          <PickerField label="المستوى" options={LEVELS} value={p.level} onChange={(v) => set('level', v)} testID="up-level" />
+          <PickerField label="الفصل" options={SEMS} value={p.semester} onChange={(v) => set('semester', v)} testID="up-sem" />
+          <PickerField label="الرفع على" options={[...(restrictedFaculty ? [] : [{ id: 'faculty', name: 'كلية كاملة' }]), { id: 'department', name: 'قسم' }]} value={p.scope} onChange={(v) => set('scope', v)} testID="up-scope" placeholder="اختر..." />
+          <PickerField label={p.scope === 'faculty' ? 'الكلية' : 'القسم'} options={scopeOpts} value={p.scope_id} onChange={(v) => set('scope_id', v)} testID="up-target" />
+        </View>
       </View>
-      <View style={[rs.card, { backgroundColor: '#eef6ff' }]}>
+      <View style={rs.card}>
+        <Text style={[rs.title, { marginBottom: 6 }]}>2. الملف</Text>
         <Text style={rs.hint}>أعمدة الملف: رقم القيد | الحالة | المعدل | التقدير. تُحفظ القيم حرفياً دون أي حساب، والخلية الفارغة تظهر للطالب «لم تصدر بعد». النموذج يحتوي أسماء طلاب النطاق والمستوى المختار للمرجع.</Text>
-        <TouchableOpacity style={[rs.btn, { backgroundColor: '#2e7d32', marginTop: 8 }]} onPress={template} testID="up-template-btn"><Text style={rs.btnTxt}>تنزيل نموذج بأسماء الطلاب</Text></TouchableOpacity>
+        <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <TouchableOpacity style={[rs.btn, { flex: 1, minWidth: 180, backgroundColor: '#22c55e', flexDirection: 'row-reverse', gap: 6 }]} onPress={template} testID="up-template-btn">
+            <Ionicons name="people-outline" size={16} color="#fff" /><Text style={rs.btnTxt}>نموذج بأسماء الطلاب</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[rs.btn, { flex: 1, minWidth: 180, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', flexDirection: 'row-reverse', gap: 6 }]} onPress={blank} testID="up-blank-template-btn">
+            <Ionicons name="document-outline" size={16} color="#1a2540" /><Text style={{ color: '#1a2540', fontWeight: '700' }}>نموذج فارغ</Text>
+          </TouchableOpacity>
+        </View>
         {Platform.OS === 'web' && (
           <label style={{ display: 'block', margin: '10px 0', padding: 10, border: '1.5px dashed #90caf9', borderRadius: 10, textAlign: 'center', cursor: 'pointer', color: '#1565c0', fontWeight: 700, background: '#fff' }} data-testid="up-file-label">
             {file ? `الملف: ${file.name}` : 'اختر ملف الإكسل (xlsx / xls / csv)'}

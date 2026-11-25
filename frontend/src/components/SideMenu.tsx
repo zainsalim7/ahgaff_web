@@ -109,6 +109,9 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 'teaching-load-report', label: 'تقارير العبء', icon: 'analytics', path: '/teaching-load-report', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_TEACHING_LOAD, PERMISSIONS.VIEW_TEACHING_LOAD
   ]},
+  { id: 'student-results', label: 'النتائج', icon: 'ribbon', path: '/student-results', category: 'academic', permissions: [
+    'view_results', 'manage_results'
+  ]},
 
   // 🏢 إدارة الأقسام
   { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', category: 'academic', permissions: [

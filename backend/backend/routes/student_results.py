@@ -175,14 +175,25 @@ async def list_result_students(faculty_id: str = "", department_id: str = "", le
         rx = {"$regex": re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"full_name": rx}, {"student_id": rx}]
     total = await db.students.count_documents(query)
-    limit = 50
+    limit = 100
     studs = await db.students.find(query, {"student_id": 1, "full_name": 1, "department_id": 1, "level": 1}) \
         .sort([("level", 1), ("full_name", 1)]).skip((max(page, 1) - 1) * limit).limit(limit).to_list(limit)
     regs = [s.get("student_id") for s in studs if s.get("student_id")]
     eq = {"reg_no": {"$in": regs}, **({"academic_year": academic_year} if academic_year else {})}
     released: dict = {}
-    async for e in db.result_entries.find(eq, {"reg_no": 1, "level": 1, "semester": 1}):
+    cur: dict = {}
+    lvl_of = {s.get("student_id"): s.get("level") for s in studs}
+    async for e in db.result_entries.find(eq):
         released.setdefault(e["reg_no"], set()).add((e["level"], e["semester"]))
+        if e["level"] == lvl_of.get(e["reg_no"]):
+            cur.setdefault((e["reg_no"], e["semester"]), []).append(e)
+
+    def cur_cell(reg, sem):
+        lst = cur.get((reg, sem))
+        if not lst:
+            return None
+        e = _pick_latest(lst)
+        return {**_cell(e), "hidden": bool(e.get("hidden") or e.get("batch_hidden"))}
     dep_ids = list({s.get("department_id") for s in studs if s.get("department_id")})
     deps = {str(d["_id"]): d.get("name", "") async for d in db.departments.find(
         {"_id": {"$in": [ObjectId(x) for x in dep_ids if ObjectId.is_valid(x)]}}, {"name": 1})}
@@ -190,6 +201,7 @@ async def list_result_students(faculty_id: str = "", department_id: str = "", le
         "id": str(s["_id"]), "reg_no": s.get("student_id", ""), "full_name": s.get("full_name", ""),
         "department_name": deps.get(s.get("department_id"), ""), "level": s.get("level"),
         "released_count": len(released.get(s.get("student_id"), ())),
+        "cur_s1": cur_cell(s.get("student_id"), 1), "cur_s2": cur_cell(s.get("student_id"), 2),
     } for s in studs]}
 
 
@@ -408,6 +420,27 @@ def _params(academic_year, level, semester, scope, scope_id):
     if scope not in ("faculty", "department") or not scope_id:
         raise HTTPException(status_code=400, detail="اختر الكلية أو القسم")
     return year, level, semester
+
+
+@router.get("/results/template/blank")
+async def results_template_blank(current_user: dict = Depends(get_current_user)):
+    """نموذج إكسل فارغ: رقم القيد | الحالة | المعدل | التقدير"""
+    _guard(current_user)
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "النتائج"
+    ws.sheet_view.rightToLeft = True
+    ws.append(HEADERS[:4])
+    for col in "ABCD":
+        ws.column_dimensions[col].width = 16
+        for row in range(1, 501):
+            ws[f"{col}{row}"].number_format = "@"
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=results_blank_template.xlsx"})
 
 
 @router.get("/results/template")
