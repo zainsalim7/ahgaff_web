@@ -12,7 +12,7 @@ const confirmBox = async (msg: string) => Platform.OS === 'web' ? window.confirm
   : new Promise<boolean>((r) => Alert.alert('تأكيد', msg, [{ text: 'إلغاء', onPress: () => r(false) }, { text: 'نعم', onPress: () => r(true) }]));
 
 const EditForm = ({ init, years, onSave, onCancel }: any) => {
-  const [f, setF] = useState({ academic_year: init.academic_year || years[0] || '', status: init.status || '', gpa: init.gpa || '', grade: init.grade || '' });
+  const [f, setF] = useState({ academic_year: init.id ? (init.academic_year || '') : (years[0] || ''), status: init.status || '', gpa: init.gpa || '', grade: init.grade || '' });
   return (
     <View style={{ gap: 6, marginTop: 6 }} testID="result-edit-form">
       {(['academic_year', 'status', 'gpa', 'grade'] as const).map((k) => (

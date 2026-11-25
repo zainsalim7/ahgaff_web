@@ -219,6 +219,11 @@ async def upsert_entry(data: dict = Body(...), current_user: dict = Depends(get_
         raise HTTPException(status_code=400, detail="مستوى أو فصل غير صحيح")
     year = _text(data.get("academic_year"))
     vals = {k: _text(data.get(k)) for k in VALS}
+    if not any(vals.values()):
+        r = await db.result_entries.delete_one({"reg_no": st["student_id"], "level": level, "semester": sem, "academic_year": year})
+        if not r.deleted_count:
+            raise HTTPException(status_code=400, detail="أدخل الحالة أو المعدل أو التقدير")
+        return {"message": "تم حذف النتيجة (كل الحقول فارغة)"}
     now = datetime.now(timezone.utc)
     await db.result_entries.update_one(
         {"reg_no": st["student_id"], "level": level, "semester": sem, "academic_year": year},

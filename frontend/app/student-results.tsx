@@ -109,7 +109,7 @@ export default function ResultsPage() {
 
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f7fb' },
-  header: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e5e7eb' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#e5e7eb' },
   title: { fontSize: 17, fontWeight: '800', color: '#1a2540' },
   tabs: { flexDirection: 'row-reverse', gap: 8, paddingHorizontal: 14, paddingTop: 10 },
   tab: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: '#1565c0', backgroundColor: '#fff' },

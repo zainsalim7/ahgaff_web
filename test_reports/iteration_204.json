@@ -1,0 +1,33 @@
+{
+  "summary": "Tested the new Results (النتائج) page end to end. Backend: 19/19 pytest cases pass in /app/backend/tests/test_results_page_v2.py. They cover list filters, 50-per-page paging, search, the academic-year released_count, the dean's scope (403 for another department or faculty), the card (max_level 5, legacy null-year entries), manual upsert, delete and validation, the template xlsx and its scope, import preview (new/changed/unchanged/invalid/out_of_scope/duplicate with reasons, level-mismatch warning, no writes on preview), commit (only new/changed saved, notifications only for new/changed and only when notify=true), repeating-student years (both kept, /students/me/results shows the latest year, app contract keys unchanged) and removal of the old /api/student-results endpoints. Frontend (admin and dean Salim): the dashboard tile goes to /student-results. The faculty, department, level and year filter chips and search work, rows show released counts and the card shows levels 1-5 x 2 semesters with history ('سابقاً (بلا سنة)'). Card edit (result-edit-*) then delete (confirm dialog) works. On the Upload tab: validation message without params, template download, file pick, preview panel/counts/status badges/warning, cancel, notify toggle checked by default, and commit with notify OFF gives a correct up-msg and resets the file input. The dean sees only his faculty's departments, and both faculty and department scopes are offered.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "POST /api/results/entries", "issue": "Saving a cell with every field empty (status/gpa/grade all null) still upserts an entry. That entry counts in released_count and shows in the student app as a level with all-null values. Consider rejecting it or deleting instead."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "student-results header", "issue": "On desktop web, results-back-btn sits under the app's global floating icons (search/menu/switch) in the top-right corner. elementFromPoint at the button returns an ionicons element from the overlay, so the back arrow is hidden and can't be clicked.", "selector": "[data-testid=results-back-btn]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "StudentResultsCard edit form", "issues": ["Clicking edit on a cell whose current entry is legacy (academic_year null) prefills the year with years[0]. Saving therefore creates a NEW entry for that year rather than correcting the legacy one. This may be intended, but it is not obvious to the user."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_results_page_v2.py", "/app/test_reports/pytest/results_v2.xml"],
+  "action_items": [
+    "(Low) Move or offset the header back button on /student-results (or add top padding) so the global floating icons do not cover it",
+    "(Low) Decide how an all-empty manual save in POST /api/results/entries should behave (reject with 400 or treat as delete)",
+    "(Optional) In the card edit form, keep a legacy entry's null year when editing it, or show a hint that saving with a year creates a new year record"
+  ],
+  "critical_code_review_comments": [
+    "student_results.py _analyze runs one find_one per row (N+1). Fine for a few hundred rows, but batch-fetch the existing result_entries for all regs in a single $in query for large faculty uploads",
+    "The import commit loop also runs one update_one per row; consider bulk_write",
+    "There is no unique index on result_entries (reg_no, level, semester, academic_year). Concurrent uploads could create duplicates. Add a unique index at startup",
+    "The notify task is started with asyncio.create_task and no reference is kept, so the task can be garbage-collected. Keep a reference or use BackgroundTasks"
+  ],
+  "updated_files": ["/app/backend/tests/test_results_page_v2.py"],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "100% of tested flows (1 low-priority overlay issue)"},
+  "seed_data_creation": "None kept. Test entries used year '2098-2099' (pytest) and '2026-2027' (UI). All were deleted by id afterwards; result_entries count is back to 8 and the original 1001 legacy and 2025-2026 entries are untouched. No test notifications were left behind. Salim custom_permissions restored to ['manage_fee_receipts','hr_manage_tasks','hr_manage_appraisals'].",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_results_page_v2.py -p no:xdist -o addopts=''. The suite temporarily adds manage_grades to Salim and restores it, and cleans up entries/notifications it created. Student 1001 has legacy (null-year) entries at L1S1, L1S2, L2S1, L2S2 and L5S1, plus 2025-2026 entries at L1S1 and L1S2 created by the main agent."
+}
