@@ -167,7 +167,7 @@ async def _notify_students(db, regs: list) -> None:
         return
     title, body = "📢 صدرت نتيجتك", "تم نشر نتيجتك الدراسية — افتح التطبيق لعرضها"
     now = datetime.now(timezone.utc).isoformat()
-    await db.notifications.insert_many([{"user_id": u, "title": title, "message": body, "type": "results", "is_read": False, "created_at": now} for u in uids])
+    await db.notifications.insert_many([{"user_id": u, "title": title, "message": body, "type": "results", "data": {"type": "results", "route": "/results"}, "is_read": False, "created_at": now} for u in uids])
     tokens = list({t["token"] for t in await db.fcm_tokens.find({"user_id": {"$in": uids}}).to_list(20000)})
     if tokens:
         try:
