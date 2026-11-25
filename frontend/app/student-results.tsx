@@ -18,6 +18,61 @@ const confirmBox = async (msg: string): Promise<boolean> => {
 
 const v = (x: string | null) => x ?? '—';
 
+type PRow = Row & { row: number; status: string; reason?: string };
+type PreviewData = { counts: Record<string, number>; rows: PRow[] };
+
+const BADGE: Record<string, { t: string; c: string; bg: string }> = {
+  new: { t: 'جديد', c: '#2e7d32', bg: '#e8f5e9' },
+  changed: { t: 'مُحدَّث', c: '#1565c0', bg: '#e3f2fd' },
+  unchanged: { t: 'بلا تغيير', c: '#64748b', bg: '#f1f5f9' },
+  invalid: { t: 'مرفوض', c: '#c62828', bg: '#ffebee' },
+  out_of_scope: { t: 'مرفوض', c: '#c62828', bg: '#ffebee' },
+  duplicate: { t: 'مكرر', c: '#ef6c00', bg: '#fff3e0' },
+};
+
+const PreviewRow = ({ r }: { r: PRow }) => {
+  const b = BADGE[r.status];
+  return (
+    <View style={[st.pRow, { borderRightColor: b.c }]} testID={`preview-row-${r.row}`}>
+      <View style={st.rowHead}>
+        <Text style={[st.badge, { color: b.c, backgroundColor: b.bg }]} testID={`preview-status-${r.row}`}>{b.t}</Text>
+        <Text style={st.rowTitle}>صف {r.row} · {r.reg_no || '—'} · المستوى {r.level ?? '—'}{r.student_name ? ` · ${r.student_name}` : ''}</Text>
+      </View>
+      {r.reason ? <Text style={st.reason}>{r.reason}</Text> : null}
+      <SemCell title="الفصل الأول" s={r.s1_status} g={r.s1_gpa} gr={r.s1_grade} />
+      <SemCell title="الفصل الثاني" s={r.s2_status} g={r.s2_gpa} gr={r.s2_grade} />
+    </View>
+  );
+};
+
+const PreviewPanel = ({ data, notify, setNotify, busy, onCommit, onCancel }: any) => {
+  const c = data.counts;
+  const saveable = (c.new || 0) + (c.changed || 0);
+  const order = ['invalid', 'out_of_scope', 'duplicate', 'new', 'changed', 'unchanged'];
+  const rows = [...data.rows].sort((a: PRow, b: PRow) => order.indexOf(a.status) - order.indexOf(b.status));
+  return (
+    <View style={[st.card, { borderColor: '#90caf9' }]} testID="results-preview-panel">
+      <Text style={[st.rowTitle, { marginBottom: 8 }]}>معاينة الملف — لم يُحفظ شيء بعد</Text>
+      <Text style={st.hint} testID="results-preview-counts">
+        جديد: {c.new} · مُحدَّث: {c.changed} · بلا تغيير: {c.unchanged} · مرفوض: {(c.invalid || 0) + (c.out_of_scope || 0)} · مكرر: {c.duplicate}
+      </Text>
+      <TouchableOpacity style={st.check} onPress={() => setNotify(!notify)} testID="results-notify-toggle">
+        <Ionicons name={notify ? 'checkbox' : 'square-outline'} size={20} color="#1565c0" />
+        <Text style={{ color: '#1a2540', marginRight: 6 }}>إرسال إشعار «صدرت نتيجتك» للطلاب الذين أُضيفت أو تغيّرت نتيجتهم</Text>
+      </TouchableOpacity>
+      <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 10 }}>
+        <TouchableOpacity style={[st.btn, { flex: 1, backgroundColor: '#2e7d32', opacity: busy || !saveable ? 0.5 : 1 }]} onPress={onCommit} disabled={busy || !saveable} testID="results-commit-btn">
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={st.btnTxt}>{saveable ? `اعتماد وحفظ (${saveable} صف)` : 'لا يوجد ما يُحفظ'}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={[st.btn, { flex: 1, backgroundColor: '#78909c' }]} onPress={onCancel} testID="results-cancel-preview-btn">
+          <Text style={st.btnTxt}>إلغاء</Text>
+        </TouchableOpacity>
+      </View>
+      {rows.map((r: PRow) => <PreviewRow key={r.row} r={r} />)}
+    </View>
+  );
+};
+
 const SemCell = ({ title, s, g, gr }: { title: string; s: string | null; g: string | null; gr: string | null }) => (
   <View style={st.sem}>
     <Text style={st.semTitle}>{title}</Text>
@@ -33,6 +88,8 @@ export default function StudentResultsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [inputKey, setInputKey] = useState(0);
+  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [notify, setNotify] = useState(true);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async (query = q) => {
@@ -56,14 +113,16 @@ export default function StudentResultsPage() {
     } catch { setMsg({ ok: false, text: 'فشل تنزيل النموذج' }); }
   };
 
-  const upload = async () => {
+  const upload = async (commit: boolean) => {
     if (!file) { setMsg({ ok: false, text: 'اختر ملف الإكسل أولاً' }); return; }
     setBusy(true); setMsg(null);
     try {
       const fd = new FormData(); fd.append('file', file);
+      fd.append('commit', commit ? 'true' : 'false'); fd.append('notify', notify ? 'true' : 'false');
       const res = await api.post('/student-results/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setMsg({ ok: true, text: res.data?.message || 'تم الرفع' });
-      setFile(null); setInputKey((k) => k + 1);
+      if (!commit) { setPreview(res.data); return; }
+      setMsg({ ok: true, text: res.data?.message || 'تم الحفظ' });
+      setFile(null); setPreview(null); setInputKey((k) => k + 1);
       await load();
     } catch (e: any) {
       setMsg({ ok: false, text: e?.response?.data?.detail || 'فشل الرفع' });
@@ -98,13 +157,20 @@ export default function StudentResultsPage() {
             <label style={{ display: 'block', margin: '10px 0', padding: 10, border: '1.5px dashed #90caf9', borderRadius: 10, textAlign: 'center', cursor: 'pointer', color: '#1565c0', fontWeight: 700, background: '#fff' }} data-testid="results-file-label">
               {file ? `الملف: ${file.name}` : 'اختر ملف الإكسل (xlsx / xls / csv)'}
               <input key={inputKey} type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} data-testid="results-file-input"
-                onChange={(e: any) => setFile(e.target.files?.[0] || null)} />
+                onChange={(e: any) => { setFile(e.target.files?.[0] || null); setPreview(null); }} />
             </label>
           )}
-          <TouchableOpacity style={[st.btn, { backgroundColor: '#1565c0', opacity: busy ? 0.6 : 1 }]} onPress={upload} disabled={busy} testID="results-upload-btn">
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={st.btnTxt}>رفع النتائج</Text>}
-          </TouchableOpacity>
+          {!preview && (
+            <TouchableOpacity style={[st.btn, { backgroundColor: '#1565c0', opacity: busy ? 0.6 : 1 }]} onPress={() => upload(false)} disabled={busy} testID="results-preview-btn">
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={st.btnTxt}>معاينة الملف قبل الحفظ</Text>}
+            </TouchableOpacity>
+          )}
         </View>
+
+        {preview && (
+          <PreviewPanel data={preview} notify={notify} setNotify={setNotify} busy={busy}
+            onCommit={() => upload(true)} onCancel={() => setPreview(null)} />
+        )}
 
         {msg && (
           <View style={[st.msg, { backgroundColor: msg.ok ? '#e8f5e9' : '#ffebee' }]} testID="results-msg">
@@ -157,4 +223,8 @@ const st = StyleSheet.create({
   sem: { flexDirection: 'row-reverse', justifyContent: 'space-between', paddingVertical: 4 },
   semTitle: { color: '#64748b', fontSize: 12.5 },
   semTxt: { color: '#1a2540', fontSize: 13, fontWeight: '600' },
+  pRow: { borderWidth: 1, borderColor: '#e5e7eb', borderRightWidth: 4, borderRadius: 10, padding: 10, marginBottom: 8, backgroundColor: '#fff' },
+  badge: { fontSize: 11.5, fontWeight: '800', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, overflow: 'hidden' },
+  reason: { color: '#c62828', fontSize: 12, textAlign: 'right', marginBottom: 4 },
+  check: { flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 10 },
 });

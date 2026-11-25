@@ -1,10 +1,11 @@
 """📋 نتائج الطلاب (جدول بسيط بلا حسابات): رفع إكسل حرفي + عرضه للطالب كما كُتب تماماً"""
+import asyncio
 import io
 import re
 from datetime import datetime, timezone
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from .deps import get_current_user, get_db, has_permission, log_activity, get_own_department_ids
@@ -121,9 +122,63 @@ async def results_template(current_user: dict = Depends(get_current_user)):
                              headers={"Content-Disposition": "attachment; filename=student_results_template.xlsx"})
 
 
+REASON_AR = {"invalid": "بلا رقم قيد أو مستوى صحيح", "out_of_scope": "طالب خارج نطاقك أو غير مسجّل في النظام", "duplicate": "مكرر في الملف — يُعتمد آخر صف"}
+
+
+async def _analyze(db, rows: list, allowed) -> list:
+    """تصنيف كل صف: new / changed / unchanged / invalid / out_of_scope / duplicate — دون أي كتابة"""
+    out, last = [], {}
+    for i, row in enumerate(rows, start=1):
+        row = list(row) + [None] * (8 - len(row))
+        reg, lvl = _text(row[0]), _level(row[1])
+        if not reg and not _text(row[1]):
+            continue
+        item = {"row": i, "reg_no": reg, "level": lvl if lvl is not None else _text(row[1]),
+                **{k: _text(row[2 + j]) for j, k in enumerate(COLS)}}
+        if not reg or lvl is None:
+            if i == 1:
+                continue
+            item["status"] = "invalid"
+        elif allowed is not None and reg not in allowed:
+            item["status"] = "out_of_scope"
+        else:
+            if (reg, lvl) in last:
+                last[(reg, lvl)]["status"] = "duplicate"
+            last[(reg, lvl)] = item
+            old = await db.student_results.find_one({"reg_no": reg, "level": lvl})
+            item["status"] = "new" if not old else ("unchanged" if all(old.get(k) == item[k] for k in COLS) else "changed")
+            if old and item["status"] == "changed":
+                item["old"] = {k: old.get(k) for k in COLS}
+        if item["status"] in REASON_AR:
+            item["reason"] = REASON_AR[item["status"]]
+        out.append(item)
+    regs = list({r["reg_no"] for r in out if r["reg_no"]})
+    names = {s["student_id"]: s.get("full_name", "") async for s in db.students.find({"student_id": {"$in": regs}}, {"student_id": 1, "full_name": 1})}
+    for r in out:
+        r["student_name"] = names.get(r["reg_no"], "")
+    return out
+
+
+async def _notify_students(db, regs: list) -> None:
+    from services.firebase_service import send_notification_to_many
+    uids = [s["user_id"] async for s in db.students.find({"student_id": {"$in": regs}, "user_id": {"$nin": [None, ""]}}, {"user_id": 1})]
+    if not uids:
+        return
+    title, body = "📢 صدرت نتيجتك", "تم نشر نتيجتك الدراسية — افتح التطبيق لعرضها"
+    now = datetime.now(timezone.utc).isoformat()
+    await db.notifications.insert_many([{"user_id": u, "title": title, "message": body, "type": "results", "is_read": False, "created_at": now} for u in uids])
+    tokens = list({t["token"] for t in await db.fcm_tokens.find({"user_id": {"$in": uids}}).to_list(20000)})
+    if tokens:
+        try:
+            await send_notification_to_many(tokens, title, body, {"type": "results", "route": "/results"})
+        except Exception:
+            pass
+
+
 @router.post("/student-results/import")
-async def import_results(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
-    """رفع إكسل: رقم القيد | المستوى | حالة1 | معدل1 | تقدير1 | حالة2 | معدل2 | تقدير2 — upsert بمفتاح (رقم القيد + المستوى)"""
+async def import_results(file: UploadFile = File(...), commit: str = Form("true"), notify: str = Form("true"),
+                         current_user: dict = Depends(get_current_user)):
+    """commit=false: معاينة دون حفظ · commit=true: حفظ (upsert رقم القيد + المستوى) + إشعار من أُضيفت/تغيّرت نتيجتهم إن notify=true"""
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
@@ -131,45 +186,39 @@ async def import_results(file: UploadFile = File(...), current_user: dict = Depe
         rows = _rows(await file.read(), file.filename)
     except Exception:
         raise HTTPException(status_code=400, detail="تعذّرت قراءة الملف — استخدم ملف Excel (xlsx/xls) أو CSV")
+    items = await _analyze(db, rows, await _scope_regs(db, current_user))
+    counts = {k: sum(1 for r in items if r["status"] == k) for k in ("new", "changed", "unchanged", "invalid", "out_of_scope", "duplicate")}
+    if not counts["new"] and not counts["changed"] and not counts["unchanged"]:
+        if counts["out_of_scope"]:
+            raise HTTPException(status_code=403, detail="كل أرقام القيد في الملف لطلاب خارج نطاقك أو غير مسجّلين في النظام")
+        raise HTTPException(status_code=400, detail="لم يُعثر على أي صف صالح (رقم القيد + المستوى) في الملف")
+    if commit.lower() != "true":
+        return {"preview": True, "counts": counts, "rows": items}
+
     now = datetime.now(timezone.utc)
-    allowed = await _scope_regs(db, current_user)
-    inserted = updated = 0
-    skipped, out_scope = [], []
-    for i, row in enumerate(rows, start=1):
-        row = list(row) + [None] * (8 - len(row))
-        reg, lvl = _text(row[0]), _level(row[1])
-        if not reg and not _text(row[1]):
+    changed_regs = set()
+    for r in items:
+        if r["status"] not in ("new", "changed"):
             continue
-        if not reg or lvl is None:
-            if i > 1:
-                skipped.append(i)
-            continue
-        if allowed is not None and reg not in allowed:
-            out_scope.append(reg)
-            continue
-        vals = {k: _text(row[2 + j]) for j, k in enumerate(COLS)}
-        res = await db.student_results.update_one(
-            {"reg_no": reg, "level": lvl},
-            {"$set": {**vals, "updated_at": now, "updated_by": current_user.get("id")},
+        await db.student_results.update_one(
+            {"reg_no": r["reg_no"], "level": r["level"]},
+            {"$set": {**{k: r[k] for k in COLS}, "updated_at": now, "updated_by": current_user.get("id")},
              "$setOnInsert": {"created_at": now}},
             upsert=True,
         )
-        if res.upserted_id:
-            inserted += 1
-        else:
-            updated += 1
-    if not inserted and not updated:
-        if out_scope:
-            raise HTTPException(status_code=403, detail=f"كل أرقام القيد في الملف لطلاب خارج نطاقك أو غير مسجّلين في النظام ({', '.join(out_scope[:15])})")
-        raise HTTPException(status_code=400, detail="لم يُعثر على أي صف صالح (رقم القيد + المستوى) في الملف")
-    await log_activity(current_user, "import_student_results", "student_results", "", file.filename or "",
-                       {"inserted": inserted, "updated": updated, "skipped": len(skipped)})
-    msg = f"تم الرفع: {inserted} صف جديد · {updated} صف مُستبدل"
-    if skipped:
-        msg += f" · تُجاهل {len(skipped)} صف بلا رقم قيد/مستوى صحيح (الصفوف: {', '.join(map(str, skipped[:15]))})"
-    if out_scope:
-        msg += f" · رُفض {len(out_scope)} صف لطلاب خارج نطاقك أو غير مسجّلين في النظام (أرقام القيد: {', '.join(out_scope[:15])})"
-    return {"inserted": inserted, "updated": updated, "skipped_rows": skipped, "out_of_scope": out_scope, "message": msg}
+        changed_regs.add(r["reg_no"])
+    notified = 0
+    if notify.lower() == "true" and changed_regs:
+        notified = await db.students.count_documents({"student_id": {"$in": list(changed_regs)}, "user_id": {"$nin": [None, ""]}})
+        asyncio.create_task(_notify_students(db, list(changed_regs)))
+    await log_activity(current_user, "import_student_results", "student_results", "", file.filename or "", {**counts, "notified": notified})
+    msg = f"تم الحفظ: {counts['new']} جديد · {counts['changed']} مُحدَّث · {counts['unchanged']} بلا تغيير"
+    rejected = counts["invalid"] + counts["out_of_scope"]
+    if rejected:
+        msg += f" · رُفض {rejected} صف"
+    if notified:
+        msg += f" · أُرسل إشعار صدور النتيجة إلى {notified} طالب"
+    return {"preview": False, "counts": counts, "notified": notified, "inserted": counts["new"], "updated": counts["changed"], "message": msg}
 
 
 @router.get("/student-results")
