@@ -8,13 +8,17 @@ import { useAcademicScope } from '../src/hooks/useAcademicScope';
 import { ChipRow, LEVELS, Opt, rs } from '../src/components/results/resultsUi';
 import { StudentResultsCard } from '../src/components/results/StudentResultsCard';
 import { ResultsUploadWizard } from '../src/components/results/ResultsUploadWizard';
+import { ResultsHistory } from '../src/components/results/ResultsHistory';
+import { useAuth } from '../src/contexts/AuthContext';
 
 interface SRow { id: string; reg_no: string; full_name: string; department_name: string; level: number; released_count: number }
 type Dep = Opt & { faculty_id?: string };
 
 export default function ResultsPage() {
   const { scope, restricted, filterFaculties, filterDepartments } = useAcademicScope();
-  const [tab, setTab] = useState<'table' | 'upload'>('table');
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission('manage_results');
+  const [tab, setTab] = useState<'table' | 'upload' | 'history'>('table');
   const [faculties, setFaculties] = useState<Opt[]>([]);
   const [departments, setDepartments] = useState<Dep[]>([]);
   const [years, setYears] = useState<string[]>([]);
@@ -54,7 +58,7 @@ export default function ResultsPage() {
         <View style={{ width: 24 }} />
       </View>
       <View style={st.tabs}>
-        {([['table', 'جدول النتائج', 'grid-outline'], ['upload', 'رفع نتائج', 'cloud-upload-outline']] as const).map(([k, l, ic]) => (
+        {([['table', 'جدول النتائج', 'grid-outline'], ...(canManage ? [['upload', 'رفع نتائج', 'cloud-upload-outline']] : []), ['history', 'سجل العمليات', 'time-outline']] as [any, string, any][]).map(([k, l, ic]) => (
           <TouchableOpacity key={k} style={[st.tab, tab === k && st.tabOn]} onPress={() => setTab(k)} testID={`results-tab-${k}`}>
             <Ionicons name={ic} size={16} color={tab === k ? '#fff' : '#1565c0'} />
             <Text style={[st.tabTxt, tab === k && { color: '#fff' }]}>{l}</Text>
@@ -62,7 +66,7 @@ export default function ResultsPage() {
         ))}
       </View>
       <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 60 }}>
-        {tab === 'upload' ? (
+        {tab === 'history' ? <ResultsHistory canManage={canManage} /> : tab === 'upload' && canManage ? (
           years.length ? <ResultsUploadWizard years={years} faculties={fullFacs} departments={filterDepartments(departments)} restrictedFaculty={restricted && !fullFacs.length} onDone={() => {}} />
             : <ActivityIndicator />
         ) : (
@@ -102,7 +106,7 @@ export default function ResultsPage() {
           </>
         )}
       </ScrollView>
-      {openId && <StudentResultsCard studentId={openId} years={years} onClose={() => { setOpenId(null); load(page); }} />}
+      {openId && <StudentResultsCard studentId={openId} years={years} canManage={canManage} onClose={() => { setOpenId(null); load(page); }} />}
     </SafeAreaView>
   );
 }

@@ -61,7 +61,7 @@ export const EXTRA_TASKS: ExtraTask[] = [
   { id: 'fee-receipts', label: 'السندات المالية', icon: 'cash', color: '#f57f17', bg: '#fff8e1', route: '/fee-receipts', perms: ['manage_fee_receipts', 'view_fee_receipts'] , category: 'إداري' },
   { id: 'bulk-nationality', label: 'تعديل الجنسيات جماعياً', icon: 'earth', color: '#2e7d32', bg: '#e8f5e9', route: '/bulk-nationality', perms: ['students_bulk_ops', PERMISSIONS.MANAGE_STUDENTS] , category: 'إداري' },
   { id: 'grades', label: 'الدرجات وبيانات الطلاب', icon: 'ribbon', color: '#5e35b1', bg: '#ede7f6', route: '/grades', perms: ['manage_grades'] , category: 'إداري' },
-  { id: 'student-results', label: 'النتائج', icon: 'trophy', color: '#1565c0', bg: '#e3f2fd', route: '/student-results', perms: ['manage_grades'] , category: 'إداري' },
+  { id: 'student-results', label: 'النتائج', icon: 'trophy', color: '#1565c0', bg: '#e3f2fd', route: '/student-results', perms: ['view_results', 'manage_results'] , category: 'إداري' },
   { id: 'statements-log', label: 'سجل الإفادات', icon: 'document-text', color: '#00796b', bg: '#e0f2f1', route: '/statements-log', perms: ['issue_statements'] , category: 'إداري' },
   { id: 'letter-new', label: 'رسالة جديدة', icon: 'flash', color: '#d97706', bg: '#fef3c7', route: '/letter-new', perms: [PERMISSIONS.ISSUE_LETTERS, 'hr_manage_correspondence', 'hr_manage_employees'] , category: 'إداري' },
   { id: 'photo-approvals', label: 'اعتماد صور الطلاب', icon: 'images', color: '#f9a825', bg: '#fff8e1', route: '/photo-approvals', perms: ['approve_student_photos'] , category: 'إداري' },

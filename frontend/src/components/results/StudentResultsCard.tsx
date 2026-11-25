@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { rs, val } from './resultsUi';
 
-interface Entry { id: string; level: number; semester: number; academic_year: string | null; status: string | null; gpa: string | null; grade: string | null; updated_by_name?: string }
+interface Entry { id: string; level: number; semester: number; academic_year: string | null; status: string | null; gpa: string | null; grade: string | null; updated_by_name?: string; hidden?: boolean; hidden_by_batch?: boolean }
 interface Card { student: { id: string; reg_no: string; full_name: string; level: number; department_name: string }; max_level: number; entries: Entry[] }
 
 const yKey = (y: string | null) => Math.max(0, ...((y || '').match(/\d{4}/g) || []).map(Number));
@@ -27,7 +27,7 @@ const EditForm = ({ init, years, onSave, onCancel }: any) => {
   );
 };
 
-const SemBox = ({ level, sem, list, years, onSave, onDelete }: any) => {
+const SemBox = ({ level, sem, list, years, onSave, onDelete, onHide, canManage }: any) => {
   const [edit, setEdit] = useState(false);
   const sorted = [...list].sort((a: Entry, b: Entry) => yKey(b.academic_year) - yKey(a.academic_year));
   const cur: Entry | undefined = sorted[0];
@@ -35,11 +35,13 @@ const SemBox = ({ level, sem, list, years, onSave, onDelete }: any) => {
     <View style={{ flex: 1, backgroundColor: '#f8fafc', borderRadius: 10, padding: 8, borderWidth: 1, borderColor: '#e2e8f0' }} testID={`card-L${level}-S${sem}`}>
       <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={{ fontWeight: '700', color: '#475569', fontSize: 12.5 }}>{sem === 1 ? 'الفصل الأول' : 'الفصل الثاني'}</Text>
-        <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+        {canManage && <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+          {cur && <TouchableOpacity onPress={() => onHide(cur)} testID={`card-hide-L${level}-S${sem}`}><Ionicons name={cur.hidden ? 'eye-outline' : 'eye-off-outline'} size={17} color="#ef6c00" /></TouchableOpacity>}
           <TouchableOpacity onPress={() => setEdit(!edit)} testID={`card-edit-L${level}-S${sem}`}><Ionicons name="create-outline" size={17} color="#1565c0" /></TouchableOpacity>
           {cur && <TouchableOpacity onPress={() => onDelete(cur)} testID={`card-delete-L${level}-S${sem}`}><Ionicons name="trash-outline" size={17} color="#c62828" /></TouchableOpacity>}
-        </View>
+        </View>}
       </View>
+      {cur?.hidden && <Text style={{ color: '#ef6c00', fontSize: 11.5, textAlign: 'right', fontWeight: '700' }} testID={`card-hidden-L${level}-S${sem}`}>مخفية عن الطالب{cur.hidden_by_batch ? ' (بإخفاء الرفعة كاملة)' : ''}</Text>}
       {cur ? (
         <Text style={{ color: '#1a2540', fontWeight: '700', textAlign: 'right', marginTop: 4 }} testID={`card-value-L${level}-S${sem}`}>
           {val(cur.status)} · {val(cur.gpa)} · {val(cur.grade)}{cur.academic_year ? `  (${cur.academic_year})` : ''}
@@ -54,7 +56,7 @@ const SemBox = ({ level, sem, list, years, onSave, onDelete }: any) => {
   );
 };
 
-export const StudentResultsCard = ({ studentId, years, onClose }: { studentId: string; years: string[]; onClose: () => void }) => {
+export const StudentResultsCard = ({ studentId, years, canManage, onClose }: { studentId: string; years: string[]; canManage: boolean; onClose: () => void }) => {
   const [card, setCard] = useState<Card | null>(null);
   const [err, setErr] = useState('');
   const load = useCallback(async () => {
@@ -70,6 +72,12 @@ export const StudentResultsCard = ({ studentId, years, onClose }: { studentId: s
   const del = async (e: Entry) => {
     if (!(await confirmBox(`حذف نتيجة المستوى ${e.level} — ${e.semester === 1 ? 'الفصل الأول' : 'الفصل الثاني'}${e.academic_year ? ` (${e.academic_year})` : ''}؟`))) return;
     try { await api.delete(`/results/entries/${e.id}`); await load(); } catch (x: any) { setErr(x?.response?.data?.detail || 'فشل الحذف'); }
+  };
+
+  const hide = async (e: Entry) => {
+    if (e.hidden_by_batch) { setErr('هذه النتيجة مخفية بإخفاء الرفعة كاملة — أظهِرها من «سجل العمليات»'); return; }
+    try { await api.post(`/results/entries/${e.id}/visibility`, { hidden: !e.hidden }); await load(); }
+    catch (x: any) { setErr(x?.response?.data?.detail || 'فشلت العملية'); }
   };
 
   return (
@@ -90,7 +98,7 @@ export const StudentResultsCard = ({ studentId, years, onClose }: { studentId: s
                     <Text style={[rs.title, { marginBottom: 6 }]}>المستوى {lvl}</Text>
                     <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
                       {[1, 2].map((sem) => (
-                        <SemBox key={sem} level={lvl} sem={sem} years={years} onSave={save} onDelete={del}
+                        <SemBox key={sem} level={lvl} sem={sem} years={years} onSave={save} onDelete={del} onHide={hide} canManage={canManage}
                           list={card.entries.filter((e) => e.level === lvl && e.semester === sem)} />
                       ))}
                     </View>

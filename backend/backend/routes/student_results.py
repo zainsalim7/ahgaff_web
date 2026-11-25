@@ -23,13 +23,32 @@ REASON_AR = {
 }
 
 
-def _can_manage(user: dict) -> bool:
-    return user.get("role") == "admin" or has_permission(user, "manage_grades")
-
-
 def _guard(user: dict):
-    if not _can_manage(user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    """إدارة: رفع/تعديل/إخفاء/تراجع"""
+    if not has_permission(user, "manage_results"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك — تتطلب صلاحية «إدارة النتائج»")
+
+
+def _guard_view(user: dict):
+    if not (has_permission(user, "view_results") or has_permission(user, "manage_results")):
+        raise HTTPException(status_code=403, detail="غير مصرح لك — تتطلب صلاحية «عرض النتائج»")
+
+
+SNAP = VALS + ["hidden", "batch_id", "batch_hidden", "student_db_id", "department_id"]
+
+
+async def _snapshot(db, key: dict):
+    e = await db.result_entries.find_one(key)
+    return {k: e.get(k) for k in SNAP} if e else None
+
+
+async def _new_batch(db, user: dict, kind: str, meta: dict, department_ids: list) -> str:
+    r = await db.result_batches.insert_one({
+        "kind": kind, **meta, "department_ids": [d for d in department_ids if d], "changes": [],
+        "hidden": False, "undone": False, "created_at": datetime.now(timezone.utc),
+        "created_by": user.get("id"), "created_by_name": user.get("full_name", ""),
+    })
+    return str(r.inserted_id)
 
 
 def _text(v):
@@ -133,11 +152,13 @@ async def get_my_results(current_user: dict = Depends(get_current_user)):
     groups: dict = {}
     async for e in db.result_entries.find({"reg_no": reg}):
         groups.setdefault(e["level"], {}).setdefault(e["semester"], []).append(e)
-    return {"levels": [{
-        "level": lvl,
-        "first_semester": _cell(_pick_latest(groups[lvl][1]) if 1 in groups[lvl] else None),
-        "second_semester": _cell(_pick_latest(groups[lvl][2]) if 2 in groups[lvl] else None),
-    } for lvl in sorted(groups)]}
+
+    def pick(lvl, sem):
+        e = _pick_latest(groups[lvl][sem]) if sem in groups[lvl] else None
+        return None if (e and (e.get("hidden") or e.get("batch_hidden"))) else e
+
+    out = [{"level": lvl, "first_semester": _cell(pick(lvl, 1)), "second_semester": _cell(pick(lvl, 2))} for lvl in sorted(groups)]
+    return {"levels": [x for x in out if any(x["first_semester"].values()) or any(x["second_semester"].values())]}
 
 
 # ==================== جدول النتائج (الإدارة) ====================
@@ -145,7 +166,7 @@ async def get_my_results(current_user: dict = Depends(get_current_user)):
 async def list_result_students(faculty_id: str = "", department_id: str = "", level: Optional[int] = None,
                                academic_year: str = "", q: str = "", page: int = 1,
                                current_user: dict = Depends(get_current_user)):
-    _guard(current_user)
+    _guard_view(current_user)
     db = get_db()
     query = await _scope_student_query(db, current_user, faculty_id, department_id)
     if level:
@@ -186,14 +207,15 @@ async def _student_in_scope(db, user: dict, student_db_id: str) -> dict:
 
 def _entry_out(e: dict) -> dict:
     return {"id": str(e["_id"]), "level": e["level"], "semester": e["semester"], "academic_year": e.get("academic_year"),
-            **{k: e.get(k) for k in VALS}, "updated_by_name": e.get("updated_by_name", ""),
+            **{k: e.get(k) for k in VALS}, "hidden": bool(e.get("hidden") or e.get("batch_hidden")),
+            "hidden_by_batch": bool(e.get("batch_hidden")), "updated_by_name": e.get("updated_by_name", ""),
             "updated_at": e["updated_at"].isoformat() if isinstance(e.get("updated_at"), datetime) else e.get("updated_at")}
 
 
 @router.get("/results/students/{student_db_id}")
 async def student_results_card(student_db_id: str, current_user: dict = Depends(get_current_user)):
     """بطاقة الطالب: كل المستويات × الفصلين — الأحدث سنةً أولاً + السجل السابق (المعيد)"""
-    _guard(current_user)
+    _guard_view(current_user)
     db = get_db()
     st = await _student_in_scope(db, current_user, student_db_id)
     entries = [_entry_out(e) async for e in db.result_entries.find({"reg_no": st.get("student_id")})]
@@ -205,9 +227,17 @@ async def student_results_card(student_db_id: str, current_user: dict = Depends(
             "max_level": max_lvl, "entries": entries}
 
 
+async def _push_change(db, batch_id: str, key: dict, before, after_exists: bool):
+    await db.result_batches.update_one({"_id": ObjectId(batch_id)}, {"$push": {"changes": {"key": key, "before": before, "after_exists": after_exists}}})
+
+
+def _who(st: dict) -> str:
+    return f"{st.get('full_name', '')} ({st.get('student_id')})"
+
+
 @router.post("/results/entries")
 async def upsert_entry(data: dict = Body(...), current_user: dict = Depends(get_current_user)):
-    """إضافة/تعديل خلية يدوياً من بطاقة الطالب"""
+    """إضافة/تعديل نتيجة فصل لطالب واحد يدوياً (قابل للتراجع)"""
     _guard(current_user)
     db = get_db()
     st = await _student_in_scope(db, current_user, data.get("student_id", ""))
@@ -219,37 +249,146 @@ async def upsert_entry(data: dict = Body(...), current_user: dict = Depends(get_
         raise HTTPException(status_code=400, detail="مستوى أو فصل غير صحيح")
     year = _text(data.get("academic_year"))
     vals = {k: _text(data.get(k)) for k in VALS}
+    key = {"reg_no": st["student_id"], "level": level, "semester": sem, "academic_year": year}
+    before = await _snapshot(db, key)
+    meta = {"academic_year": year, "level": level, "semester": sem, "student_name": _who(st)}
     if not any(vals.values()):
-        r = await db.result_entries.delete_one({"reg_no": st["student_id"], "level": level, "semester": sem, "academic_year": year})
-        if not r.deleted_count:
+        if not before:
             raise HTTPException(status_code=400, detail="أدخل الحالة أو المعدل أو التقدير")
-        return {"message": "تم حذف النتيجة (كل الحقول فارغة)"}
+        bid = await _new_batch(db, current_user, "manual_delete", meta, [st.get("department_id")])
+        await _push_change(db, bid, key, before, False)
+        await db.result_entries.delete_one(key)
+        return {"message": "تم حذف النتيجة (كل الحقول فارغة)", "batch_id": bid}
+    bid = await _new_batch(db, current_user, "manual", meta, [st.get("department_id")])
+    await _push_change(db, bid, key, before, True)
     now = datetime.now(timezone.utc)
-    await db.result_entries.update_one(
-        {"reg_no": st["student_id"], "level": level, "semester": sem, "academic_year": year},
-        {"$set": {**vals, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"), "updated_at": now,
-                  "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
-         "$setOnInsert": {"created_at": now}},
-        upsert=True,
-    )
-    await log_activity(current_user, "edit_student_result", "result_entries", str(st["_id"]),
-                       f"{st['student_id']} م{level} ف{sem} {year or ''}", vals)
-    return {"message": "تم الحفظ"}
+    await db.result_entries.update_one(key, {
+        "$set": {**vals, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"), "batch_id": bid,
+                 "batch_hidden": False, "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
+        "$setOnInsert": {"created_at": now}}, upsert=True)
+    await log_activity(current_user, "edit_student_result", "result_entries", str(st["_id"]), f"{st['student_id']} م{level} ف{sem} {year or ''}", vals)
+    return {"message": "تم الحفظ", "batch_id": bid}
+
+
+async def _entry_scoped(db, user: dict, entry_id: str) -> dict:
+    e = await db.result_entries.find_one({"_id": ObjectId(entry_id)}) if ObjectId.is_valid(entry_id) else None
+    if not e:
+        raise HTTPException(status_code=404, detail="غير موجود")
+    sc = await _user_scope(db, user)
+    if sc is not None and not await db.students.find_one({"student_id": e["reg_no"], "department_id": {"$in": list(sc["deps"])}}):
+        raise HTTPException(status_code=403, detail="هذا الطالب خارج نطاقك")
+    return e
 
 
 @router.delete("/results/entries/{entry_id}")
 async def delete_entry(entry_id: str, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
-    e = await db.result_entries.find_one({"_id": ObjectId(entry_id)}) if ObjectId.is_valid(entry_id) else None
-    if not e:
-        raise HTTPException(status_code=404, detail="غير موجود")
-    sc = await _user_scope(db, current_user)
-    if sc is not None and not await db.students.find_one({"student_id": e["reg_no"], "department_id": {"$in": list(sc["deps"])}}):
-        raise HTTPException(status_code=403, detail="هذا الطالب خارج نطاقك")
+    e = await _entry_scoped(db, current_user, entry_id)
+    key = {k: e.get(k) for k in ("reg_no", "level", "semester", "academic_year")}
+    st = await db.students.find_one({"student_id": e["reg_no"]}, {"full_name": 1, "student_id": 1}) or {"student_id": e["reg_no"]}
+    bid = await _new_batch(db, current_user, "manual_delete", {"academic_year": e.get("academic_year"), "level": e["level"],
+                                                                 "semester": e["semester"], "student_name": _who(st)}, [e.get("department_id")])
+    await _push_change(db, bid, key, {k: e.get(k) for k in SNAP}, False)
     await db.result_entries.delete_one({"_id": e["_id"]})
     await log_activity(current_user, "delete_student_result", "result_entries", entry_id, f"{e['reg_no']} م{e['level']} ف{e['semester']}")
-    return {"message": "تم الحذف"}
+    return {"message": "تم الحذف", "batch_id": bid}
+
+
+@router.post("/results/entries/{entry_id}/visibility")
+async def entry_visibility(entry_id: str, data: dict = Body(...), current_user: dict = Depends(get_current_user)):
+    """👁 إخفاء/إظهار نتيجة طالب واحد في التطبيق"""
+    _guard(current_user)
+    db = get_db()
+    e = await _entry_scoped(db, current_user, entry_id)
+    hidden = bool(data.get("hidden"))
+    await db.result_entries.update_one({"_id": e["_id"]}, {"$set": {"hidden": hidden}})
+    await log_activity(current_user, "hide_student_result" if hidden else "show_student_result", "result_entries", entry_id, e["reg_no"])
+    return {"message": "تم إخفاء النتيجة عن الطالب" if hidden else "النتيجة ظاهرة للطالب الآن", "hidden": hidden}
+
+
+# ==================== سجل الرفعات: إخفاء رفعة كاملة · التراجع ====================
+async def _batch_scoped(db, user: dict, batch_id: str) -> dict:
+    b = await db.result_batches.find_one({"_id": ObjectId(batch_id)}) if ObjectId.is_valid(batch_id) else None
+    if not b:
+        raise HTTPException(status_code=404, detail="الرفعة غير موجودة")
+    sc = await _user_scope(db, user)
+    if sc is not None and not set(b.get("department_ids") or []) <= sc["deps"]:
+        raise HTTPException(status_code=403, detail="هذه الرفعة خارج نطاقك")
+    return b
+
+
+KIND_AR = {"import": "رفع ملف", "manual": "تعديل يدوي", "manual_delete": "حذف يدوي"}
+
+
+@router.get("/results/batches")
+async def list_batches(current_user: dict = Depends(get_current_user)):
+    _guard_view(current_user)
+    db = get_db()
+    sc = await _user_scope(db, current_user)
+    q = {} if sc is None else {"department_ids": {"$not": {"$elemMatch": {"$nin": list(sc["deps"])}}}}
+    items = []
+    async for b in db.result_batches.find(q, {"changes": 0}).sort("created_at", -1).limit(200):
+        items.append({
+            "id": str(b["_id"]), "kind": b["kind"], "kind_name": KIND_AR.get(b["kind"], b["kind"]),
+            "academic_year": b.get("academic_year"), "level": b.get("level"), "semester": b.get("semester"),
+            "scope_name": b.get("scope_name", ""), "student_name": b.get("student_name", ""), "file_name": b.get("file_name", ""),
+            "counts": b.get("counts") or {}, "notified": b.get("notified", 0), "hidden": b.get("hidden", False),
+            "undone": b.get("undone", False), "undone_by_name": b.get("undone_by_name", ""),
+            "created_by_name": b.get("created_by_name", ""),
+            "created_at": b["created_at"].isoformat() if isinstance(b.get("created_at"), datetime) else b.get("created_at"),
+        })
+    return {"items": items}
+
+
+@router.post("/results/batches/{batch_id}/visibility")
+async def batch_visibility(batch_id: str, data: dict = Body(...), current_user: dict = Depends(get_current_user)):
+    """👁 إخفاء/إظهار رفعة كاملة في تطبيق الطلاب"""
+    _guard(current_user)
+    db = get_db()
+    b = await _batch_scoped(db, current_user, batch_id)
+    if b.get("undone"):
+        raise HTTPException(status_code=400, detail="تم التراجع عن هذه الرفعة")
+    hidden = bool(data.get("hidden"))
+    r = await db.result_entries.update_many({"batch_id": batch_id}, {"$set": {"batch_hidden": hidden}})
+    await db.result_batches.update_one({"_id": b["_id"]}, {"$set": {"hidden": hidden}})
+    await log_activity(current_user, "hide_results_batch" if hidden else "show_results_batch", "result_batches", batch_id, b.get("scope_name", ""))
+    return {"hidden": hidden, "affected": r.modified_count,
+            "message": f"تم إخفاء {r.modified_count} نتيجة عن الطلاب" if hidden else f"أصبحت {r.matched_count} نتيجة ظاهرة للطلاب"}
+
+
+@router.post("/results/batches/{batch_id}/undo")
+async def undo_batch(batch_id: str, current_user: dict = Depends(get_current_user)):
+    """↩️ التراجع: تعود النتائج كما كانت قبل الرفعة/التعديل (دون إشعار) — يُتخطّى ما عُدِّل بعدها"""
+    _guard(current_user)
+    db = get_db()
+    b = await _batch_scoped(db, current_user, batch_id)
+    if b.get("undone"):
+        raise HTTPException(status_code=400, detail="تم التراجع عن هذه الرفعة مسبقاً")
+    restored = skipped = 0
+    for ch in reversed(b.get("changes") or []):
+        key, before = ch["key"], ch.get("before")
+        cur = await db.result_entries.find_one(key)
+        if ch.get("after_exists") and (not cur or cur.get("batch_id") != batch_id):
+            skipped += 1
+            continue
+        if not ch.get("after_exists") and cur:
+            skipped += 1
+            continue
+        if before is None:
+            await db.result_entries.delete_one(key)
+        else:
+            await db.result_entries.update_one(key, {"$set": {**before, "updated_at": datetime.now(timezone.utc)},
+                                                     "$setOnInsert": {"created_at": datetime.now(timezone.utc)}}, upsert=True)
+        restored += 1
+    await db.result_batches.update_one({"_id": b["_id"]}, {"$set": {
+        "undone": True, "undone_at": datetime.now(timezone.utc), "undone_by_name": current_user.get("full_name", ""),
+        "undo_result": {"restored": restored, "skipped": skipped}}})
+    await log_activity(current_user, "undo_results_batch", "result_batches", batch_id, b.get("scope_name", ""), {"restored": restored, "skipped": skipped})
+    msg = f"تم التراجع: أُعيدت {restored} نتيجة إلى ما كانت عليه"
+    if skipped:
+        msg += f" · تُخطّيت {skipped} نتيجة لأنها عُدّلت بعد هذه الرفعة"
+    return {"restored": restored, "skipped": skipped, "message": msg}
 
 
 # ==================== الرفع: سنة + مستوى + فصل + كلية/قسم ====================
@@ -377,20 +516,27 @@ async def import_results(file: UploadFile = File(...), academic_year: str = Form
 
     now = datetime.now(timezone.utc)
     notify_uids = []
+    scope_doc = await db[("faculties" if scope == "faculty" else "departments")].find_one({"_id": ObjectId(scope_id)}, {"name": 1}) if ObjectId.is_valid(scope_id) else None
+    dep_ids = q["department_id"]["$in"] if isinstance(q.get("department_id"), dict) else [q.get("department_id")]
+    bid = await _new_batch(db, current_user, "import", {**key, "scope": scope, "scope_id": scope_id, "scope_name": (scope_doc or {}).get("name", ""),
+                                                        "file_name": file.filename or "", "counts": counts}, dep_ids)
     for r in items:
         if r["status_code"] not in ("new", "changed"):
             continue
         st = students_by_reg[r["reg_no"]]
+        ekey = {"reg_no": r["reg_no"], **key}
+        await _push_change(db, bid, ekey, await _snapshot(db, ekey), True)
         await db.result_entries.update_one(
-            {"reg_no": r["reg_no"], **key},
+            ekey,
             {"$set": {**{k: r[k] for k in VALS}, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"),
-                      "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
+                      "batch_id": bid, "batch_hidden": False, "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
              "$setOnInsert": {"created_at": now}},
             upsert=True,
         )
         if st.get("user_id"):
             notify_uids.append(st["user_id"])
     notified = len(set(notify_uids)) if notify.lower() == "true" else 0
+    await db.result_batches.update_one({"_id": ObjectId(bid)}, {"$set": {"notified": notified}})
     if notified:
         asyncio.create_task(_notify_students(db, list(set(notify_uids))))
     await log_activity(current_user, "import_student_results", "result_entries", "", file.filename or "",
@@ -401,4 +547,4 @@ async def import_results(file: UploadFile = File(...), academic_year: str = Form
         msg += f" · رُفض {rejected} صف"
     if notified:
         msg += f" · أُرسل إشعار صدور النتيجة إلى {notified} طالب"
-    return {"preview": False, "counts": counts, "notified": notified, "message": msg}
+    return {"preview": False, "counts": counts, "notified": notified, "batch_id": bid, "message": msg}

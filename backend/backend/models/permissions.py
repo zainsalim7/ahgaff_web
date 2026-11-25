@@ -215,6 +215,8 @@ class Permission:
     PRINT_STUDENT_CARDS = "print_student_cards"
     MANAGE_FACULTY_BOARD = "manage_faculty_board"
     MANAGE_PREP_LEAVE = "manage_prep_leave"
+    VIEW_RESULTS = "view_results"
+    MANAGE_RESULTS = "manage_results"
 
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
@@ -499,6 +501,8 @@ ALL_PERMISSIONS = [
     {"key": Permission.PRINT_STUDENT_CARDS, "label": "طباعة بطاقات الطلاب وتصميمها", "category": "بطاقات الطلاب"},
     {"key": Permission.MANAGE_FACULTY_BOARD, "label": "اتخاذ قرارات مجلس الكلية", "category": "مجلس الكلية"},
     {"key": Permission.MANAGE_PREP_LEAVE, "label": "تحديد أيام الإجازة التحضيرية", "category": "الحضور"},
+    {"key": Permission.VIEW_RESULTS, "label": "عرض جدول نتائج الطلاب وبطاقاتهم (قراءة فقط)", "category": "النتائج"},
+    {"key": Permission.MANAGE_RESULTS, "label": "إدارة النتائج (رفع، تعديل، إخفاء، تراجع)", "category": "النتائج"},
 ]
 
 DASHBOARD_PERMISSIONS = [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_ATTENDANCE, Permission.DASHBOARD_TEACHERS,
@@ -567,6 +571,7 @@ ADMIN_ROLE_PRESETS = [
 ]
 
 FULL_PERMISSION_MAPPING = {
+    Permission.MANAGE_RESULTS: [Permission.VIEW_RESULTS],
     Permission.MANAGE_DEPARTMENTS: [
         Permission.VIEW_DEPARTMENTS, Permission.ADD_DEPARTMENT, 
         Permission.EDIT_DEPARTMENT, Permission.DELETE_DEPARTMENT
