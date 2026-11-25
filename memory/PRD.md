@@ -184,3 +184,4 @@
 - Collection `student_results` (unique reg_no+level): s1_status/s1_gpa/s1_grade/s2_status/s2_gpa/s2_grade as raw text, empty=null.
 - routes/student_results.py: POST /api/student-results/import (xlsx/xls/csv, upsert), GET /api/student-results?q, DELETE /{id}, GET /template (perm manage_grades); GET /api/students/me/results returns rows by student's student_id literally (old computed version removed from grades.py).
 - Frontend page /student-results + dashboard tile "نتائج الطلاب (التطبيق)". Prep-leave «present» now materializes whole period on save.
+- 2026-06: Scope isolation added: student_results (import rejects out-of-scope/unknown reg_nos, list/delete scoped via get_own_department_ids) and prep_leave (scoped users cannot use scope=all or targets outside scope; faculty only if they own all its departments; list hides other scopes; can_delete flag). Frontend prep page hides «الجامعة بالكامل» and filters options via useAcademicScope.

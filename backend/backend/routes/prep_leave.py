@@ -6,7 +6,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .deps import get_current_user, get_db, log_activity, has_permission
+from .deps import get_current_user, get_db, log_activity, has_permission, get_own_department_ids
 from models.permissions import UserRole
 
 router = APIRouter(prefix="/prep-leave-periods", tags=["إجازة التحضير"])
@@ -22,6 +22,37 @@ def _now() -> datetime:
 def _can_manage(user: dict) -> bool:
     """🔒 لا صلاحيات افتراضية بالدور — إجازة التحضير تتطلّب صراحةً manage_prep_leave"""
     return user.get("role") == UserRole.ADMIN or has_permission(user, "manage_prep_leave")
+
+
+async def _user_scope(db, user: dict):
+    """None = غير مقيَّد · وإلا {deps, full_facs} (الكليات التي يملك كل أقسامها)"""
+    deps = await get_own_department_ids(user)
+    if deps is None:
+        return None
+    deps = set(deps)
+    oids = [ObjectId(d) for d in deps if ObjectId.is_valid(d)]
+    facs = {d.get("faculty_id") async for d in db.departments.find({"_id": {"$in": oids}}, {"faculty_id": 1}) if d.get("faculty_id")}
+    full = set()
+    for f in facs:
+        all_d = {str(x["_id"]) async for x in db.departments.find({"faculty_id": f}, {"_id": 1})}
+        if all_d and all_d <= deps:
+            full.add(f)
+    return {"deps": deps, "facs": facs, "full_facs": full}
+
+
+async def _target_in_scope(db, sc, scope: str, scope_id) -> bool:
+    if sc is None:
+        return True
+    if scope == "all":
+        return False
+    if scope == "faculty":
+        return scope_id in sc["full_facs"]
+    if scope == "department":
+        return scope_id in sc["deps"]
+    if scope == "course":
+        c = await db.courses.find_one({"_id": ObjectId(scope_id)}, {"department_id": 1}) if ObjectId.is_valid(scope_id or "") else None
+        return bool(c) and c.get("department_id") in sc["deps"]
+    return False
 
 
 class PrepPeriodCreate(BaseModel):
@@ -126,7 +157,13 @@ async def sync_present_periods(db) -> int:
 async def list_prep_periods(current_user: dict = Depends(get_current_user)):
     db = get_db()
     await sync_present_periods(db)
-    items = [_serialize(d) async for d in db.prep_leave_periods.find({}).sort("date_from", -1)]
+    sc = await _user_scope(db, current_user)
+    items = []
+    async for d in db.prep_leave_periods.find({}).sort("date_from", -1):
+        if sc is None or d.get("scope", "all") == "all" or (d.get("scope") == "faculty" and d.get("scope_id") in sc["facs"]) or await _target_in_scope(db, sc, d.get("scope"), d.get("scope_id")):
+            item = _serialize(d)
+            item["can_delete"] = await _target_in_scope(db, sc, d.get("scope", "all"), d.get("scope_id"))
+            items.append(item)
     return {"items": items}
 
 
@@ -149,6 +186,8 @@ async def create_prep_period(data: PrepPeriodCreate, current_user: dict = Depend
         raise HTTPException(status_code=400, detail="تاريخ النهاية قبل تاريخ البداية")
 
     db = get_db()
+    if not await _target_in_scope(db, await _user_scope(db, current_user), data.scope, data.scope_id):
+        raise HTTPException(status_code=403, detail="لا يمكنك تحديد فترة خارج نطاقك (الجامعة بالكامل أو كلية/قسم/مقرر لا تتبعك)")
     doc = {
         "date_from": data.date_from, "date_to": data.date_to, "scope": data.scope, "mode": data.mode,
         "scope_id": data.scope_id if data.scope != "all" else None,
@@ -177,6 +216,8 @@ async def delete_prep_period(period_id: str, current_user: dict = Depends(get_cu
     doc = await db.prep_leave_periods.find_one({"_id": oid})
     if not doc:
         raise HTTPException(status_code=404, detail="الفترة غير موجودة")
+    if not await _target_in_scope(db, await _user_scope(db, current_user), doc.get("scope", "all"), doc.get("scope_id")):
+        raise HTTPException(status_code=403, detail="لا يمكنك حذف فترة خارج نطاقك")
     await db.prep_leave_periods.delete_one({"_id": oid})
     if doc.get("mode") == "present":
         await revert_present_period(db, period_id)

@@ -18,6 +18,7 @@ import { Stack } from 'expo-router';
 import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useAuthStore } from '../src/store/authStore';
+import { useAcademicScope } from '../src/hooks/useAcademicScope';
 
 interface PrepPeriod {
   id: string;
@@ -31,6 +32,7 @@ interface PrepPeriod {
   reason: string;
   created_at?: string;
   created_by_name: string;
+  can_delete?: boolean;
 }
 
 interface SimpleOption { id: string; name: string; }
@@ -87,6 +89,8 @@ const DateField = ({ value, onChange, testID }: { value: string; onChange: (v: s
 
 export default function PrepLeavePeriodsScreen() {
   const { user: ctxUser, hasPermission } = useAuth();
+  const { scope: acScope, restricted } = useAcademicScope();
+  const visibleScopes = restricted ? SCOPES.filter((s) => s.value !== 'all') : SCOPES;
   const storeUser = useAuthStore((s) => s.user);
   const user: any = ctxUser || storeUser;
   const [items, setItems] = useState<PrepPeriod[]>([]);
@@ -145,15 +149,15 @@ export default function PrepLeavePeriodsScreen() {
   const resetForm = () => {
     setFormFrom('');
     setFormTo('');
-    setFormScope('all');
+    setFormScope(restricted ? 'department' : 'all');
     setFormScopeId('');
     setFormReason('');
     setFormMode('exclude');
   };
 
   const scopeOptions = (): SimpleOption[] => {
-    if (formScope === 'faculty') return faculties;
-    if (formScope === 'department') return departments;
+    if (formScope === 'faculty') return restricted ? faculties.filter((f) => (acScope?.full_faculty_ids || []).includes(f.id)) : faculties;
+    if (formScope === 'department') return restricted ? departments.filter((d) => (acScope?.department_ids || []).includes(d.id)) : departments;
     if (formScope === 'course') return courses;
     return [];
   };
@@ -264,9 +268,9 @@ export default function PrepLeavePeriodsScreen() {
                   {p.reason ? <Text style={styles.cardReason}>{p.reason}</Text> : null}
                   <Text style={styles.cardMeta}>بواسطة {p.created_by_name}</Text>
                 </View>
-                <TouchableOpacity onPress={() => handleDelete(p)} style={styles.iconBtn} testID={`delete-prep-period-${p.id}`}>
+                {p.can_delete !== false && <TouchableOpacity onPress={() => handleDelete(p)} style={styles.iconBtn} testID={`delete-prep-period-${p.id}`}>
                   <Ionicons name="trash-outline" size={20} color="#c62828" />
-                </TouchableOpacity>
+                </TouchableOpacity>}
               </View>
             ))
           )}
@@ -311,7 +315,7 @@ export default function PrepLeavePeriodsScreen() {
                 <View style={styles.formGroup}>
                   <Text style={styles.label}>النطاق</Text>
                   <View style={styles.typesGrid}>
-                    {SCOPES.map((s) => (
+                    {visibleScopes.map((s) => (
                       <TouchableOpacity
                         key={s.value}
                         style={[styles.typeChip, formScope === s.value && styles.typeChipActive]}

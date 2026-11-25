@@ -7,7 +7,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-from .deps import get_current_user, get_db, has_permission, log_activity
+from .deps import get_current_user, get_db, has_permission, log_activity, get_own_department_ids
 
 router = APIRouter()
 
@@ -18,6 +18,14 @@ LEVEL_WORDS = {"الأول": 1, "الاول": 1, "الثاني": 2, "الثال�
 
 def _can_manage(user: dict) -> bool:
     return user.get("role") == "admin" or has_permission(user, "manage_grades")
+
+
+async def _scope_regs(db, user: dict):
+    """🔒 None = غير مقيَّد · وإلا مجموعة أرقام قيد طلاب أقسام نطاق المستخدم"""
+    deps = await get_own_department_ids(user)
+    if deps is None:
+        return None
+    return {_text(r) for r in await db.students.distinct("student_id", {"department_id": {"$in": list(deps)}}) if _text(r)}
 
 
 def _text(v):
@@ -124,8 +132,9 @@ async def import_results(file: UploadFile = File(...), current_user: dict = Depe
     except Exception:
         raise HTTPException(status_code=400, detail="تعذّرت قراءة الملف — استخدم ملف Excel (xlsx/xls) أو CSV")
     now = datetime.now(timezone.utc)
+    allowed = await _scope_regs(db, current_user)
     inserted = updated = 0
-    skipped = []
+    skipped, out_scope = [], []
     for i, row in enumerate(rows, start=1):
         row = list(row) + [None] * (8 - len(row))
         reg, lvl = _text(row[0]), _level(row[1])
@@ -134,6 +143,9 @@ async def import_results(file: UploadFile = File(...), current_user: dict = Depe
         if not reg or lvl is None:
             if i > 1:
                 skipped.append(i)
+            continue
+        if allowed is not None and reg not in allowed:
+            out_scope.append(reg)
             continue
         vals = {k: _text(row[2 + j]) for j, k in enumerate(COLS)}
         res = await db.student_results.update_one(
@@ -147,13 +159,17 @@ async def import_results(file: UploadFile = File(...), current_user: dict = Depe
         else:
             updated += 1
     if not inserted and not updated:
+        if out_scope:
+            raise HTTPException(status_code=403, detail=f"كل أرقام القيد في الملف لطلاب خارج نطاقك أو غير مسجّلين في النظام ({', '.join(out_scope[:15])})")
         raise HTTPException(status_code=400, detail="لم يُعثر على أي صف صالح (رقم القيد + المستوى) في الملف")
     await log_activity(current_user, "import_student_results", "student_results", "", file.filename or "",
                        {"inserted": inserted, "updated": updated, "skipped": len(skipped)})
     msg = f"تم الرفع: {inserted} صف جديد · {updated} صف مُستبدل"
     if skipped:
         msg += f" · تُجاهل {len(skipped)} صف بلا رقم قيد/مستوى صحيح (الصفوف: {', '.join(map(str, skipped[:15]))})"
-    return {"inserted": inserted, "updated": updated, "skipped_rows": skipped, "message": msg}
+    if out_scope:
+        msg += f" · رُفض {len(out_scope)} صف لطلاب خارج نطاقك أو غير مسجّلين في النظام (أرقام القيد: {', '.join(out_scope[:15])})"
+    return {"inserted": inserted, "updated": updated, "skipped_rows": skipped, "out_of_scope": out_scope, "message": msg}
 
 
 @router.get("/student-results")
@@ -162,6 +178,9 @@ async def list_results(q: str = "", current_user: dict = Depends(get_current_use
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     query = {"reg_no": {"$regex": re.escape(q.strip())}} if q.strip() else {}
+    allowed = await _scope_regs(db, current_user)
+    if allowed is not None:
+        query = {"$and": [query, {"reg_no": {"$in": list(allowed)}}]}
     total = await db.student_results.count_documents(query)
     rows = await db.student_results.find(query).sort([("updated_at", -1), ("reg_no", 1), ("level", 1)]).to_list(200)
     regs = list({r["reg_no"] for r in rows})
@@ -179,8 +198,12 @@ async def delete_result(row_id: str, current_user: dict = Depends(get_current_us
     if not ObjectId.is_valid(row_id):
         raise HTTPException(status_code=404, detail="غير موجود")
     db = get_db()
-    r = await db.student_results.find_one_and_delete({"_id": ObjectId(row_id)})
+    r = await db.student_results.find_one({"_id": ObjectId(row_id)})
     if not r:
         raise HTTPException(status_code=404, detail="غير موجود")
+    allowed = await _scope_regs(db, current_user)
+    if allowed is not None and r.get("reg_no") not in allowed:
+        raise HTTPException(status_code=403, detail="هذا الطالب خارج نطاقك")
+    await db.student_results.delete_one({"_id": r["_id"]})
     await log_activity(current_user, "delete_student_result", "student_results", row_id, f"{r.get('reg_no')} / {r.get('level')}")
     return {"message": "تم الحذف"}
