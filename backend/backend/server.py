@@ -20743,7 +20743,9 @@ async def _ensure_weekly_schedule_unique_indexes(db, dedupe: bool = False):
                     await db.weekly_schedule.drop_index(old_name)
             except Exception:
                 pass
-        await db.student_results.create_index([("reg_no", 1), ("level", 1)], unique=True, name="uniq_reg_level")
+        await db.result_entries.create_index([("reg_no", 1), ("level", 1), ("semester", 1), ("academic_year", 1)], unique=True, name="uniq_reg_lvl_sem_year")
+        from routes.student_results import migrate_legacy_results
+        await migrate_legacy_results(db)
         await db.weekly_schedule.create_index(
             [("teacher_id", 1), ("day", 1), ("slot_number", 1), ("merge_key", 1)],
             unique=True,
