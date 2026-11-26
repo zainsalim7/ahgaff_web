@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -49,6 +49,9 @@ export default function ResultsCenterPage() {
   const [err, setErr] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [openFac, setOpenFac] = useState('');
+  const [q, setQ] = useState('');
+  const [size, setSize] = useState(12);
+  const [page, setPage] = useState(1);
   const [modal, setModal] = useState<'' | 'settings' | 'publish'>('');
 
   useEffect(() => {
@@ -77,6 +80,12 @@ export default function ResultsCenterPage() {
   const facId = (open && openFac) || f.faculty_id || departments.find((d) => d.id === f.department_id)?.faculty_id || (myFacs.length === 1 ? myFacs[0].id : '');
   const meta = facultyMeta(myFacs, facId);
   const sem = sems.find((s) => s.id === f.semester_id);
+  const term = q.trim().toLowerCase();
+  const shown = term ? courses.filter((c) => c.name.toLowerCase().includes(term) || (c.code || '').toLowerCase().includes(term)) : courses;
+  const pages = size ? Math.max(1, Math.ceil(shown.length / size)) : 1;
+  const cur = Math.min(page, pages);
+  const visible = size ? shown.slice((cur - 1) * size, cur * size) : shown;
+  useEffect(() => { setPage(1); }, [q, size, f]);
 
   return (
     <SafeAreaView style={st.container} edges={['bottom']}>
@@ -127,10 +136,34 @@ export default function ResultsCenterPage() {
                 <PickerField label="الفصل الدراسي" options={sems} value={f.semester_id} onChange={(v) => setF({ ...f, semester_id: v })} testID="rc-flt-semester" noPlaceholder={sems.length > 0} maxWidth={240} />
               </View>
             </View>
+            <View style={st.toolRow}>
+              <View style={st.search}>
+                <Ionicons name="search" size={16} color="#8a95a8" />
+                <TextInput style={st.searchInput} value={q} onChangeText={setQ} placeholder="ابحث باسم المقرر أو رقمه" placeholderTextColor="#94a3b8" testID="rc-course-search" />
+                {!!q && <TouchableOpacity onPress={() => setQ('')} testID="rc-course-search-clear"><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity>}
+              </View>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                <Text style={st.cSub}>عدد العرض:</Text>
+                {[12, 24, 48, 0].map((n) => (
+                  <TouchableOpacity key={n} onPress={() => setSize(n)} style={[st.chip, size === n && st.chipOn]} testID={`rc-page-size-${n || 'all'}`}>
+                    <Text style={[st.chipTxt, size === n && { color: '#fff' }]}>{n || 'الكل'}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={st.cSub} testID="rc-courses-count">{shown.length} مقرر{term ? ` (من ${courses.length})` : ''}</Text>
+            </View>
             {!!err && <Text style={st.err} testID="rc-error">{err}</Text>}
             {loading ? <ActivityIndicator style={{ marginTop: 30 }} /> : courses.length === 0
               ? <Text style={{ textAlign: 'center', color: '#94a3b8', marginTop: 30 }} testID="rc-courses-empty">لا توجد مقررات ضمن نطاقك لهذه الفلاتر</Text>
-              : <View style={st.grid} testID="rc-courses-grid">{courses.map((c) => <CourseCard key={c.id} c={c} onOpen={() => setOpen(c.id)} />)}</View>}
+              : shown.length === 0 ? <Text style={{ textAlign: 'center', color: '#94a3b8', marginTop: 30 }} testID="rc-search-empty">لا توجد مقررات تطابق «{q}»</Text>
+              : <View style={st.grid} testID="rc-courses-grid">{visible.map((c) => <CourseCard key={c.id} c={c} onOpen={() => setOpen(c.id)} />)}</View>}
+            {!loading && pages > 1 && (
+              <View style={st.pager} testID="rc-pager">
+                <TouchableOpacity disabled={cur <= 1} onPress={() => setPage(cur - 1)} style={[st.chip, cur <= 1 && { opacity: 0.4 }]} testID="rc-page-prev"><Ionicons name="chevron-forward" size={16} color="#1a2540" /></TouchableOpacity>
+                <Text style={st.chipTxt} testID="rc-page-info">صفحة {cur} من {pages}</Text>
+                <TouchableOpacity disabled={cur >= pages} onPress={() => setPage(cur + 1)} style={[st.chip, cur >= pages && { opacity: 0.4 }]} testID="rc-page-next"><Ionicons name="chevron-back" size={16} color="#1a2540" /></TouchableOpacity>
+              </View>
+            )}
           </>
         )}
       </ScrollView>
@@ -164,4 +197,11 @@ const st = StyleSheet.create({
   bar: { height: 6, borderRadius: 3, backgroundColor: '#eef1f6', overflow: 'hidden' },
   barFill: { height: 6, backgroundColor: '#2962ff', alignSelf: 'flex-end' },
   err: { color: '#c62828', textAlign: 'right', marginBottom: 10 },
+  toolRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 14 },
+  search: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 12, height: 40, flexGrow: 1, maxWidth: 420 },
+  searchInput: { flex: 1, textAlign: 'right', fontSize: 14, color: '#1a2540', outlineStyle: 'none' as any },
+  chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  chipOn: { backgroundColor: '#1a2540', borderColor: '#1a2540' },
+  chipTxt: { fontSize: 12.5, fontWeight: '700', color: '#1a2540' },
+  pager: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16 },
 });

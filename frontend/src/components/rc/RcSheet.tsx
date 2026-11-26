@@ -109,7 +109,13 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
         <Btn icon="download-outline" label="تصدير الكشف Excel" color="#475569" outline onPress={exportX} testID="rc-export-btn" />
         <Btn icon="time-outline" label="سجل التعديلات" color="#475569" outline onPress={() => setModal('log')} testID="rc-log-btn" />
       </View>
-      {field && field !== 'coursework' && !locked && <Text style={{ color: '#ef6c00', textAlign: 'right', marginBottom: 8 }} testID="rc-need-lock-note">رصد الأدوار يبدأ بعد إقفال السعي واعتماد كشف الأهلية</Text>}
+      {field && field !== 'coursework' && !locked && (
+        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap', backgroundColor: '#fff7ed', borderRadius: 10, padding: 10, marginBottom: 10 }} testID="rc-need-lock-note">
+          <Ionicons name="information-circle" size={18} color="#ef6c00" />
+          <Text style={{ color: '#9a3412', textAlign: 'right', flex: 1 }}>خانات الدرجات مقفلة لأن السعي لم يُقفل بعد. رصد الأدوار يبدأ بعد رصد السعي لكل الطلاب ثم «إقفال السعي» لاعتماد كشف الأهلية.</Text>
+          {perms.cw && <Btn icon="lock-closed-outline" label="إقفال السعي الآن" color="#2e7d32" onPress={() => lock(true)} testID="rc-lock-inline-btn" />}
+        </View>
+      )}
       <Msg m={msg} testID="rc-sheet-msg" />
       <View style={[rc.card, { overflow: 'hidden' }]}>
         <RcMarksTable tab={tab} sheet={sheet} edits={edits} errors={errors} canEdit={canEdit} canDecide={perms.decide}

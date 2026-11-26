@@ -86,7 +86,7 @@ export const RcMarksTable = ({ tab, sheet, edits, setEdit, errors, onDecision, c
           {field && <Text style={[rc.th, { width: 96 }]}>{tab === 'coursework' ? `السعي (من ${mx})` : `الدرجة (من ${mx})`}</Text>}
           {cols.map((c) => <Text key={c.label} style={[rc.th, { flex: c.flex }]}>{c.label}</Text>)}
         </View>
-        {rows.length === 0 && <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }} testID={`rc-empty-${tab}`}>لا يوجد طلاب في هذه المرحلة</Text>}
+        {rows.length === 0 && <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }} testID={`rc-empty-${tab}`}>{{ first: 'لا يوجد مؤهلون بعد — يظهر هنا من نجح في السعي ولم يتجاوز حد الغياب', second: 'لا يوجد طلاب دور ثانٍ بعد — يظهر هنا غير المؤهلين (بعد رصد سعيهم) والراسبون في الدور الأول', exceptional: 'يظهر هنا من رسب في الدور الثاني بعد رصد درجته' }[tab as string] || 'لا يوجد طلاب في هذه المرحلة'}</Text>}
         {rows.map((r, i) => {
           const can = !!field && canEdit && editable(tab, r, locked);
           const cur = field ? (edits[r.student_db_id] ?? (r[field] === null ? '' : String(r[field]))) : '';
