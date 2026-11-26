@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="16" time="12.522" timestamp="2026-11-26T11:36:25.955169+00:00" hostname="agent-env-09acf16a-7ac0-4f4f-bdd8-550445b492cb"><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_import_is_draft_hidden_no_notif" time="1.126"><failure message="AssertionError: assert {'gpa': None,...status': None} == {'gpa': '78',...atus': 'ناجح'}&#10;  &#10;  Differing items:&#10;  {'gpa': None} != {'gpa': '78'}&#10;  {'status': None} != {'status': 'ناجح'}&#10;  {'grade': None} != {'grade': 'جيد جداً'}&#10;  &#10;  Full diff:...&#10;  &#10;  ...Full output truncated (12 lines hidden), use '-vv' to show">tests/test_results_draft_publish_iter209.py:95: in test_import_is_draft_hidden_no_notif
+    assert my_l1(S["stu"]) == S["base_s1"]
+E   AssertionError: assert {'gpa': None,...status': None} == {'gpa': '78',...atus': 'ناجح'}
+E     
+E     Differing items:
+E     {'gpa': None} != {'gpa': '78'}
+E     {'status': None} != {'status': 'ناجح'}
+E     {'grade': None} != {'grade': 'جيد جداً'}
+E     
+E     Full diff:...
+E     
+E     ...Full output truncated (12 lines hidden), use '-vv' to show</failure></testcase><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_batches_list_draft_pending" time="0.102" /><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_visibility_on_draft_400" time="0.157"><failure message="AssertionError: assert {'gpa': None,...status': None} == {'gpa': '78',...atus': 'ناجح'}&#10;  &#10;  Differing items:&#10;  {'gpa': None} != {'gpa': '78'}&#10;  {'status': None} != {'status': 'ناجح'}&#10;  {'grade': None} != {'grade': 'جيد جداً'}&#10;  &#10;  Full diff:...&#10;  &#10;  ...Full output truncated (12 lines hidden), use '-vv' to show">tests/test_results_draft_publish_iter209.py:106: in test_visibility_on_draft_400
+    assert my_l1(S["stu"]) == S["base_s1"]
+E   AssertionError: assert {'gpa': None,...status': None} == {'gpa': '78',...atus': 'ناجح'}
+E     
+E     Differing items:
+E     {'gpa': None} != {'gpa': '78'}
+E     {'status': None} != {'status': 'ناجح'}
+E     {'grade': None} != {'grade': 'جيد جداً'}
+E     
+E     Full diff:...
+E     
+E     ...Full output truncated (12 lines hidden), use '-vv' to show</failure></testcase><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_manual_edit_on_draft_stays_hidden" time="0.152"><failure message="AssertionError: assert {'gpa': None,...status': None} == {'gpa': '78',...atus': 'ناجح'}&#10;  &#10;  Differing items:&#10;  {'gpa': None} != {'gpa': '78'}&#10;  {'status': None} != {'status': 'ناجح'}&#10;  {'grade': None} != {'grade': 'جيد جداً'}&#10;  &#10;  Full diff:...&#10;  &#10;  ...Full output truncated (12 lines hidden), use '-vv' to show">tests/test_results_draft_publish_iter209.py:117: in test_manual_edit_on_draft_stays_hidden
+    assert my_l1(S["stu"]) == S["base_s1"]
+E   AssertionError: assert {'gpa': None,...status': None} == {'gpa': '78',...atus': 'ناجح'}
+E     
+E     Differing items:
+E     {'gpa': None} != {'gpa': '78'}
+E     {'status': None} != {'status': 'ناجح'}
+E     {'grade': None} != {'grade': 'جيد جداً'}
+E     
+E     Full diff:...
+E     
+E     ...Full output truncated (12 lines hidden), use '-vv' to show</failure></testcase><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_publish_makes_visible_and_notifies" time="2.219" /><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_republish_400_and_toggle_allowed" time="0.174" /><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_draft_over_published_then_undo_restores" time="0.384" /><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_draft_over_published_keeps_old_visible" time="0.000"><failure message="AssertionError: published result disappeared while correction is a draft: {'status': None, 'gpa': None, 'grade': None}&#10;assert None == 'TEST_ناجح'&#10; +  where None = &lt;built-in method get of dict object at 0xfbb159c7a780&gt;('status')&#10; +    where &lt;built-in method get of dict object at 0xfbb159c7a780&gt; = {'gpa': None, 'grade': None, 'status': None}.get">tests/test_results_draft_publish_iter209.py:156: in test_draft_over_published_keeps_old_visible
+    assert c.get("status") == "TEST_ناجح", f"published result disappeared while correction is a draft: {c}"
+E   AssertionError: published result disappeared while correction is a draft: {'status': None, 'gpa': None, 'grade': None}
+E   assert None == 'TEST_ناجح'
+E    +  where None = &lt;built-in method get of dict object at 0xfbb159c7a780&gt;('status')
+E    +    where &lt;built-in method get of dict object at 0xfbb159c7a780&gt; = {'gpa': None, 'grade': None, 'status': None}.get</failure></testcase><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_undo_new_draft_removes_entry" time="0.223" /><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_notify_false_publish_no_notification" time="1.815" /><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_publish_event_only_400" time="0.406" /><testcase classname="tests.test_results_draft_publish_iter209.TestDraftPublish" name="test_invalid_batch_id_404" time="0.074" /><testcase classname="tests.test_results_draft_publish_iter209.TestDeanScope" name="test_dean_cannot_publish_other_faculty" time="0.521" /><testcase classname="tests.test_results_draft_publish_iter209.TestDeanScope" name="test_dean_can_publish_own" time="0.475" /><testcase classname="tests.test_results_draft_publish_iter209.TestDeanScope" name="test_view_only_cannot_publish" time="0.435" /><testcase classname="tests.test_results_draft_publish_iter209.TestGradesLinkDraft" name="test_grades_import_link_is_draft" time="3.969" /></testsuite></testsuites>

@@ -1,5 +1,6 @@
 """📋 نتائج الطلاب (بلا حسابات): رفع إكسل لكل (سنة + مستوى + فصل + كلية/قسم) · بطاقة الطالب · عرض حرفي للتطبيق"""
 import asyncio
+import logging
 import io
 import re
 from datetime import datetime, timezone
@@ -34,7 +35,7 @@ def _guard_view(user: dict):
         raise HTTPException(status_code=403, detail="غير مصرح لك — تتطلب صلاحية «عرض النتائج»")
 
 
-SNAP = VALS + ["hidden", "batch_id", "batch_hidden", "draft_batch_id", "student_db_id", "department_id"]
+SNAP = VALS + ["hidden", "batch_id", "batch_hidden", "draft_batch_id", "prev_visible", "student_db_id", "department_id"]
 
 
 async def _snapshot(db, key: dict):
@@ -137,6 +138,23 @@ def _pick_latest(entries: list) -> dict:
     return max(entries, key=lambda e: (_year_key(e.get("academic_year")), str(e.get("updated_at") or "")))
 
 
+def _student_view(e: dict) -> Optional[dict]:
+    """ما يراه الطالب: النتيجة الظاهرة، أو القيم المنشورة سابقاً إن كانت مسودة تصحيح معلّقة"""
+    if e.get("hidden"):
+        return None
+    if not e.get("batch_hidden"):
+        return e
+    return e.get("prev_visible") or None
+
+
+def _prev_visible(before: Optional[dict]):
+    if not before:
+        return None
+    if not before.get("hidden") and not before.get("batch_hidden"):
+        return {k: before.get(k) for k in VALS}
+    return before.get("prev_visible")
+
+
 def _cell(e: Optional[dict]) -> dict:
     return {k: (e or {}).get(k) for k in VALS}
 
@@ -159,8 +177,11 @@ async def get_my_results(current_user: dict = Depends(get_current_user)):
         groups.setdefault(e["level"], {}).setdefault(e["semester"], []).append(e)
 
     def pick(lvl, sem):
-        e = _pick_latest(groups[lvl][sem]) if sem in groups[lvl] else None
-        return None if (e and (e.get("hidden") or e.get("batch_hidden"))) else e
+        for e in sorted(groups[lvl].get(sem, []), key=lambda e: (_year_key(e.get("academic_year")), str(e.get("updated_at") or "")), reverse=True):
+            v = _student_view(e)
+            if v:
+                return v
+        return None
 
     out = [{"level": lvl, "first_semester": _cell(pick(lvl, 1)), "second_semester": _cell(pick(lvl, 2))} for lvl in sorted(groups)]
     return {"levels": [x for x in out if any(x["first_semester"].values()) or any(x["second_semester"].values())]}
@@ -286,10 +307,13 @@ async def upsert_entry(data: dict = Body(...), current_user: dict = Depends(get_
     draft_of = None
     if before and ObjectId.is_valid(before.get("batch_id") or ""):
         pb = await db.result_batches.find_one({"_id": ObjectId(before["batch_id"])}, {"draft": 1, "undone": 1})
-        draft_of = before["batch_id"] if pb and pb.get("draft") and not pb.get("undone") else before.get("draft_batch_id")
+        draft_of = before["batch_id"] if pb and pb.get("draft") and not pb.get("undone") else None
+        if not draft_of and ObjectId.is_valid(before.get("draft_batch_id") or ""):
+            db_ = await db.result_batches.find_one({"_id": ObjectId(before["draft_batch_id"])}, {"draft": 1, "undone": 1})
+            draft_of = before["draft_batch_id"] if db_ and db_.get("draft") and not db_.get("undone") else None
     await db.result_entries.update_one(key, {
         "$set": {**vals, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"), "batch_id": bid,
-                 "batch_hidden": bool(draft_of), "draft_batch_id": draft_of, "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
+                 "batch_hidden": bool(draft_of), "draft_batch_id": draft_of, "prev_visible": before.get("prev_visible") if (draft_of and before) else None, "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
         "$setOnInsert": {"created_at": now}}, upsert=True)
     await log_activity(current_user, "edit_student_result", "result_entries", str(st["_id"]), f"{st['student_id']} م{level} ف{sem} {year or ''}", vals)
     return {"message": "تم الحفظ", "batch_id": bid}
@@ -401,8 +425,8 @@ async def publish_batch(batch_id: str, data: dict = Body(default={}), current_us
     if not b.get("draft"):
         raise HTTPException(status_code=400, detail="هذه الرفعة منشورة مسبقاً")
     r = await db.result_entries.update_many({"$or": [{"batch_id": batch_id}, {"draft_batch_id": batch_id}]},
-                                            {"$set": {"batch_hidden": False, "draft_batch_id": None}})
-    send = bool(data.get("notify", b.get("notify_on_publish", True)))
+                                            {"$set": {"batch_hidden": False, "draft_batch_id": None, "prev_visible": None}})
+    send = bool(b.get("notify_on_publish"))
     uids = []
     if send and b.get("notify_uids"):
         uids = [d["user_id"] async for d in db.students.find(
@@ -414,7 +438,7 @@ async def publish_batch(batch_id: str, data: dict = Body(default={}), current_us
     if uids:
         asyncio.create_task(_notify_students(db, uids))
     await log_activity(current_user, "publish_results_batch", "result_batches", batch_id, b.get("scope_name", ""), {"notified": len(uids)})
-    msg = f"تم النشر: أصبحت {r.matched_count} نتيجة ظاهرة للطلاب"
+    msg = f"تم النشر: أصبحت {r.matched_count} نتيجة ظاهرة للطلاب" if r.matched_count else "تم النشر"
     if uids:
         msg += f" · أُرسل إشعار «صدرت نتيجتك» إلى {len(uids)} طالب"
     return {"published": r.matched_count, "notified": len(uids), "message": msg}
@@ -440,6 +464,7 @@ async def _undo_batch(db, current_user: dict, b: dict, batch_id: str):
             await db.result_entries.update_one(key, {"$set": {**before, "updated_at": datetime.now(timezone.utc)},
                                                      "$setOnInsert": {"created_at": datetime.now(timezone.utc)}}, upsert=True)
         restored += 1
+    await db.result_entries.update_many({"draft_batch_id": batch_id}, {"$set": {"batch_hidden": False, "draft_batch_id": None, "prev_visible": None}})
     await db.result_batches.update_one({"_id": b["_id"]}, {"$set": {
         "undone": True, "undone_at": datetime.now(timezone.utc), "undone_by_name": current_user.get("full_name", ""),
         "undo_result": {"restored": restored, "skipped": skipped}}})
@@ -589,8 +614,8 @@ async def _notify_students(db, user_ids: list) -> None:
     if tokens:
         try:
             await send_notification_to_many(tokens, title, body, data)
-        except Exception:
-            pass
+        except Exception as ex:
+            logging.getLogger(__name__).error("results notification failed: %s", ex)
 
 
 @router.post("/results/import")
@@ -632,10 +657,11 @@ async def import_results(file: UploadFile = File(...), academic_year: str = Form
             continue
         st = students_by_reg[r["reg_no"]]
         ekey = {"reg_no": r["reg_no"], **key}
-        await _push_change(db, bid, ekey, await _snapshot(db, ekey), True)
+        before = await _snapshot(db, ekey)
+        await _push_change(db, bid, ekey, before, True)
         await db.result_entries.update_one(
             ekey,
-            {"$set": {**{k: r[k] for k in VALS}, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"),
+            {"$set": {**{k: r[k] for k in VALS}, "prev_visible": _prev_visible(before), "draft_batch_id": None, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"),
                       "batch_id": bid, "batch_hidden": True, "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
              "$setOnInsert": {"created_at": now}},
             upsert=True,
@@ -672,8 +698,6 @@ async def link_grades_import(db, user: dict, import_id: str, imp: dict, students
         before = await _snapshot(db, ekey)
         if not (before and all(before.get(k) == vals[k] for k in VALS)):
             rows.append((st, vals, ekey, before))
-    if not rows:
-        return {"linked": 0, "notified": 0}
     dep = await db.departments.find_one({"_id": ObjectId(imp["department_id"])}, {"name": 1}) if ObjectId.is_valid(imp.get("department_id") or "") else None
     bid = await _new_batch(db, user, "import", {**key, "scope": "department", "scope_id": imp.get("department_id"),
                                                 "scope_name": (dep or {}).get("name", ""), "file_name": f"كشف درجات: {imp.get('filename', '')}",
@@ -685,7 +709,7 @@ async def link_grades_import(db, user: dict, import_id: str, imp: dict, students
         counts["changed" if before else "new"] += 1
         await _push_change(db, bid, ekey, before, True)
         await db.result_entries.update_one(ekey, {
-            "$set": {**vals, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"), "batch_id": bid,
+            "$set": {**vals, "prev_visible": _prev_visible(before), "draft_batch_id": None, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"), "batch_id": bid,
                      "batch_hidden": True, "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("full_name", "")},
             "$setOnInsert": {"created_at": now}}, upsert=True)
         linked += 1
@@ -708,16 +732,20 @@ async def get_my_grades(current_user: dict = Depends(get_current_user)):
         return {"semesters": [], "paused": True, "message": PAUSED_MSG}
     sid, reg = str(student["_id"]), _text(student.get("student_id"))
     recs = await db.student_grades.find({"$or": [{"student_db_id": sid}] + ([{"student_db_id": {"$in": ["", None]}, "reg_no": reg}] if reg else [])}).to_list(100)
+    draft_imports = {b["grade_import_id"] async for b in db.result_batches.find(
+        {"grade_import_id": {"$in": list({r.get("import_id") for r in recs if r.get("import_id")})}, "draft": True, "undone": {"$ne": True}},
+        {"grade_import_id": 1})}
     latest: dict = {}
-    for r in recs:
+    for r in sorted(recs, key=lambda r: _year_key(r.get("academic_year")), reverse=True):
         k = (r.get("level"), r.get("semester_no"))
-        if k not in latest or _year_key(r.get("academic_year")) >= _year_key(latest[k].get("academic_year")):
-            latest[k] = r
+        if k in latest or r.get("import_id") in draft_imports:
+            continue
+        e = await db.result_entries.find_one({"reg_no": reg, "level": k[0], "semester": k[1], "academic_year": r.get("academic_year")})
+        if e and (e.get("hidden") or (e.get("batch_hidden") and not e.get("prev_visible"))):
+            continue
+        latest[k] = r
     out = []
     for (lvl, sem), r in sorted(latest.items(), key=lambda x: (x[0][0] or 0, x[0][1] or 0)):
-        e = await db.result_entries.find_one({"reg_no": reg, "level": lvl, "semester": sem, "academic_year": r.get("academic_year")})
-        if e and (e.get("hidden") or e.get("batch_hidden")):
-            continue
         out.append({
             "level": lvl, "semester": sem,
             "status": _text(r.get("sem_status")), "gpa": _text(r.get("sem_gpa")), "cumulative_gpa": _text(r.get("cum_gpa")),
