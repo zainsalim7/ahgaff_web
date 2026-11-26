@@ -103,19 +103,12 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
 
       <View style={{ flexDirection: 'row-reverse', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
         {field && canEdit && <Btn icon="save-outline" label={dirty ? `حفظ التعديلات (${dirty})` : 'حفظ التعديلات'} color="#2962ff" onPress={save} disabled={busy || !dirty} testID="rc-save-btn" />}
-        {field && canEdit && <Btn icon="cloud-upload-outline" label="استيراد من Excel" color="#0f766e" onPress={() => setModal('import')} testID="rc-import-open-btn" disabled={field !== 'coursework' && !locked || field === 'coursework' && locked} />}
+        {field && canEdit && <Btn icon="cloud-upload-outline" label="استيراد من Excel" color="#0f766e" onPress={() => setModal('import')} testID="rc-import-open-btn" disabled={field === 'coursework' && locked} />}
         {(tab === 'coursework' || tab === 'eligibility') && !locked && perms.cw && <Btn icon="lock-closed-outline" label="إقفال السعي واعتماد الأهلية" color="#2e7d32" onPress={() => lock(true)} testID="rc-lock-btn" />}
         {(tab === 'coursework' || tab === 'eligibility') && locked && perms.unlock && <Btn icon="lock-open-outline" label="فتح السعي" color="#ef6c00" outline onPress={() => lock(false)} testID="rc-unlock-btn" />}
         <Btn icon="download-outline" label="تصدير الكشف Excel" color="#475569" outline onPress={exportX} testID="rc-export-btn" />
         <Btn icon="time-outline" label="سجل التعديلات" color="#475569" outline onPress={() => setModal('log')} testID="rc-log-btn" />
       </View>
-      {field && field !== 'coursework' && !locked && (
-        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap', backgroundColor: '#fff7ed', borderRadius: 10, padding: 10, marginBottom: 10 }} testID="rc-need-lock-note">
-          <Ionicons name="information-circle" size={18} color="#ef6c00" />
-          <Text style={{ color: '#9a3412', textAlign: 'right', flex: 1 }}>خانات الدرجات مقفلة لأن السعي لم يُقفل بعد. رصد الأدوار يبدأ بعد رصد السعي لكل الطلاب ثم «إقفال السعي» لاعتماد كشف الأهلية.</Text>
-          {perms.cw && <Btn icon="lock-closed-outline" label="إقفال السعي الآن" color="#2e7d32" onPress={() => lock(true)} testID="rc-lock-inline-btn" />}
-        </View>
-      )}
       <Msg m={msg} testID="rc-sheet-msg" />
       <View style={[rc.card, { overflow: 'hidden' }]}>
         <RcMarksTable tab={tab} sheet={sheet} edits={edits} errors={errors} canEdit={canEdit} canDecide={perms.decide}

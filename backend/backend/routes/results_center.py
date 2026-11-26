@@ -204,8 +204,8 @@ def _allowed(field: str, row: dict, locked: bool) -> Optional[str]:
     """None = مسموح · وإلا سبب المنع"""
     if field == "coursework":
         return "السعي مقفل — يلزم فتحه بصلاحية أعلى" if locked else None
-    if not locked:
-        return "أقفل السعي أولاً لاعتماد كشف الأهلية"
+    if row.get("coursework") is None:
+        return "ارصد سعي الطالب أولاً لتحديد أهليته"
     if field == "first_exam":
         return None if row["eligible"] else "الطالب غير مؤهل للدور الأول"
     if field == "second_exam":
@@ -235,6 +235,11 @@ async def _save(db, user: dict, course: dict, field: str, items: list, via: str)
         if val == old:
             continue
         block = _allowed(field, row, locked)
+        if not block and field == "coursework" and (row.get("first_exam") is not None or row.get("second_exam") is not None):
+            m2 = {k: row.get(k) for k in E.FIELDS}
+            m2["coursework"] = val
+            if E.compute(m2, cfg, {"status": row["att"].get("status")}, row.get("decisions") or {})["eligible"] != row["eligible"]:
+                block = "تعديل السعي يغيّر أهلية الطالب وقد رُصدت له درجة دور — احذف درجة الدور أولاً"
         if block:
             errors.append({"student_db_id": row["student_db_id"], "name": row["name"], "error": block})
             continue
@@ -293,13 +298,15 @@ async def import_marks(course_id: str, file: UploadFile = File(...), field: str 
             item["status"], item["reason"] = "rejected", err
         elif val == row.get(field):
             item["status"] = "unchanged"
+        elif row.get(field) is not None:
+            item["status"], item["reason"] = "exists", "للطالب درجة مرصودة — تُركت كما هي (عدّلها يدوياً إن لزم)"
         elif _allowed(field, row, locked):
             item["status"], item["reason"] = "rejected", _allowed(field, row, locked)
         else:
             item["status"], item["student_db_id"], item["parsed"] = "ok", row["student_db_id"], val
         seen.add(reg)
         out.append(item)
-    counts = {k: sum(1 for i in out if i["status"] == k) for k in ("ok", "unchanged", "rejected")}
+    counts = {k: sum(1 for i in out if i["status"] == k) for k in ("ok", "unchanged", "exists", "rejected")}
     if commit.lower() != "true":
         return {"preview": True, "rows": out, "counts": counts}
     res = await _save(db, current_user, course, field, [{"student_db_id": i["student_db_id"], "value": i["parsed"]} for i in out if i["status"] == "ok"], "excel")

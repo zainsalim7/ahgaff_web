@@ -14,7 +14,7 @@ export const rowsForTab = (tab: TabId, rows: RcRow[]) =>
     : tab === 'exceptional' ? rows.filter((r) => r.pass2 === false) : rows;
 
 export const editable = (tab: TabId, r: RcRow, locked: boolean) =>
-  tab === 'coursework' ? !locked : !locked ? false : tab === 'first' ? r.eligible : tab === 'second' ? r.in_second : tab === 'exceptional' ? r.in_exc : false;
+  tab === 'coursework' ? !locked : r.coursework === null ? false : tab === 'first' ? r.eligible : tab === 'second' ? r.in_second : tab === 'exceptional' ? r.in_exc : false;
 
 const columns = (tab: TabId, s: Sheet, onDecision: (r: RcRow, k: DecKind) => void, canDecide: boolean): Col[] => {
   const cfg = s.settings;
@@ -107,7 +107,7 @@ export const RcMarksTable = ({ tab, sheet, edits, setEdit, errors, onDecision, c
                     <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
                       <Text style={[rc.td, { fontWeight: '700', minWidth: 40, textAlign: 'center' }]} testID={`mark-ro-${field}-${r.student_db_id}`}>{fmt(r[field])}</Text>
                       {tab === 'coursework' && locked && <Ionicons name="lock-closed" size={12} color="#94a3b8" />}
-                      {tab !== 'coursework' && !locked && <Ionicons name="lock-closed" size={13} color="#ef6c00" testID={`mark-wait-lock-${r.student_db_id}`} />}
+                      {tab !== 'coursework' && r.coursework === null && <Text style={{ fontSize: 10.5, color: '#ef6c00' }} testID={`mark-wait-cw-${r.student_db_id}`}>بلا سعي</Text>}
                     </View>
                   )}
                 </View>

@@ -4,8 +4,8 @@ import api from '../../services/api';
 import { ModalShell, downloadBlob } from '../results/resultsUi';
 import { Field, FIELD_AR, Btn, Msg, Badge, rc } from './rcUi';
 
-type PRow = { reg_no: string; name: string; value: string | null; old: any; status: 'ok' | 'unchanged' | 'rejected'; reason?: string };
-const ST = { ok: { t: 'يُحفظ', c: '#2e7d32' }, unchanged: { t: 'بلا تغيير', c: '#64748b' }, rejected: { t: 'مرفوض', c: '#c62828' } };
+type PRow = { reg_no: string; name: string; value: string | null; old: any; status: 'ok' | 'unchanged' | 'exists' | 'rejected'; reason?: string };
+const ST = { ok: { t: 'يُحفظ', c: '#2e7d32' }, unchanged: { t: 'بلا تغيير', c: '#64748b' }, exists: { t: 'موجودة — تُركت', c: '#1565c0' }, rejected: { t: 'مرفوض', c: '#c62828' } };
 
 export const RcImportModal = ({ courseId, courseName, field, onClose, onDone }: { courseId: string; courseName: string; field: Field; onClose: () => void; onDone: () => void }) => {
   const [file, setFile] = useState<File | null>(null);
@@ -30,7 +30,7 @@ export const RcImportModal = ({ courseId, courseName, field, onClose, onDone }: 
   const c = preview?.counts;
   return (
     <ModalShell title={`استيراد ${FIELD_AR[field]} من Excel · ${courseName}`} icon="cloud-upload-outline" onClose={onClose} testID="rc-import-modal">
-      <Text style={[rc.td, { marginBottom: 8, color: '#475569' }]}>الأعمدة: رقم القيد | الدرجة. اكتب «غ» للغائب عن الامتحان. يُرفض أي طالب غير مسجّل في المقرر أو غير مسموح له في هذه المرحلة.</Text>
+      <Text style={[rc.td, { marginBottom: 8, color: '#475569' }]}>الأعمدة: رقم القيد | الدرجة. اكتب «غ» للغائب عن الامتحان. تُضاف الدرجات الجديدة فقط، ومن له درجة مرصودة تُترك درجته كما هي (عدّلها يدوياً إن لزم). يُرفض أي طالب غير مسجّل في المقرر أو غير مسموح له في هذه المرحلة.</Text>
       <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 8 }}>
         <Btn icon="download-outline" label="تنزيل النموذج بأسماء الطلاب" color="#22c55e" onPress={template} testID="rc-import-template-btn" />
       </View>
@@ -47,7 +47,7 @@ export const RcImportModal = ({ courseId, courseName, field, onClose, onDone }: 
         </TouchableOpacity>
       ) : (
         <View testID="rc-import-preview">
-          <Text style={[rc.td, { fontWeight: '800', marginBottom: 6 }]} testID="rc-import-counts">يُحفظ: {c.ok} · بلا تغيير: {c.unchanged} · مرفوض: {c.rejected}</Text>
+          <Text style={[rc.td, { fontWeight: '800', marginBottom: 6 }]} testID="rc-import-counts">يُحفظ (جديد): {c.ok} · موجودة وتُركت: {c.exists} · بلا تغيير: {c.unchanged} · مرفوض: {c.rejected}</Text>
           <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 10 }}>
             <Btn icon="checkmark-done" label={`اعتماد وحفظ (${c.ok})`} color="#2e7d32" onPress={() => send(true)} disabled={busy || !c.ok} testID="rc-import-commit-btn" />
             <Btn icon="close" label="إلغاء" color="#78909c" onPress={() => setPreview(null)} testID="rc-import-cancel-btn" />
