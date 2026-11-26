@@ -30,6 +30,7 @@ export default function GradesScreen() {
   const [detected, setDetected] = useState<any>(null); const [detecting, setDetecting] = useState(false);
   const [preview, setPreview] = useState<any>(null);
   const [replaceExisting, setReplaceExisting] = useState(false);
+  const [notifyStudents, setNotifyStudents] = useState(true);
 
   // السجل
   const [search, setSearch] = useState('');
@@ -120,6 +121,7 @@ export default function GradesScreen() {
       fd.append('batch_no', batchNo);
       fd.append('commit', commit ? 'true' : 'false');
       fd.append('replace', replaceExisting ? 'true' : 'false');
+      fd.append('notify', notifyStudents ? 'true' : 'false');
       const res = await api.post('/grades/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       if (commit) {
         showMsg('success', res.data?.message || '✅ تم الاعتماد');
@@ -372,6 +374,14 @@ export default function GradesScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, alignSelf: 'flex-end' }}
+                  onPress={() => setNotifyStudents((v) => !v)}
+                  testID="grades-notify-toggle"
+                >
+                  <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#1565c0' }}>نشر نتيجة الفصل في «النتائج» وإشعار الطلاب الذين أُضيفت أو تغيّرت نتيجتهم</Text>
+                  <Ionicons name={notifyStudents ? 'checkbox' : 'square-outline'} size={20} color="#1565c0" />
+                </TouchableOpacity>
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                   <Text style={[st.stat, { backgroundColor: '#e8f5e9', color: '#2e7d32' }]}>بالقيد: {preview.stats.matched_by_reg}</Text>
                   <Text style={[st.stat, { backgroundColor: '#fff8e1', color: '#f57f17' }]}>بالاسم: {preview.stats.matched_by_name}</Text>

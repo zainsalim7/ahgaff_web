@@ -592,3 +592,74 @@ async def import_results(file: UploadFile = File(...), academic_year: str = Form
     if notified:
         msg += f" · أُرسل إشعار صدور النتيجة إلى {notified} طالب"
     return {"preview": False, "counts": counts, "notified": notified, "batch_id": bid, "message": msg}
+
+
+# ==================== 🔗 ربط كشف الدرجات بالنتائج + بيان الدرجات في التطبيق ====================
+async def link_grades_import(db, user: dict, import_id: str, imp: dict, students: list, by_id: dict, notify: bool) -> dict:
+    """نتيجة الفصل من الكشف ← result_entries (الحالة · المعدل الفصلي · «تراكمي X» مكان التقدير) كرفعة قابلة للإخفاء/التراجع"""
+    key = {"level": int(imp["level"]), "semester": int(imp["semester_no"]), "academic_year": _text(imp.get("academic_year"))}
+    rows = [s for s in students if s.get("student_db_id") and s.get("sem_status") and by_id.get(s["student_db_id"])]
+    if not rows:
+        return {"linked": 0, "notified": 0}
+    dep = await db.departments.find_one({"_id": ObjectId(imp["department_id"])}, {"name": 1}) if ObjectId.is_valid(imp.get("department_id") or "") else None
+    bid = await _new_batch(db, user, "import", {**key, "scope": "department", "scope_id": imp.get("department_id"),
+                                                "scope_name": (dep or {}).get("name", ""), "file_name": f"كشف درجات: {imp.get('filename', '')}",
+                                                "grade_import_id": import_id}, [imp.get("department_id")])
+    now = datetime.now(timezone.utc)
+    linked, uids = 0, set()
+    counts = {"new": 0, "changed": 0, "unchanged": 0}
+    for s in rows:
+        st = by_id[s["student_db_id"]]
+        vals = {"status": _text(s.get("sem_status")), "gpa": _text(s.get("sem_gpa")),
+                "grade": f"تراكمي {s['cum_gpa']}" if _text(s.get("cum_gpa")) else None}
+        ekey = {"reg_no": st["student_id"], **key}
+        before = await _snapshot(db, ekey)
+        if before and all(before.get(k) == vals[k] for k in VALS):
+            counts["unchanged"] += 1
+            continue
+        counts["changed" if before else "new"] += 1
+        await _push_change(db, bid, ekey, before, True)
+        await db.result_entries.update_one(ekey, {
+            "$set": {**vals, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"), "batch_id": bid,
+                     "batch_hidden": False, "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("full_name", "")},
+            "$setOnInsert": {"created_at": now}}, upsert=True)
+        linked += 1
+        if st.get("user_id"):
+            uids.add(st["user_id"])
+    notified = len(uids) if notify else 0
+    await db.result_batches.update_one({"_id": ObjectId(bid)}, {"$set": {"counts": counts, "notified": notified}})
+    if notified:
+        asyncio.create_task(_notify_students(db, list(uids)))
+    return {"linked": linked, "notified": notified, "results_batch_id": bid}
+
+
+@router.get("/students/me/grades")
+async def get_my_grades(current_user: dict = Depends(get_current_user)):
+    """📑 بيان درجات الطالب: لكل فصل مقرراته (المجموع · التقدير · شارة الدور) — حرفياً من الكشف؛ الفصل المخفي لا يظهر"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="هذا الـ endpoint للطلاب فقط")
+    db = get_db()
+    student = await db.students.find_one({"user_id": current_user["id"]}, {"student_id": 1})
+    if not student:
+        return {"semesters": []}
+    sid, reg = str(student["_id"]), _text(student.get("student_id"))
+    recs = await db.student_grades.find({"$or": [{"student_db_id": sid}] + ([{"student_db_id": {"$in": ["", None]}, "reg_no": reg}] if reg else [])}).to_list(100)
+    latest: dict = {}
+    for r in recs:
+        k = (r.get("level"), r.get("semester_no"))
+        if k not in latest or _year_key(r.get("academic_year")) >= _year_key(latest[k].get("academic_year")):
+            latest[k] = r
+    out = []
+    for (lvl, sem), r in sorted(latest.items(), key=lambda x: (x[0][0] or 0, x[0][1] or 0)):
+        e = await db.result_entries.find_one({"reg_no": reg, "level": lvl, "semester": sem, "academic_year": r.get("academic_year")})
+        if e and (e.get("hidden") or e.get("batch_hidden")):
+            continue
+        out.append({
+            "level": lvl, "semester": sem,
+            "status": _text(r.get("sem_status")), "gpa": _text(r.get("sem_gpa")), "cumulative_gpa": _text(r.get("cum_gpa")),
+            "courses": [{"name": g.get("course_name"), "credits": _text(g.get("credits")), "total": _text(g.get("total")),
+                         "grade": _text(g.get("letter")), "stage": g.get("stage") or "first",
+                         "stage_label": {"first": "دور أول", "second": "دور ثان", "tasfiya": "تصفية", "exceptional": "استثنائي"}.get(g.get("stage") or "first")}
+                        for g in r.get("grades", [])],
+        })
+    return {"semesters": out}

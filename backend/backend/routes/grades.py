@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity, has_permission, export_stamp, export_filename, export_headers
+from .deps import get_db, get_current_user, log_activity, has_permission, export_stamp, export_filename, export_headers, get_own_department_ids
 
 router = APIRouter()
 
@@ -20,7 +20,31 @@ LEVEL_AR = {1: "الأول", 2: "الثاني", 3: "الثالث", 4: "الرا�
 
 def _can_manage(user: dict) -> bool:
     """🔒 لا صلاحيات افتراضية بالدور — إدارة الدرجات تتطلّب صراحةً manage_grades"""
-    return user.get("role") == "admin" or has_permission(user, "manage_grades")
+    return has_permission(user, "manage_grades")
+
+
+async def _deps(user: dict):
+    """🔒 None = غير مقيَّد · وإلا أقسام نطاق المستخدم"""
+    d = await get_own_department_ids(user)
+    return None if d is None else set(d)
+
+
+def _dep_filter(deps) -> dict:
+    return {} if deps is None else {"department_id": {"$in": list(deps)}}
+
+
+async def _check_dep(user: dict, department_id: str):
+    deps = await _deps(user)
+    if deps is not None and department_id not in deps:
+        raise HTTPException(status_code=403, detail="هذا الكشف/الطالب خارج نطاقك")
+
+
+async def _check_import(db, user: dict, import_id: str) -> dict:
+    imp = await db.grade_imports.find_one({"_id": ObjectId(import_id)}) if ObjectId.is_valid(import_id) else None
+    if not imp:
+        raise HTTPException(status_code=404, detail="الاستيراد غير موجود")
+    await _check_dep(user, imp.get("department_id", ""))
+    return imp
 
 
 def _norm_name(n: str) -> str:
@@ -478,6 +502,7 @@ async def _compute_analysis(db, import_id: str) -> dict:
 async def analyze_import(import_id: str, current_user: dict = Depends(get_current_user)):
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
+    await _check_import(get_db(), current_user, import_id)
     return await _compute_analysis(get_db(), import_id)
 
 
@@ -487,8 +512,9 @@ async def cumulative_analysis(current_user: dict = Depends(get_current_user)):
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
-    imports = await db.grade_imports.find().to_list(200)
-    recs = await db.student_grades.find().to_list(10000)
+    dq = _dep_filter(await _deps(current_user))
+    imports = await db.grade_imports.find(dq).to_list(200)
+    recs = await db.student_grades.find(dq).to_list(10000)
     comp = []
     for imp in imports:
         iid = str(imp["_id"])
@@ -702,6 +728,7 @@ async def import_grades(
     batch_no: str = Form(""),
     commit: str = Form("false"),
     replace: str = Form("false"),
+    notify: str = Form("true"),
     current_user: dict = Depends(get_current_user),
 ):
     """معاينة (commit=false) أو اعتماد (commit=true) استيراد كشف درجات فصلي من Excel"""
@@ -710,6 +737,8 @@ async def import_grades(
     db = get_db()
     content = await file.read()
     parsed = _parse_grades_file(content, file.filename or "grades.xls")
+    from services.grade_stages import enrich_with_stages
+    enrich_with_stages(parsed, content, file.filename or "grades.xls")
     if not parsed["students"]:
         raise HTTPException(status_code=400, detail="لم يتم العثور على أي طالب في الملف")
 
@@ -746,12 +775,22 @@ async def import_grades(
     if commit == "true" and not (faculty_id and department_id and level and semester_no and academic_year):
         raise HTTPException(status_code=400, detail="أكمل بيانات الكشف (الكلية/القسم/المستوى/الفصل/العام الجامعي)")
 
-    # مطابقة الطلاب: رقم القيد أولاً ثم الاسم
-    all_students = await db.students.find({}, {"student_id": 1, "full_name": 1, "department_id": 1}).to_list(20000)
+    # 🔒 الكشف يجب أن يكون داخل نطاق المستخدم — والمطابقة داخل القسم فقط (لا تسلّل لطلاب كليات أخرى)
+    deps = await _deps(current_user)
+    if department_id:
+        await _check_dep(current_user, department_id)
+    elif commit == "true":
+        raise HTTPException(status_code=400, detail="اختر القسم")
+    sq = {"department_id": department_id} if department_id else _dep_filter(deps)
+    all_students = await db.students.find(sq, {"student_id": 1, "full_name": 1, "department_id": 1, "user_id": 1, "level": 1}).to_list(20000)
     by_reg = {str(s.get("student_id", "")).strip(): s for s in all_students if s.get("student_id")}
     by_name: dict = {}
+    name_count: dict = {}
     for s in all_students:
-        by_name.setdefault(_norm_name(s.get("full_name", "")), s)
+        k = _norm_name(s.get("full_name", ""))
+        name_count[k] = name_count.get(k, 0) + 1
+        by_name.setdefault(k, s)
+    by_name = {k: v for k, v in by_name.items() if name_count[k] == 1}  # الاسم المكرر لا يُطابَق تلقائياً
 
     matched, name_matched, unmatched = 0, 0, 0
     for i, st in enumerate(parsed["students"]):
@@ -852,6 +891,8 @@ async def import_grades(
             "grades": st["grades"],
             "result": st["result"],
             "note": st["note"],
+            "sem_stage": st.get("sem_stage"), "sem_status": st.get("sem_status"),
+            "sem_gpa": st.get("sem_gpa"), "cum_gpa": st.get("cum_gpa"),
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
     if docs:
@@ -860,6 +901,12 @@ async def import_grades(
                        {"summary": f"استيراد درجات: مستوى {level} فصل {semester_no} ({academic_year}) — {len(docs)} طالب، {len(parsed['courses'])} مقرر"})
     result["import_id"] = iid
     result["message"] = f"✅ تم اعتماد الاستيراد: {len(docs)} طالب و{len(parsed['courses'])} مقرر"
+    # 🔗 ربط نتيجة الفصل بجدول «النتائج» وتطبيق الطالب (قابل للإخفاء/التراجع + إشعار لمن تغيّرت نتيجته)
+    from routes.student_results import link_grades_import
+    linked = await link_grades_import(db, current_user, iid, imp_doc, parsed["students"], {str(s["_id"]): s for s in all_students}, notify == "true")
+    result.update(linked)
+    if linked.get("linked"):
+        result["message"] += f" · رُبطت {linked['linked']} نتيجة بصفحة النتائج" + (f" · إشعار لـ {linked['notified']} طالب" if linked.get("notified") else "")
     return result
 
 
@@ -870,7 +917,7 @@ async def list_grade_imports(current_user: dict = Depends(get_current_user)):
     db = get_db()
     out = []
     dept_names = {str(d["_id"]): d.get("name", "") async for d in db.departments.find({}, {"name": 1})}
-    for i in await db.grade_imports.find().sort("imported_at", -1).to_list(200):
+    for i in await db.grade_imports.find(_dep_filter(await _deps(current_user))).sort("imported_at", -1).to_list(200):
         out.append({
             "id": str(i["_id"]), "filename": i.get("filename", ""),
             "department_id": i.get("department_id", ""),
@@ -889,9 +936,7 @@ async def delete_grade_import(import_id: str, current_user: dict = Depends(get_c
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
-    imp = await db.grade_imports.find_one({"_id": ObjectId(import_id)})
-    if not imp:
-        raise HTTPException(status_code=404, detail="الاستيراد غير موجود")
+    imp = await _check_import(db, current_user, import_id)
     res = await db.student_grades.delete_many({"import_id": import_id})
     await db.grade_imports.delete_one({"_id": ObjectId(import_id)})
     await log_activity(current_user, "delete_grades_import", "grades", import_id, imp.get("filename", ""),
@@ -907,10 +952,10 @@ async def search_grade_students(q: str = "", current_user: dict = Depends(get_cu
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
-    query = {}
+    query = _dep_filter(await _deps(current_user))
     if q.strip():
-        query = {"$or": [{"student_name": {"$regex": q.strip(), "$options": "i"}},
-                         {"reg_no": {"$regex": q.strip(), "$options": "i"}}]}
+        query["$or"] = [{"student_name": {"$regex": re.escape(q.strip()), "$options": "i"}},
+                        {"reg_no": {"$regex": re.escape(q.strip()), "$options": "i"}}]
     groups: dict = {}
     for g in await db.student_grades.find(query).to_list(3000):
         key = g.get("student_db_id") or f"{g.get('reg_no')}|{_norm_name(g.get('student_name', ''))}"
@@ -933,7 +978,7 @@ async def get_academic_record(
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
-    q = {}
+    q = _dep_filter(await _deps(current_user))
     if student_db_id:
         q["student_db_id"] = student_db_id
     elif reg_no:
@@ -974,6 +1019,7 @@ async def update_grade_record(record_id: str, data: GradeRecordUpdate, current_u
     rc = await db.student_grades.find_one({"_id": ObjectId(record_id)})
     if not rc:
         raise HTTPException(status_code=404, detail="السجل غير موجود")
+    await _check_dep(current_user, rc.get("department_id", ""))
     upd = {}
     if data.grades is not None:
         upd["grades"] = data.grades
@@ -1010,6 +1056,8 @@ async def issue_grade_statement(data: GradeStatementRequest, current_user: dict 
     recs = await db.student_grades.find({"_id": {"$in": [ObjectId(r) for r in data.record_ids]}}).to_list(30)
     if not recs:
         raise HTTPException(status_code=404, detail="لا توجد سجلات")
+    for rc in recs:
+        await _check_dep(current_user, rc.get("department_id", ""))
     recs.sort(key=lambda x: (x.get("academic_year", ""), x.get("level") or 0, x.get("semester_no") or 0))
     student_name = recs[0].get("student_name", "")
     reg_no = recs[0].get("reg_no", "")
@@ -1351,6 +1399,7 @@ def _analysis_course_table(a: dict):
 async def export_analysis_excel(import_id: str, current_user: dict = Depends(get_current_user)):
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
+    await _check_import(get_db(), current_user, import_id)
     a = await _compute_analysis(get_db(), import_id)
     from urllib.parse import quote
     from openpyxl import Workbook
@@ -1411,6 +1460,7 @@ async def export_analysis_excel(import_id: str, current_user: dict = Depends(get
 async def export_analysis_pdf(import_id: str, current_user: dict = Depends(get_current_user)):
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
+    await _check_import(get_db(), current_user, import_id)
     a = await _compute_analysis(get_db(), import_id)
     from urllib.parse import quote
     import arabic_reshaper
