@@ -11,6 +11,7 @@ import { StudentResultsCard } from '../src/components/results/StudentResultsCard
 import { ResultsUploadWizard } from '../src/components/results/ResultsUploadWizard';
 import { ResultsHistory } from '../src/components/results/ResultsHistory';
 import { ResultsTable, SRow } from '../src/components/results/ResultsTable';
+import { ResultsPausePanel, usePauses } from '../src/components/results/ResultsPausePanel';
 
 type Dep = Opt & { faculty_id?: string };
 const EMPTY = { faculty_id: '', department_id: '', level: '', section: '', academic_year: '', q: '' };
@@ -39,7 +40,8 @@ export default function ResultsPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [modal, setModal] = useState<'' | 'upload' | 'history'>('');
+  const [modal, setModal] = useState<'' | 'upload' | 'history' | 'pause'>('');
+  const pz = usePauses();
 
   useEffect(() => {
     api.get('/faculties').then((r) => setFaculties((r.data || []).map((x: any) => ({ id: x.id, name: x.name, levels_count: x.levels_count, sections: x.sections })))).catch(() => {});
@@ -96,6 +98,12 @@ export default function ResultsPage() {
                 <Ionicons name="document-outline" size={16} color="#fff" /><Text style={st.hBtnTxt}>نموذج Excel فارغ</Text>
               </TouchableOpacity>
             )}
+            {canManage && (
+              <TouchableOpacity style={[st.hBtn, { backgroundColor: pz.items.length ? '#ea580c' : '#fff', borderWidth: 1, borderColor: pz.items.length ? '#ea580c' : '#e3e7ee' }]} onPress={() => setModal('pause')} testID="results-pause-open-btn">
+                <Ionicons name={pz.items.length ? 'pause-circle' : 'pause-circle-outline'} size={16} color={pz.items.length ? '#fff' : '#ea580c'} />
+                <Text style={[st.hBtnTxt, { color: pz.items.length ? '#fff' : '#ea580c' }]}>{pz.items.length ? `العرض موقوف (${pz.items.length})` : 'إيقاف عرض النتائج في التطبيق'}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={[st.hBtn, st.ghost]} onPress={() => setModal('history')} testID="results-history-open-btn">
               <Ionicons name="time-outline" size={16} color="#1a2540" /><Text style={[st.hBtnTxt, { color: '#1a2540' }]}>سجل العمليات</Text>
             </TouchableOpacity>
@@ -145,6 +153,16 @@ export default function ResultsPage() {
         <ModalShell title="رفع نتائج من Excel" icon="cloud-upload-outline" onClose={() => { setModal(''); load(page); }} testID="results-upload-modal">
           <ResultsUploadWizard years={years} faculties={fullFacs} departments={filterDepartments(departments)} restrictedFaculty={restricted && !fullFacs.length} allFaculties={faculties} onDone={() => load(page)} />
         </ModalShell>
+      )}
+      {modal === 'pause' && canManage && (
+        <ModalShell title="إيقاف عرض النتائج في التطبيق" icon="pause-circle-outline" onClose={() => setModal('')} testID="results-pause-modal">
+          <ResultsPausePanel pauses={pz.items} canAll={pz.canAll} faculties={fullFacs} departments={filterDepartments(departments)} onChanged={pz.load} />
+        </ModalShell>
+      )}
+      {!!pz.items.length && !modal && (
+        <View style={{ position: 'absolute', bottom: 14, alignSelf: 'center', backgroundColor: '#ea580c', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 }} testID="results-paused-banner">
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12.5 }}>⏸ عرض النتائج موقوف في التطبيق: {pz.items.map((p) => p.scope_name).join('، ')}</Text>
+        </View>
       )}
       {modal === 'history' && (
         <ModalShell title="سجل العمليات" icon="time-outline" onClose={() => { setModal(''); load(page); }} testID="results-history-modal">

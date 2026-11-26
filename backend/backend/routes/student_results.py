@@ -10,7 +10,7 @@ from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadF
 from fastapi.responses import StreamingResponse
 
 from .deps import get_current_user, get_db, has_permission, log_activity
-from .prep_leave import _user_scope
+from .prep_leave import _user_scope, _target_in_scope
 
 router = APIRouter()
 
@@ -145,10 +145,12 @@ async def get_my_results(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "student":
         raise HTTPException(status_code=403, detail="هذا الـ endpoint للطلاب فقط")
     db = get_db()
-    student = await db.students.find_one({"user_id": current_user["id"]}, {"student_id": 1})
+    student = await db.students.find_one({"user_id": current_user["id"]}, {"student_id": 1, "department_id": 1})
     reg = _text((student or {}).get("student_id"))
     if not reg:
         return {"levels": []}
+    if await _student_paused(db, student):
+        return {"levels": [], "paused": True, "message": PAUSED_MSG}
     groups: dict = {}
     async for e in db.result_entries.find({"reg_no": reg}):
         groups.setdefault(e["level"], {}).setdefault(e["semester"], []).append(e)
@@ -334,7 +336,7 @@ async def _batch_scoped(db, user: dict, batch_id: str) -> dict:
     return b
 
 
-KIND_AR = {"import": "رفع ملف", "manual": "تعديل يدوي", "manual_delete": "حذف يدوي"}
+KIND_AR = {"import": "رفع ملف", "manual": "تعديل يدوي", "manual_delete": "حذف يدوي", "pause": "⏸ إيقاف عرض النتائج", "resume": "▶ استئناف عرض النتائج"}
 
 
 @router.get("/results/batches")
@@ -350,7 +352,7 @@ async def list_batches(current_user: dict = Depends(get_current_user)):
             "academic_year": b.get("academic_year"), "level": b.get("level"), "semester": b.get("semester"),
             "scope_name": (b.get("scope_name", "") + (f" · شعبة {b['section']}" if b.get("section") else "")), "student_name": b.get("student_name", ""), "file_name": b.get("file_name", ""),
             "counts": b.get("counts") or {}, "notified": b.get("notified", 0), "hidden": b.get("hidden", False),
-            "undone": b.get("undone", False), "undone_by_name": b.get("undone_by_name", ""),
+            "undone": b.get("undone", False), "event_only": b.get("event_only", False), "undone_by_name": b.get("undone_by_name", ""),
             "created_by_name": b.get("created_by_name", ""),
             "created_at": b["created_at"].isoformat() if isinstance(b.get("created_at"), datetime) else b.get("created_at"),
         })
@@ -659,9 +661,11 @@ async def get_my_grades(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != "student":
         raise HTTPException(status_code=403, detail="هذا الـ endpoint للطلاب فقط")
     db = get_db()
-    student = await db.students.find_one({"user_id": current_user["id"]}, {"student_id": 1})
+    student = await db.students.find_one({"user_id": current_user["id"]}, {"student_id": 1, "department_id": 1})
     if not student:
         return {"semesters": []}
+    if await _student_paused(db, student):
+        return {"semesters": [], "paused": True, "message": PAUSED_MSG}
     sid, reg = str(student["_id"]), _text(student.get("student_id"))
     recs = await db.student_grades.find({"$or": [{"student_db_id": sid}] + ([{"student_db_id": {"$in": ["", None]}, "reg_no": reg}] if reg else [])}).to_list(100)
     latest: dict = {}
@@ -683,3 +687,72 @@ async def get_my_grades(current_user: dict = Depends(get_current_user)):
                         for g in r.get("grades", [])],
         })
     return {"semesters": out}
+
+
+# ==================== ⏸ إيقاف عرض النتائج في التطبيق (جامعة / كلية / قسم) ====================
+PAUSED_MSG = "النتائج غير متاحة حالياً"
+
+
+async def _student_paused(db, student: dict) -> bool:
+    dep_id = (student or {}).get("department_id")
+    dep = await db.departments.find_one({"_id": ObjectId(dep_id)}, {"faculty_id": 1}) if ObjectId.is_valid(dep_id or "") else None
+    ors = [{"scope": "all"}, {"scope": "department", "scope_id": dep_id}]
+    if dep and dep.get("faculty_id"):
+        ors.append({"scope": "faculty", "scope_id": dep["faculty_id"]})
+    return bool(await db.results_pauses.find_one({"$or": ors}))
+
+
+async def _scope_label(db, scope: str, scope_id) -> str:
+    if scope == "all":
+        return "الجامعة بالكامل"
+    coll = "faculties" if scope == "faculty" else "departments"
+    d = await db[coll].find_one({"_id": ObjectId(scope_id)}, {"name": 1}) if ObjectId.is_valid(scope_id or "") else None
+    return (d or {}).get("name", "")
+
+
+@router.get("/results/pauses")
+async def list_pauses(current_user: dict = Depends(get_current_user)):
+    _guard_view(current_user)
+    db = get_db()
+    sc = await _user_scope(db, current_user)
+    items = []
+    async for p in db.results_pauses.find({}).sort("paused_at", -1):
+        mine = await _target_in_scope(db, sc, p["scope"], p.get("scope_id"))
+        visible = sc is None or p["scope"] == "all" or mine or (p["scope"] == "faculty" and p.get("scope_id") in sc["facs"])
+        if visible:
+            items.append({"id": str(p["_id"]), "scope": p["scope"], "scope_id": p.get("scope_id"), "scope_name": p.get("scope_name", ""),
+                          "paused_by_name": p.get("paused_by_name", ""), "can_resume": mine and has_permission(current_user, "manage_results"),
+                          "paused_at": p["paused_at"].isoformat() if isinstance(p.get("paused_at"), datetime) else p.get("paused_at")})
+    return {"items": items, "can_pause_all": sc is None}
+
+
+@router.post("/results/pauses")
+async def set_pause(data: dict = Body(...), current_user: dict = Depends(get_current_user)):
+    """paused=true يوقف العرض للنطاق · paused=false يستأنفه — لا يُحذف أي شيء"""
+    _guard(current_user)
+    db = get_db()
+    scope, scope_id, paused = data.get("scope"), data.get("scope_id") or None, bool(data.get("paused"))
+    if scope not in ("all", "faculty", "department") or (scope != "all" and not scope_id):
+        raise HTTPException(status_code=400, detail="اختر النطاق")
+    sc = await _user_scope(db, current_user)
+    if not await _target_in_scope(db, sc, scope, scope_id):
+        raise HTTPException(status_code=403, detail="هذا النطاق خارج صلاحيتك")
+    key = {"scope": scope, "scope_id": None if scope == "all" else scope_id}
+    name = await _scope_label(db, scope, scope_id)
+    if paused:
+        await db.results_pauses.update_one(key, {"$set": {"scope_name": name, "paused_at": datetime.now(timezone.utc),
+                                                          "paused_by": current_user.get("id"), "paused_by_name": current_user.get("full_name", "")}}, upsert=True)
+    else:
+        r = await db.results_pauses.delete_one(key)
+        if not r.deleted_count:
+            raise HTTPException(status_code=404, detail="العرض غير موقوف لهذا النطاق")
+    if scope == "all":
+        deps = []
+    elif scope == "faculty":
+        deps = [str(d["_id"]) async for d in db.departments.find({"faculty_id": scope_id}, {"_id": 1})]
+    else:
+        deps = [scope_id]
+    bid = await _new_batch(db, current_user, "pause" if paused else "resume", {"scope": scope, "scope_id": scope_id, "scope_name": name}, deps)
+    await db.result_batches.update_one({"_id": ObjectId(bid)}, {"$set": {"event_only": True}})
+    await log_activity(current_user, "pause_results" if paused else "resume_results", "results_pauses", scope_id or "all", name)
+    return {"paused": paused, "message": f"تم إيقاف عرض النتائج في التطبيق: {name}" if paused else f"عاد عرض النتائج في التطبيق: {name}"}

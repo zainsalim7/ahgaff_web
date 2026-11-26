@@ -7,7 +7,7 @@ import { rs } from './resultsUi';
 interface Batch {
   id: string; kind: string; kind_name: string; academic_year: string | null; level: number; semester: number;
   scope_name: string; student_name: string; file_name: string; counts: any; notified: number; hidden: boolean;
-  undone: boolean; undone_by_name: string; created_by_name: string; created_at: string;
+  undone: boolean; undone_by_name: string; created_by_name: string; created_at: string; event_only?: boolean;
 }
 
 const confirmBox = async (msg: string) => Platform.OS === 'web' ? window.confirm(msg)
@@ -17,6 +17,12 @@ const fmt = (iso: string) => { try { return new Date(iso).toLocaleString('ar-EG'
 
 const BatchCard = ({ b, canManage, onAct }: { b: Batch; canManage: boolean; onAct: (b: Batch, a: 'hide' | 'show' | 'undo') => void }) => {
   const c = b.counts || {};
+  if (b.event_only) return (
+    <View style={[rs.card, { backgroundColor: b.kind === 'pause' ? '#fff7ed' : '#f0fdf4' }]} testID={`batch-${b.id}`}>
+      <Text style={rs.title}>{b.kind_name} · {b.scope_name}</Text>
+      <Text style={{ color: '#94a3b8', textAlign: 'right', fontSize: 11.5 }}>{b.created_by_name} · {fmt(b.created_at)}</Text>
+    </View>
+  );
   return (
     <View style={[rs.card, b.undone && { opacity: 0.6 }]} testID={`batch-${b.id}`}>
       <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
