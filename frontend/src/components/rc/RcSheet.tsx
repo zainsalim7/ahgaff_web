@@ -18,7 +18,7 @@ const Count = ({ label, value, color }: { label: string; value: number; color: s
   </View>
 );
 
-export const RcSheet = ({ courseId, perms, onBack }: { courseId: string; perms: RcPerms; onBack: () => void }) => {
+export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: string; perms: RcPerms; onBack: () => void; onFaculty?: (id: string) => void }) => {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [tab, setTab] = useState<TabId>('coursework');
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -29,7 +29,7 @@ export const RcSheet = ({ courseId, perms, onBack }: { courseId: string; perms: 
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    try { setSheet((await api.get(`/rc/courses/${courseId}/sheet`)).data); }
+    try { const d = (await api.get(`/rc/courses/${courseId}/sheet`)).data; setSheet(d); onFaculty?.(d.course.faculty_id || ''); }
     catch (e: any) { setMsg({ ok: false, text: e?.response?.data?.detail || 'تعذر جلب الكشف' }); }
   }, [courseId]);
   useEffect(() => { load(); }, [load]);

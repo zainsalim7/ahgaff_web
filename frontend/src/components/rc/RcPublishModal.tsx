@@ -45,6 +45,7 @@ export const RcPublishModal = ({ departmentId, departmentName, level, semesterId
         <PickerField label="الفصل" options={SEMS} value={p.semester_no} onChange={(semester_no) => setP({ ...p, semester_no })} testID="rc-pub-sem" maxWidth={180} />
         <PickerField label="السنة الدراسية" options={years.map((y) => ({ id: y, name: y }))} value={p.academic_year} onChange={(academic_year) => setP({ ...p, academic_year })} testID="rc-pub-year" maxWidth={200} />
       </View>
+      {!['1', '2'].includes(defaultTerm) && <Text style={{ color: '#64748b', fontSize: 12, textAlign: 'right', marginTop: 4 }} testID="rc-pub-term-hint">الفصل المختار ليس أولاً أو ثانياً (مثل الصيفي) — حدّد في أي فصل تُسجَّل النتيجة في صفحة النتائج</Text>}
       <TouchableOpacity style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginVertical: 10 }} onPress={() => setP({ ...p, notify: !p.notify })} testID="rc-pub-notify-toggle">
         <Ionicons name={p.notify ? 'checkbox' : 'square-outline'} size={20} color="#1565c0" />
         <Text style={rc.td}>عند النشر: إشعار الطلاب الذين أُضيفت أو تغيّرت نتيجتهم</Text>

@@ -48,6 +48,7 @@ export default function ResultsCenterPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  const [openFac, setOpenFac] = useState('');
   const [modal, setModal] = useState<'' | 'settings' | 'publish'>('');
 
   useEffect(() => {
@@ -73,7 +74,7 @@ export default function ResultsCenterPage() {
 
   const myFacs = filterFaculties(faculties) as Fac[];
   const myDeps = filterDepartments(departments).filter((d) => !f.faculty_id || d.faculty_id === f.faculty_id);
-  const facId = f.faculty_id || departments.find((d) => d.id === f.department_id)?.faculty_id || (myFacs.length === 1 ? myFacs[0].id : '');
+  const facId = (open && openFac) || f.faculty_id || departments.find((d) => d.id === f.department_id)?.faculty_id || (myFacs.length === 1 ? myFacs[0].id : '');
   const meta = facultyMeta(myFacs, facId);
   const sem = sems.find((s) => s.id === f.semester_id);
 
@@ -107,7 +108,7 @@ export default function ResultsCenterPage() {
           </View>
         </View>
 
-        {open ? <RcSheet courseId={open} perms={perms} onBack={() => setOpen(null)} /> : (
+        {open ? <RcSheet courseId={open} perms={perms} onBack={() => { setOpen(null); setOpenFac(''); }} onFaculty={setOpenFac} /> : (
           <>
             <View style={st.flow} testID="rc-flow">
               {['أعمال السعي', 'كشف الأهلية', 'الدور الأول', 'الدور الثاني', 'الاستثنائي', 'الاعتماد ← النتائج'].map((x, i, a) => (

@@ -246,6 +246,7 @@ class TestGradesLinkDraft:
 
 class TestUndoDraftAfterManualEdit:
     def test_undo_draft_after_manual_edit_not_stuck_hidden(self):
+        mdb.students.update_one({"_id": S["sid"]}, {"$set": {"student_id": "1001"}})  # previous class renames reg_no
         r = imp(S["admin"], [["1001", "TEST_ناجح", "66", "جيد"]], sem="2", level="2")
         assert r.status_code == 200, r.text
         d = r.json()["batch_id"]

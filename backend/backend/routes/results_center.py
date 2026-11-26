@@ -87,10 +87,14 @@ async def put_settings(data: dict = Body(...), current_user: dict = Depends(get_
         raise HTTPException(status_code=400, detail="سلم التقديرات غير صحيح")
     cfg["grade_scale"] = scale
     old = await _settings(db, fid)
-    if old["coursework_max"] != cfg["coursework_max"]:
-        cids = [str(c["_id"]) async for c in db.courses.find({"faculty_id": fid}, {"_id": 1})]
-        if await db.rc_marks.find_one({"course_id": {"$in": cids}, "$or": [{"coursework": {"$ne": None}}, {"first_exam": {"$ne": None}}]}):
-            raise HTTPException(status_code=400, detail="لا يمكن تغيير درجة السعي بعد بدء رصد الدرجات في مقررات هذه الكلية")
+    dep_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": fid}, {"_id": 1})]
+    cids = [str(c["_id"]) async for c in db.courses.find({"$or": [{"faculty_id": fid}, {"department_id": {"$in": dep_ids}}]}, {"_id": 1})]
+    if old["coursework_max"] != cfg["coursework_max"] and await db.rc_marks.find_one(
+            {"course_id": {"$in": cids}, "$or": [{"coursework": {"$ne": None}}, {"first_exam": {"$ne": None}}]}):
+        raise HTTPException(status_code=400, detail="لا يمكن تغيير درجة السعي بعد بدء رصد الدرجات في مقررات هذه الكلية")
+    rules = ("coursework_pass_pct", "pass_mark", "second_cap", "exceptional_cap")
+    if any(old[k] != cfg[k] for k in rules) and await db.rc_sheets.find_one({"course_id": {"$in": cids}, "coursework_locked": True}):
+        raise HTTPException(status_code=400, detail="لا يمكن تغيير نسب النجاح أو السقوف بعد إقفال السعي في مقررات هذه الكلية — افتح السعي أولاً")
     await db.rc_settings.update_one({"faculty_id": fid}, {"$set": {**cfg, "updated_at": _now(), "updated_by_name": current_user.get("full_name", "")}}, upsert=True)
     await log_activity(current_user, "rc_update_settings", "rc_settings", fid, "", cfg)
     return {"message": "تم حفظ إعدادات اللائحة", **cfg, "final_max": 100 - cfg["coursework_max"]}
@@ -129,7 +133,10 @@ async def list_courses(faculty_id: str = "", department_id: str = "", level: int
     ids = [str(c["_id"]) for c in courses]
     sheets = {s["course_id"]: s async for s in db.rc_sheets.find({"course_id": {"$in": ids}})}
     enr: dict = {}
-    async for e in db.enrollments.aggregate([{"$match": {"course_id": {"$in": ids}}}, {"$group": {"_id": "$course_id", "n": {"$sum": 1}}}]):
+    async for e in db.enrollments.aggregate([{"$match": {"course_id": {"$in": ids}}},
+                                             {"$addFields": {"sid": {"$convert": {"input": "$student_id", "to": "objectId", "onError": None, "onNull": None}}}},
+                                             {"$lookup": {"from": "students", "localField": "sid", "foreignField": "_id", "as": "s"}},
+                                             {"$match": {"s.0": {"$exists": True}}}, {"$group": {"_id": "$course_id", "n": {"$sum": 1}}}]):
         enr[e["_id"]] = e["n"]
     cw: dict = {}
     async for e in db.rc_marks.aggregate([{"$match": {"course_id": {"$in": ids}, "coursework": {"$ne": None}}}, {"$group": {"_id": "$course_id", "n": {"$sum": 1}}}]):
@@ -341,8 +348,8 @@ async def export_sheet(course_id: str, current_user: dict = Depends(get_current_
     head = ["رقم القيد", "الاسم", "الشعبة", "السعي", "غياب بلا عذر %", "غياب بعذر %", "الإجمالي %", "الأهلية", "سبب عدم الأهلية",
             "الدور الأول", "مجموع الدور الأول", "الدور الثاني", "المعتمد في الثاني", "الاستثنائي", "المعتمد في الاستثنائي", "الدرجة النهائية", "التقدير", "النتيجة", "الدور"]
     body = [[r["reg_no"], r["name"], r["section"], v(r["coursework"]), v(r["att"]["pct_unexcused"]), v(r["att"]["pct_excused"]), v(r["att"]["pct_total"]),
-             r["eligibility"], "، ".join(r["reasons"]), v(r["first_exam"]), v(r["total1"]), v(r["second_exam"]), v(r["final2"]),
-             v(r["exceptional_exam"]), v(r["final3"]), v(r["final"]), r["letter"] or "", r["result"], r["stage_label"]] for r in d["rows"]]
+             r["eligibility"], "، ".join(r["reasons"]), v(r["first_exam"] if r["eligible"] else None), v(r["total1"]),
+             v(r["second_exam"] if r["in_second"] else None), v(r["final2"]), v(r["exceptional_exam"] if r["in_exc"] else None), v(r["final3"]), v(r["final"]), r["letter"] or "", r["result"], r["stage_label"]] for r in d["rows"]]
     return _xlsx("كشف المقرر", head, body, "rc_sheet.xlsx")
 
 
