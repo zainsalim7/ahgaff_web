@@ -76,7 +76,7 @@ def compute(m: dict, cfg: dict, att: dict, decs: dict) -> dict:
     unc = bool(decs.get("second_uncapped"))
     if r["in_second"] and s2 is not None:
         r["pass2"] = _num(s2) is not None and s2 >= pm
-        r["final2"] = (s2 if unc else min(s2, cfg["second_cap"])) if _num(s2) is not None else 0
+        r["final2"] = (s2 if unc else min(s2, cfg["second_cap"])) if r["pass2"] else 0
     exc = decs.get("exceptional")
     r["in_exc"] = bool(exc) and r["pass2"] is False
     if r["in_exc"] and x3 is not None:
