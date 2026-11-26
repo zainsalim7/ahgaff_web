@@ -854,8 +854,10 @@ async def import_grades(
     if existing and replace != "true":
         raise HTTPException(status_code=409,
                             detail="يوجد استيراد سابق لنفس (القسم/المستوى/الفصل/العام). فعّل خيار «استبدال الاستيراد السابق» أو احذفه من تبويب الاستيرادات أولاً.")
+    replaced_ids: list = []
     if existing and replace == "true":
         olds = await db.grade_imports.find(scope_q).to_list(20)
+        replaced_ids = [str(o["_id"]) for o in olds]
         for o in olds:
             await db.student_grades.delete_many({"import_id": str(o["_id"])})
             await db.grade_imports.delete_one({"_id": o["_id"]})
@@ -905,6 +907,10 @@ async def import_grades(
     from routes.student_results import link_grades_import
     linked = await link_grades_import(db, current_user, iid, imp_doc, parsed["students"], {str(s["_id"]): s for s in all_students}, notify == "true")
     result.update(linked)
+    if replaced_ids:  # رفعات النتائج السابقة تنتقل للكشف الجديد (حذفه لاحقاً يتراجع عنها كلها)
+        await db.result_batches.update_many({"grade_import_id": {"$in": replaced_ids}}, {"$set": {"grade_import_id": iid}})
+    if linked.get("link_skipped"):
+        result["message"] += f" · {linked['link_skipped']}"
     if linked.get("linked"):
         result["message"] += f" · رُبطت {linked['linked']} نتيجة بصفحة النتائج" + (f" · إشعار لـ {linked['notified']} طالب" if linked.get("notified") else "")
     return result
@@ -937,6 +943,8 @@ async def delete_grade_import(import_id: str, current_user: dict = Depends(get_c
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     imp = await _check_import(db, current_user, import_id)
+    from routes.student_results import unlink_grades_import
+    await unlink_grades_import(db, current_user, import_id)
     res = await db.student_grades.delete_many({"import_id": import_id})
     await db.grade_imports.delete_one({"_id": ObjectId(import_id)})
     await log_activity(current_user, "delete_grades_import", "grades", import_id, imp.get("filename", ""),
@@ -1016,7 +1024,7 @@ async def update_grade_record(record_id: str, data: GradeRecordUpdate, current_u
     if not _can_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
-    rc = await db.student_grades.find_one({"_id": ObjectId(record_id)})
+    rc = await db.student_grades.find_one({"_id": ObjectId(record_id)}) if ObjectId.is_valid(record_id) else None
     if not rc:
         raise HTTPException(status_code=404, detail="السجل غير موجود")
     await _check_dep(current_user, rc.get("department_id", ""))
@@ -1053,7 +1061,7 @@ async def issue_grade_statement(data: GradeStatementRequest, current_user: dict 
     if not data.record_ids:
         raise HTTPException(status_code=400, detail="اختر فصلاً واحداً على الأقل")
     db = get_db()
-    recs = await db.student_grades.find({"_id": {"$in": [ObjectId(r) for r in data.record_ids]}}).to_list(30)
+    recs = await db.student_grades.find({"_id": {"$in": [ObjectId(r) for r in data.record_ids if ObjectId.is_valid(r)]}}).to_list(30)
     if not recs:
         raise HTTPException(status_code=404, detail="لا توجد سجلات")
     for rc in recs:
@@ -1275,8 +1283,8 @@ def _build_grade_statement_pdf(d: dict, settings: dict) -> bytes:
         row2 = [ar(_fmt_val(g.get("total", ""))) for g in rev] + [ar("الدرجة")]
         rows = [row0, row1, row2]
         heights = [16 * mm, 7 * mm, 8 * mm]
-        if any(g.get("grade_letter") for g in grades):
-            rows.append([ar(_fmt_val(g.get("grade_letter", ""))) for g in rev] + [ar("التقدير")])
+        if any(g.get("grade_letter") or g.get("letter") for g in grades):
+            rows.append([ar(_fmt_val(g.get("grade_letter") or g.get("letter") or "")) for g in rev] + [ar("التقدير")])
             heights.append(7 * mm)
         tbl = Table(rows, colWidths=[col_w] * n + [26 * mm],
                     rowHeights=heights)

@@ -379,7 +379,7 @@ export default function GradesScreen() {
                   onPress={() => setNotifyStudents((v) => !v)}
                   testID="grades-notify-toggle"
                 >
-                  <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#1565c0' }}>نشر نتيجة الفصل في «النتائج» وإشعار الطلاب الذين أُضيفت أو تغيّرت نتيجتهم</Text>
+                  <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#1565c0' }}>إشعار الطلاب الذين أُضيفت أو تغيّرت نتيجتهم (نتيجة الفصل تُنشر تلقائياً في «النتائج»)</Text>
                   <Ionicons name={notifyStudents ? 'checkbox' : 'square-outline'} size={20} color="#1565c0" />
                 </TouchableOpacity>
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -398,7 +398,7 @@ export default function GradesScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#333', textAlign: 'right' }}>{s.name} <Text style={{ color: '#999', fontWeight: '400' }}>({s.reg_no})</Text></Text>
                         <Text style={{ fontSize: 10.5, color: '#888', textAlign: 'right' }} numberOfLines={1}>
-                          {s.grades.map((g: any) => `${g.course_name}: ${g.total || '—'}`).join(' · ')}
+                          {s.sem_status ? `【${s.sem_status}${s.sem_gpa ? ` ${s.sem_gpa}` : ''}${s.cum_gpa ? ` · تراكمي ${s.cum_gpa}` : ''}】 ` : ''}{s.grades.map((g: any) => `${g.course_name}: ${g.total || '—'}${g.letter ? ` (${g.letter})` : ''}${g.stage === 'second' ? ' ⟲دور ثان' : g.stage === 'tasfiya' ? ' ⟲تصفية' : ''}`).join(' · ')}
                         </Text>
                         {!!s.result && <Text style={{ fontSize: 10.5, color: '#1565c0', textAlign: 'right' }}>النتيجة: {s.result} {s.note ? `— ${s.note}` : ''}</Text>}
                       </View>
@@ -449,7 +449,7 @@ export default function GradesScreen() {
                     {rc.grades.map((g: any, gi: number) => (
                       <View key={gi} style={st.gradeRow}>
                         <Text style={{ fontSize: 12, fontWeight: '700', color: g.total === '' ? '#999' : '#1565c0', width: 46, textAlign: 'center' }}>{g.total || '—'}</Text>
-                        {!!g.grade_letter && <Text style={{ fontSize: 10.5, color: '#00695c', width: 56, textAlign: 'center' }}>{g.grade_letter}</Text>}
+                        {!!(g.grade_letter || g.letter) && <Text style={{ fontSize: 10.5, color: '#00695c', width: 56, textAlign: 'center' }}>{g.grade_letter || g.letter}{g.stage === 'second' ? ' · دور ثان' : g.stage === 'tasfiya' ? ' · تصفية' : ''}</Text>}
                         <Text style={{ fontSize: 11, color: '#999', width: 34, textAlign: 'center' }}>{g.credits}</Text>
                         <Text style={{ fontSize: 12, color: '#333', flex: 1, textAlign: 'right' }}>{g.course_name}</Text>
                       </View>

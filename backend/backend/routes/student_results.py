@@ -373,14 +373,7 @@ async def batch_visibility(batch_id: str, data: dict = Body(...), current_user: 
             "message": f"تم إخفاء {r.modified_count} نتيجة عن الطلاب" if hidden else f"أصبحت {r.matched_count} نتيجة ظاهرة للطلاب"}
 
 
-@router.post("/results/batches/{batch_id}/undo")
-async def undo_batch(batch_id: str, current_user: dict = Depends(get_current_user)):
-    """↩️ التراجع: تعود النتائج كما كانت قبل الرفعة/التعديل (دون إشعار) — يُتخطّى ما عُدِّل بعدها"""
-    _guard(current_user)
-    db = get_db()
-    b = await _batch_scoped(db, current_user, batch_id)
-    if b.get("undone"):
-        raise HTTPException(status_code=400, detail="تم التراجع عن هذه الرفعة مسبقاً")
+async def _undo_batch(db, current_user: dict, b: dict, batch_id: str):
     restored = skipped = 0
     for ch in reversed(b.get("changes") or []):
         key, before = ch["key"], ch.get("before")
@@ -404,6 +397,27 @@ async def undo_batch(batch_id: str, current_user: dict = Depends(get_current_use
         "undone": True, "undone_at": datetime.now(timezone.utc), "undone_by_name": current_user.get("full_name", ""),
         "undo_result": {"restored": restored, "skipped": skipped}}})
     await log_activity(current_user, "undo_results_batch", "result_batches", batch_id, b.get("scope_name", ""), {"restored": restored, "skipped": skipped})
+    return restored, skipped
+
+
+async def unlink_grades_import(db, user: dict, import_id: str) -> int:
+    """عند حذف/استبدال كشف درجات: التراجع عن رفعات النتائج المرتبطة به"""
+    n = 0
+    async for b in db.result_batches.find({"grade_import_id": import_id, "undone": {"$ne": True}}).sort("created_at", -1):
+        await _undo_batch(db, user, b, str(b["_id"]))
+        n += 1
+    return n
+
+
+@router.post("/results/batches/{batch_id}/undo")
+async def undo_batch(batch_id: str, current_user: dict = Depends(get_current_user)):
+    """↩️ التراجع: تعود النتائج كما كانت قبل الرفعة/التعديل (دون إشعار) — يُتخطّى ما عُدِّل بعدها"""
+    _guard(current_user)
+    db = get_db()
+    b = await _batch_scoped(db, current_user, batch_id)
+    if b.get("undone"):
+        raise HTTPException(status_code=400, detail="تم التراجع عن هذه الرفعة مسبقاً")
+    restored, skipped = await _undo_batch(db, current_user, b, batch_id)
     msg = f"تم التراجع: أُعيدت {restored} نتيجة إلى ما كانت عليه"
     if skipped:
         msg += f" · تُخطّيت {skipped} نتيجة لأنها عُدّلت بعد هذه الرفعة"
@@ -597,8 +611,22 @@ async def import_results(file: UploadFile = File(...), academic_year: str = Form
 # ==================== 🔗 ربط كشف الدرجات بالنتائج + بيان الدرجات في التطبيق ====================
 async def link_grades_import(db, user: dict, import_id: str, imp: dict, students: list, by_id: dict, notify: bool) -> dict:
     """نتيجة الفصل من الكشف ← result_entries (الحالة · المعدل الفصلي · «تراكمي X» مكان التقدير) كرفعة قابلة للإخفاء/التراجع"""
+    if not has_permission(user, "manage_results"):
+        return {"linked": 0, "notified": 0, "link_skipped": "لم تُنشر نتيجة الفصل في «النتائج» — تتطلب صلاحية «إدارة النتائج»"}
+    if int(imp["semester_no"]) not in (1, 2):
+        return {"linked": 0, "notified": 0, "link_skipped": "صفحة النتائج تدعم الفصلين الأول والثاني فقط"}
     key = {"level": int(imp["level"]), "semester": int(imp["semester_no"]), "academic_year": _text(imp.get("academic_year"))}
-    rows = [s for s in students if s.get("student_db_id") and s.get("sem_status") and by_id.get(s["student_db_id"])]
+    rows = []
+    for s in students:
+        st = by_id.get(s.get("student_db_id") or "")
+        if not st or not s.get("sem_status"):
+            continue
+        vals = {"status": _text(s.get("sem_status")), "gpa": _text(s.get("sem_gpa")),
+                "grade": f"تراكمي {s['cum_gpa']}" if _text(s.get("cum_gpa")) else None}
+        ekey = {"reg_no": st["student_id"], **key}
+        before = await _snapshot(db, ekey)
+        if not (before and all(before.get(k) == vals[k] for k in VALS)):
+            rows.append((st, vals, ekey, before))
     if not rows:
         return {"linked": 0, "notified": 0}
     dep = await db.departments.find_one({"_id": ObjectId(imp["department_id"])}, {"name": 1}) if ObjectId.is_valid(imp.get("department_id") or "") else None
@@ -607,16 +635,8 @@ async def link_grades_import(db, user: dict, import_id: str, imp: dict, students
                                                 "grade_import_id": import_id}, [imp.get("department_id")])
     now = datetime.now(timezone.utc)
     linked, uids = 0, set()
-    counts = {"new": 0, "changed": 0, "unchanged": 0}
-    for s in rows:
-        st = by_id[s["student_db_id"]]
-        vals = {"status": _text(s.get("sem_status")), "gpa": _text(s.get("sem_gpa")),
-                "grade": f"تراكمي {s['cum_gpa']}" if _text(s.get("cum_gpa")) else None}
-        ekey = {"reg_no": st["student_id"], **key}
-        before = await _snapshot(db, ekey)
-        if before and all(before.get(k) == vals[k] for k in VALS):
-            counts["unchanged"] += 1
-            continue
+    counts = {"new": 0, "changed": 0, "unchanged": len(students) - len(rows)}
+    for st, vals, ekey, before in rows:
         counts["changed" if before else "new"] += 1
         await _push_change(db, bid, ekey, before, True)
         await db.result_entries.update_one(ekey, {

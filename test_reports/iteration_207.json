@@ -1,0 +1,43 @@
+{
+  "summary": "Tested the grades stage-sheets feature with the real file: import, link to Results, the student's /me/grades, and department isolation. Backend: 13 pytest tests, 11 passed. Core flows pass: preview gives 33 students and 9 courses. Row 128002 reads 4.31 / تراكمي 4.44 with letters أ,أ,ب,ج,ب,ج,أ,أ,ب. Row 127306 has stage=second for القرآن and أصول الفقه. Matching stays inside the chosen department. Name-only matching works only when the name is unique in that department (a same-name student in another department does not affect it). Commit stores letter, stage and sem_status/sem_gpa/cum_gpa, creates a results batch named 'كشف درجات:…', and sets the result entry to status ناجح, gpa 4.31, grade 'تراكمي 4.44'. /me/grades and /me/results are correct for student 1001. Hiding the batch removes the semester from /me/grades and nulls it in /me/results. 409 without replace works. Dean Salim with manage_grades gets 403 on preview and commit into the other faculty's department. His imports list is filtered, and he is blocked (403) on analysis, the excel/pdf export, update, statement and delete of the out-of-scope import. search/record filter that data out. His own department works. 2 tests failed (see issues). Frontend: /grades loads. Preview shows 33 rows. grades-notify-toggle is visible, checked by default and switches when clicked. The imports, analysis and record tabs render. NOTE: /app/backend/tests/sample_grades_L3S2.xls did not exist; I copied it from /tmp/g.xls, which has the same sheets and gives 33 students.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "DELETE /api/grades/imports/{id}", "issue": "Deleting a grade import does not undo or remove the results batch it created. The result entry (ناجح / 4.31 / تراكمي 4.44) stays on the Results page and in the student app (/me/results), and the batch points to a grade_import_id that no longer exists. The same happens with replace=true: the old import is deleted but its results batch stays."},
+      {"endpoint": "POST /api/grades/import (commit, replace)", "issue": "A re-commit where no result changed still creates an empty results batch (counts unchanged=1, linked=0) and returns results_batch_id. This adds an empty entry to the Results batch log."},
+      {"endpoint": "PUT /api/grades/records/{id}, POST /api/grades/statement", "issue": "An invalid ObjectId returns 500 (bson InvalidId) instead of 400/404."},
+      {"endpoint": "POST /api/grades/import (link)", "issue": "The link writes result_entries using only manage_grades; manage_results is not checked. This may be intended, but it means a manage_grades-only user can publish results and send notifications. Also, if semester_no=3 (summer), entries are written with semester 3, which /me/results and the Results module (semesters 1/2 only) never show."},
+      {"endpoint": "grades record and PDF statement", "issue": "The new per-course 'letter' field (from the stage sheets) is not used. The admin record tab (grades.tsx:452) and the PDF statement (grades.py:1278) read only 'grade_letter', which is set only for template files. So letters from the real multi-sheet file do not show in the admin record or the official statement."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Student app per-course grade statement", "issue": "No frontend screen calls GET /api/students/me/grades (grep of /app/frontend finds nothing). The endpoint works, but students cannot see the per-course total, letter or round badge anywhere in the app. User requirement (1) is backend-only so far.", "affected_selectors": []},
+      {"flow": "Import tab auto-detect", "issue": "With the real file sample_grades_L3S2.xls, detect-meta finds nothing ('غير مكتشف'). The form defaults to level 4, semester 1, year 2026-2027 while the file is L3 S2, so a user who does not notice could commit with the wrong level and semester.", "affected_selectors": ["grades-detected-box", "grades-level-input", "grades-semester-input"]},
+      {"flow": "Preview rows", "issue": "The preview shows only course totals. The new letter, stage badge and sem_status/GPA are in the response but not shown before commit.", "affected_selectors": ["grades-preview-row-0"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_grades_stages_results_link.py", "/app/test_reports/pytest/iter207.xml"],
+  "action_items": [
+    "When a grade import is deleted (and when replace=true deletes the old one), undo its linked results batch (result_batches.grade_import_id) so no orphan results stay in the Results page or the app.",
+    "Skip creating a results batch when nothing changed (linked == 0).",
+    "Check ObjectId.is_valid in PUT /grades/records/{id} and POST /grades/statement; return 400/404 instead of 500.",
+    "Add a student-app screen that uses /api/students/me/grades (per course: total, letter, round badge; plus status, GPA, cumulative) if requirement (1) means the app UI.",
+    "Use g.letter as a fallback for grade_letter in the admin record tab and the PDF statement.",
+    "Optional: show letter, stage badge and semester status/GPA in the import preview; improve meta detection for the multi-sheet legacy file (level/semester/batch 28)."
+  ],
+  "critical_code_review_comments": [
+    "grades.py is 1560 lines; it should be split (parsing, analysis export, statement PDF).",
+    "link_grades_import only adds a manage_grades check for result_entries; consider also requiring or logging manage_results.",
+    "enrich_with_stages matches students across stage sheets by normalized name only. Two students with the same name in one file would get each other's letters and GPA. Consider matching by reg_no when the stage sheets have it.",
+    "Scope helpers differ: grades uses get_own_department_ids (courses scope) while results uses prep_leave._user_scope. They agree for Salim, but they could drift apart for other roles."
+  ],
+  "updated_files": ["/app/backend/tests/test_grades_stages_results_link.py", "/app/backend/tests/sample_grades_L3S2.xls (copied from /tmp/g.xls because it was missing)"],
+  "success_rate": {"backend": "85% (11/13)", "frontend": "100% of tested admin /grades flows (no student-app UI exists to test)"},
+  "seed_data_creation": "Temporary only, all restored: student 1001's student_id was set to 128002 and then back to 1001. Salim's custom_permissions got +manage_grades and were reset to ['manage_fee_receipts','hr_manage_tasks','hr_manage_appraisals']. TEST_GR_1/2/3 students were inserted and deleted by id. The test grade imports (year 2098-2099, departments a8 and a9) were deleted. Two results batches were undone and remain only as undone log entries (there is no API to delete them). No result_entries or student_grades are left for 2098-2099. Verified with Mongo.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python3 -m pytest tests/test_grades_stages_results_link.py -v -p no:xdist -s. The module fixture handles the temporary changes and restores them. It uses academic_year 2098-2099 and level 3 semester 2. The two failing tests (invalid-id 500, orphan result after deleting an import) should pass once fixed. Notify=true with real changed results was not checked end to end (a push is only sent when a result changes; the re-commit had unchanged results)."
+}
