@@ -1,0 +1,32 @@
+{
+  "summary": "Tested the results pause switch ('إيقاف عرض النتائج في التطبيق') end to end, backend and frontend. Backend: 12/12 pytest pass. Covered: pausing for the whole university, faculty 698e4f92 and department 698e5009, each of which empties /students/me/results and /me/grades for student 1001 with paused:true and the message 'النتائج غير متاحة حالياً'. Pausing another department or faculty does not affect him. Resuming gives back exactly the same data as before. Pausing twice keeps one record. Resuming a scope that is not paused returns 404. A bad scope returns 400. Pause and resume events appear in /results/batches with event_only:true. Dean Salim with view_results only gets 403 on POST. With manage_results he gets can_pause_all:false and 403 for 'all', the other faculty and the other department, and he can pause and resume his own faculty. He sees the admin's 'all' pause with can_resume:false and gets 403 if he tries to resume it. Frontend as admin: the pause-open button opens the modal. The scope dropdown lists all/faculty/department, the submit button is disabled until a target is chosen, and the confirm dialog shows. After pausing, pause-msg shows success, pause-item and pause-resume appear, the header button turns orange with 'العرض موقوف (1)' and the bottom banner shows the scope name. The history modal shows pause/resume cards with no undo/hide buttons. Resuming clears the button and the banner. As dean: no 'all' option, only his own faculty in the target list, the admin's 'all' pause is listed without a resume button, and he can pause and resume his faculty. Regression: the upload modal and history modal open. The table loads (92 students).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/results/batches/{id}/undo and /visibility", "issue": "Neither endpoint rejects event_only (pause/resume) batches. An API call returns 200 and marks the log entry undone:true or hidden:true. The UI hides these buttons, but the backend should return 400 when event_only is set."},
+      {"endpoint": "GET /api/results/batches (scoped user)", "issue": "University-wide ('all') pause/resume events have department_ids=[], so the scope filter (department_ids.0 exists) hides them from deans and department heads. They cannot see in the history who paused the whole university. Probably fine, but worth confirming this is intended."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/student-results", "issues": ["The results-paused-banner is absolutely positioned at bottom:14 and sits over table rows. Small overlap only.", "The pause-scope picker shows a placeholder option 'اختر...'. Choosing it silently resets the scope to 'department'. Better to drop the placeholder from that picker."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_results_pause_iter208.py", "/app/test_reports/pytest/iter208_pause.xml"],
+  "action_items": [
+    "Optional: in undo_batch and batch_visibility, return 400 when b.get('event_only') is set.",
+    "Optional: remove the placeholder option from the pause-scope picker."
+  ],
+  "critical_code_review_comments": [
+    "student-results.tsx is getting large. Check it against the 700-line limit.",
+    "ResultsPausePanel sets its initial scope from canAll at mount. This works because the pauses are loaded before the modal opens, but it is fragile if the modal ever mounts before usePauses resolves."
+  ],
+  "updated_files": ["/app/backend/tests/test_results_pause_iter208.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "None left behind. Salim's custom_permissions were changed temporarily and restored to ['manage_fee_receipts','hr_manage_tasks','hr_manage_appraisals']. results_pauses has 0 documents at the end. The 23 pause/resume event batches created during this run (created_at after the test start) were deleted by id. The 2 older events made by the main agent were kept.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_results_pause_iter208.py -v -p no:xdist -o addopts=''. The module fixture restores Salim and resumes every scope it used. Each run adds pause/resume event batches to result_batches. For UI login, set localStorage 'token' and 'user' from /api/auth/login, then goto /student-results. Typing in the login form and pressing Enter does not submit."
+}

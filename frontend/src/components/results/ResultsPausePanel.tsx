@@ -43,7 +43,7 @@ export const ResultsPausePanel = ({ pauses, canAll, faculties, departments, onCh
       <View style={rs.card}>
         <Text style={[rs.title, { marginBottom: 10 }]}>إيقاف العرض لنطاق</Text>
         <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' }}>
-          <PickerField label="النطاق" options={scopes} value={scope} onChange={(v) => { setScope(v || 'department'); setScopeId(''); }} testID="pause-scope" placeholder="اختر..." />
+          <PickerField label="النطاق" options={scopes} value={scope} onChange={(v) => { setScope(v || 'department'); setScopeId(''); }} testID="pause-scope" noPlaceholder />
           {scope !== 'all' && <PickerField label={scope === 'faculty' ? 'الكلية' : 'القسم'} options={scope === 'faculty' ? faculties : departments} value={scopeId} onChange={setScopeId} testID="pause-target" />}
           <TouchableOpacity style={[rs.btn, { backgroundColor: '#ea580c', flexDirection: 'row-reverse', gap: 6, opacity: busy || (scope !== 'all' && !scopeId) ? 0.5 : 1 }]}
             disabled={busy || (scope !== 'all' && !scopeId)} testID="pause-submit-btn"

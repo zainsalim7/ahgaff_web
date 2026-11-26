@@ -365,6 +365,8 @@ async def batch_visibility(batch_id: str, data: dict = Body(...), current_user: 
     _guard(current_user)
     db = get_db()
     b = await _batch_scoped(db, current_user, batch_id)
+    if b.get("event_only"):
+        raise HTTPException(status_code=400, detail="هذا سجل حدث وليس رفعة")
     if b.get("undone"):
         raise HTTPException(status_code=400, detail="تم التراجع عن هذه الرفعة")
     hidden = bool(data.get("hidden"))
@@ -417,6 +419,8 @@ async def undo_batch(batch_id: str, current_user: dict = Depends(get_current_use
     _guard(current_user)
     db = get_db()
     b = await _batch_scoped(db, current_user, batch_id)
+    if b.get("event_only"):
+        raise HTTPException(status_code=400, detail="هذا سجل حدث وليس رفعة")
     if b.get("undone"):
         raise HTTPException(status_code=400, detail="تم التراجع عن هذه الرفعة مسبقاً")
     restored, skipped = await _undo_batch(db, current_user, b, batch_id)

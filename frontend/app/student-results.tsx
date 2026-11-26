@@ -144,6 +144,11 @@ export default function ResultsPage() {
           </View>
         </View>
 
+        {!!pz.items.length && (
+          <View style={{ backgroundColor: '#fff7ed', borderWidth: 1, borderColor: '#fed7aa', borderRadius: 12, padding: 12, marginBottom: 14 }} testID="results-paused-banner">
+            <Text style={{ color: '#c2410c', fontWeight: '700', fontSize: 13, textAlign: 'right' }}>⏸ عرض النتائج موقوف في التطبيق: {pz.items.map((p) => p.scope_name).join('، ')}</Text>
+          </View>
+        )}
         {err ? <Text style={st.err} testID="results-error">{err}</Text> : null}
         <ResultsTable items={data.items} total={data.total} page={page} pages={data.pages} loading={loading} offset={(page - 1) * 100}
           onOpen={setOpenId} onPage={(p) => load(p)} />
@@ -158,11 +163,6 @@ export default function ResultsPage() {
         <ModalShell title="إيقاف عرض النتائج في التطبيق" icon="pause-circle-outline" onClose={() => setModal('')} testID="results-pause-modal">
           <ResultsPausePanel pauses={pz.items} canAll={pz.canAll} faculties={fullFacs} departments={filterDepartments(departments)} onChanged={pz.load} />
         </ModalShell>
-      )}
-      {!!pz.items.length && !modal && (
-        <View style={{ position: 'absolute', bottom: 14, alignSelf: 'center', backgroundColor: '#ea580c', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 }} testID="results-paused-banner">
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12.5 }}>⏸ عرض النتائج موقوف في التطبيق: {pz.items.map((p) => p.scope_name).join('، ')}</Text>
-        </View>
       )}
       {modal === 'history' && (
         <ModalShell title="سجل العمليات" icon="time-outline" onClose={() => { setModal(''); load(page); }} testID="results-history-modal">

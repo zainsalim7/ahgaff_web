@@ -34,14 +34,14 @@ export const ChipRow = ({ label, options, value, onChange, testPrefix, allLabel 
   </View>
 );
 
-export const PickerField = ({ label, options, value, onChange, testID, allLabel, placeholder, maxWidth, enabled = true }: {
-  label: string; options: Opt[]; value: string; onChange: (v: string) => void; testID: string; allLabel?: string; placeholder?: string; maxWidth?: number; enabled?: boolean;
+export const PickerField = ({ label, options, value, onChange, testID, allLabel, placeholder, maxWidth, enabled = true, noPlaceholder }: {
+  label: string; options: Opt[]; value: string; onChange: (v: string) => void; testID: string; allLabel?: string; placeholder?: string; maxWidth?: number; enabled?: boolean; noPlaceholder?: boolean;
 }) => (
   <View style={[rs.field, maxWidth ? { maxWidth } : null]}>
     <Text style={rs.fieldLbl}>{label}</Text>
     <View style={[rs.dropdown, !enabled && { backgroundColor: '#f4f6fb' }]}>
       <Picker selectedValue={value} onValueChange={(v) => onChange(String(v))} style={rs.dropdownInner} enabled={enabled} testID={testID}>
-        {allLabel !== undefined ? <Picker.Item label={allLabel} value="" /> : <Picker.Item label={placeholder || 'اختر...'} value="" />}
+        {noPlaceholder ? null : allLabel !== undefined ? <Picker.Item label={allLabel} value="" /> : <Picker.Item label={placeholder || 'اختر...'} value="" />}
         {options.map((o) => <Picker.Item key={o.id} label={o.name} value={o.id} />)}
       </Picker>
     </View>
