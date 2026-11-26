@@ -107,7 +107,6 @@ export const RcMarksTable = ({ tab, sheet, edits, setEdit, errors, onDecision, c
                     <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
                       <Text style={[rc.td, { fontWeight: '700', minWidth: 40, textAlign: 'center' }]} testID={`mark-ro-${field}-${r.student_db_id}`}>{fmt(r[field])}</Text>
                       {tab === 'coursework' && locked && <Ionicons name="lock-closed" size={12} color="#94a3b8" />}
-                      {tab !== 'coursework' && r.coursework === null && <Text style={{ fontSize: 10.5, color: '#ef6c00' }} testID={`mark-wait-cw-${r.student_db_id}`}>بلا سعي</Text>}
                     </View>
                   )}
                 </View>

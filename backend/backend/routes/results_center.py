@@ -235,10 +235,11 @@ async def _save(db, user: dict, course: dict, field: str, items: list, via: str)
         if val == old:
             continue
         block = _allowed(field, row, locked)
-        if not block and field == "coursework" and (row.get("first_exam") is not None or row.get("second_exam") is not None):
+        if not block and field == "coursework" and any(row.get(k) is not None for k in ("first_exam", "second_exam", "exceptional_exam")):
             m2 = {k: row.get(k) for k in E.FIELDS}
             m2["coursework"] = val
-            if E.compute(m2, cfg, {"status": row["att"].get("status")}, row.get("decisions") or {})["eligible"] != row["eligible"]:
+            n = E.compute(m2, cfg, {"status": row["att"].get("status")}, row.get("decisions") or {})
+            if val is None or any(n[k] != row[k] for k in ("eligible", "in_second", "in_exc")):
                 block = "تعديل السعي يغيّر أهلية الطالب وقد رُصدت له درجة دور — احذف درجة الدور أولاً"
         if block:
             errors.append({"student_db_id": row["student_db_id"], "name": row["name"], "error": block})
@@ -299,7 +300,7 @@ async def import_marks(course_id: str, file: UploadFile = File(...), field: str 
         elif val == row.get(field):
             item["status"] = "unchanged"
         elif row.get(field) is not None:
-            item["status"], item["reason"] = "exists", "للطالب درجة مرصودة — تُركت كما هي (عدّلها يدوياً إن لزم)"
+            item["status"], item["reason"] = "exists", "له درجة مرصودة (عدّلها يدوياً إن لزم)"
         elif _allowed(field, row, locked):
             item["status"], item["reason"] = "rejected", _allowed(field, row, locked)
         else:

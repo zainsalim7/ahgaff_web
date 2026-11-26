@@ -1,0 +1,36 @@
+{
+  "summary": "Results Center new rules tested end-to-end. Backend: test_results_center_iter210.py rewritten to be self-seeding (own TEST_ courses + own marks on MAIN course 6a773c33d51592e96b39c174, teardown removes rc_marks/rc_log/rc_sheets created in run + rc_settings if absent before). 20 tests: 19 pass, 1 fail (real bug: clearing coursework of a not-eligible student who has a second_exam mark is allowed -> orphaned second mark). Verified: first_exam/second_exam before lock (rejected only for missing coursework 'ارصد سعي' / not eligible / not in second; accepted otherwise, incl. absence-based not-eligible student on second), eligibility-flip guard both directions + non-flipping change allowed, Excel import add-only (status 'exists', marks unchanged, empty cells never wipe, coursework import also add-only, manual edit still changes), lock still needs full coursework, publish still blocked when a course is unlocked. Frontend (admin, 1920x1080): course search by name & code filters cards + rc-courses-count '(من 13)', search-empty + clear button, page sizes 12/24/48/all, pager prev/next/info (13 courses -> 2 pages at 12), sheet open before lock: first-tab inputs for eligible students, second-tab input for not-eligible student, save works, flip error shown inline in row, import modal preview shows 'موجودة — تُركت' rows + rejected reasons, commit disabled when ok=0.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/rc/courses/{id}/marks field=coursework value=''", "issue": "Clearing coursework (set to empty) of a NOT-eligible student who already has a second_exam mark is saved. Eligibility stays False->False so the flip guard does not fire, but in_second becomes False (requires coursework != None) and the second_exam mark is orphaned (result 'بانتظار السعي'). Same would apply to exceptional chain. Fix in _save: also block when val is None and any exam field exists (e.g. 'احذف درجة الدور أولاً'), or compare in_second/eligible + coursework-presence instead of eligible only."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "RcMarksTable 'بلا سعي' indicator", "issue": "mark-wait-cw-{sid} is unreachable in first/second/exceptional tabs: rowsForTab filters first=eligible, second=in_second, exceptional=pass2===false — all require coursework, so students without coursework never appear there. Requested 'بلا سعي' hint never renders. Either show all students (with read-only + 'بلا سعي') in those tabs or drop the dead code.", "selector": "[data-testid^=mark-wait-cw-]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "RcImportModal preview", "issues": ["'exists' badge text duplicates wording: 'موجودة — تُركت: للطالب درجة مرصودة — تُركت كما هي (عدّلها يدوياً إن لزم)' — shorten the backend reason or the label."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_results_center_iter210.py", "/app/test_reports/pytest/rc_iter211.xml"],
+  "action_items": [
+    "Block clearing coursework (value empty) when the student has any exam mark (first/second/exceptional) — test_main_clear_coursework_with_second_exam_blocked",
+    "Make 'بلا سعي' visible (or remove dead code) — students without coursework are filtered out of exam tabs",
+    "Optional: dedupe 'تُركت' wording in import exists badge"
+  ],
+  "critical_code_review_comments": [
+    "_save flip guard only compares eligible; should also consider coursework becoming None (in_second depends on cw is not None).",
+    "Before-lock exam entry: if attendance status later changes (student becomes candidate/deprived) after a first_exam mark is entered, eligibility flips with no guard — first_exam mark silently ignored. Consider surfacing this in sheet/publish preview.",
+    "Template endpoint uses _allowed(field, r, True) — fine, but for coursework it lists all students regardless of lock; ok."
+  ],
+  "updated_files": ["/app/backend/tests/test_results_center_iter210.py"],
+  "success_rate": {"backend": "95% (19/20)", "frontend": "100% of requested flows (1 low-priority unreachable indicator)"},
+  "seed_data_creation": "Test-created only; all cleaned. Temporary UI seed on MAIN course (coursework/first/second for 3 students) deleted by student ids; rc_* collections back to 0 docs, rc_settings 0.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && set -a && . ./.env && set +a && python3 -m pytest tests/test_results_center_iter210.py -p no:xdist -o addopts='' -q. File is self-seeding; MAIN-course tests use students M1..M6 (reg 129095,129101,129140,99999,129142,129199), all attendance 'excellent' there. Absence-based ineligibility tested on fake course A (S2). UI login: fill placeholders 'اسم المستخدم / رقم القيد / الرقم المرجعي' & 'كلمة المرور', click text 'تسجيل الدخول' (.last). Import file input accepts CSV buffer via set_input_files on [data-testid=rc-import-file-input].",
+  "rca of the issue": "Clear-coursework orphan: _save computes new eligibility with m2['coursework']=None -> eligible False; old eligible False -> equal -> no block. compute() sets in_second = (cw is not None and not eligible) or pass1 is False -> False, so second_exam ignored. Repro: coursework 10 -> second_exam 60 -> PUT coursework ''. Mitigation: block if val is None and any of first/second/exceptional exam not None."
+}

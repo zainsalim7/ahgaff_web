@@ -1,4 +1,5 @@
-# Results Center (/api/rc/*) regression: settings, marks, lock, eligibility, rounds, decisions, Excel, RBAC/scope, publish→draft→publish
+# Results Center (/api/rc/*) regression: settings, marks, exams-before-lock, eligibility flip guard, rounds, decisions,
+# Excel add-only import, RBAC/scope, publish→draft→publish. Self-seeding: creates its own courses + marks on MAIN_COURSE and cleans up.
 import io
 import os
 import uuid
@@ -61,6 +62,9 @@ def env():
         {"student_id": S["S6"], "scope": "course", "course_id": A, "decision": "deprived", "reason": "TEST_", "created_at": datetime.now(timezone.utc)},
     ]).inserted_ids
     had_settings = db.rc_settings.find_one({"faculty_id": FAC}) is not None
+    t0 = datetime.now(timezone.utc)
+    pre_marks = {m["_id"] for m in db.rc_marks.find({"course_id": MAIN_COURSE}, {"_id": 1})}
+    had_sheet = db.rc_sheets.find_one({"course_id": MAIN_COURSE}) is not None
     salim = db.users.find_one({"username": "Salim"})
     salim_perms = list(salim.get("custom_permissions") or [])
     ST.update(A=A, B=B, sem=sem, imports=[], batches=[])
@@ -83,6 +87,11 @@ def env():
         db.rc_decisions.delete_many({"course_id": c}); db.rc_log.delete_many({"course_id": c})
     if not had_settings:
         db.rc_settings.delete_many({"faculty_id": FAC})
+    # MAIN_COURSE: remove only the rc docs created during this run
+    db.rc_marks.delete_many({"course_id": MAIN_COURSE, "_id": {"$nin": list(pre_marks)}})
+    db.rc_log.delete_many({"course_id": MAIN_COURSE, "at": {"$gte": t0}})
+    if not had_sheet:
+        db.rc_sheets.delete_many({"course_id": MAIN_COURSE})
 
 
 @pytest.fixture(scope="module")
@@ -90,8 +99,14 @@ def admin():
     return login("admin", "admin123")
 
 
+M = {"M1": "69b2f09d69f982071647f320", "M2": "69b2f09d69f982071647f324", "M3": "69b2f09d69f982071647f31e",
+     "M4": "69db65e84ddac901ce791506", "M5": "69b2f09d69f982071647f314", "M6": "69b2f09d69f982071647f316"}
+MREG = {"M1": "129095", "M2": "129101", "M3": "129140", "M4": "99999", "M5": "129142", "M6": "129199"}
+
+
 def marks(h, cid, field, items):
-    r = requests.put(f"{API}/rc/courses/{cid}/marks", headers=h, json={"field": field, "marks": [{"student_db_id": S[k], "value": v} for k, v in items]}, timeout=60)
+    ids = {**S, **M}
+    r = requests.put(f"{API}/rc/courses/{cid}/marks", headers=h, json={"field": field, "marks": [{"student_db_id": ids[k], "value": v} for k, v in items]}, timeout=60)
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -108,6 +123,7 @@ def test_settings_get_and_put(env, admin):
     assert r.status_code == 200 and r.json()["coursework_max"] == 40 and r.json()["final_max"] == 60
     body = {"faculty_id": FAC, "coursework_max": 40, "coursework_pass_pct": 40, "pass_mark": 50, "second_cap": 50, "exceptional_cap": 50}
     assert requests.put(f"{API}/rc/settings", headers=admin, json=body).status_code == 200
+    assert marks(admin, MAIN_COURSE, "coursework", [("M1", 30)])["saved"] == 1  # self-seed
     r = requests.put(f"{API}/rc/settings", headers=admin, json={**body, "coursework_max": 30})
     assert r.status_code == 400, r.text  # marks exist on MAIN_COURSE
     assert requests.put(f"{API}/rc/settings", headers=admin, json={**body, "coursework_max": 120}).status_code == 400
@@ -125,12 +141,17 @@ def test_course_list_contains_test_course(env, admin):
 def test_coursework_validation_and_lock(env, admin):
     A = env["A"]
     r = marks(admin, A, "first_exam", [("S1", 30)])
-    assert r["saved"] == 0 and "أقفل" in r["errors"][0]["error"]
+    assert r["saved"] == 0 and "ارصد سعي" in r["errors"][0]["error"], r
     r = marks(admin, A, "coursework", [("S1", 41), ("S2", "غ"), ("S3", -1), ("S4", "abc")])
     assert r["saved"] == 0 and len(r["errors"]) == 4
     assert requests.post(f"{API}/rc/courses/{A}/lock", headers=admin, json={"locked": True}).status_code == 400
     r = marks(admin, A, "coursework", [("S1", "١٦"), ("S2", 30), ("S3", 30), ("S4", 30), ("S5", 30), ("S6", 30)])
     assert r["saved"] == 6, r
+    # NEW RULE: exams allowed before lock once coursework is entered
+    r = marks(admin, A, "first_exam", [("S1", 34), ("S2", 40)])  # S2 not eligible (absence)
+    assert r["saved"] == 1 and "غير مؤهل" in r["errors"][0]["error"], r
+    r = marks(admin, A, "second_exam", [("S2", 100)])  # absence-based not-eligible → second before lock
+    assert r["saved"] == 1, r
     assert requests.post(f"{API}/rc/courses/{A}/lock", headers=admin, json={"locked": True}).status_code == 200
     r = marks(admin, A, "coursework", [("S1", 20)])
     assert r["saved"] == 0 and "مقفل" in r["errors"][0]["error"]
@@ -152,7 +173,7 @@ def test_first_round(env, admin):
     r = marks(admin, A, "first_exam", [("S4", 61), ("S2", 40)])
     assert r["saved"] == 0 and len(r["errors"]) == 2
     r = marks(admin, A, "first_exam", [("S1", 34), ("S4", 10), ("S5", "غ")])
-    assert r["saved"] == 3
+    assert r["saved"] == 2, r  # S1 already 34 (entered before lock)
     rows, _ = sheet(admin, A)
     assert rows[S["S1"]]["total1"] == 50 and rows[S["S1"]]["pass1"] is True and rows[S["S1"]]["letter"] == "مقبول"
     assert rows[S["S4"]]["pass1"] is False and rows[S["S4"]]["in_second"] is True
@@ -169,7 +190,7 @@ def test_second_round_cap_and_uncapped(env, admin):
     r = marks(admin, A, "second_exam", [("S1", 70)])
     assert r["saved"] == 0
     r = marks(admin, A, "second_exam", [("S4", 100), ("S2", 100), ("S3", 90), ("S5", 20), ("S6", 10)])
-    assert r["saved"] == 5, r
+    assert r["saved"] == 4, r  # S2 already 100
     rows, _ = sheet(admin, A)
     assert rows[S["S4"]]["final"] == 50 and rows[S["S4"]]["stage"] == "second"
     assert rows[S["S2"]]["final"] == 50
@@ -227,11 +248,102 @@ def test_template_export_import(env, admin):
     r = requests.post(f"{API}/rc/courses/{A}/import", headers=admin, files=files(), data={"field": "second_exam", "commit": "false"})
     assert r.status_code == 200, r.text
     c = r.json()["counts"]
-    assert c == {"ok": 1, "unchanged": 1, "rejected": 3}, r.json()
+    assert c == {"ok": 0, "unchanged": 1, "exists": 1, "rejected": 3}, r.json()  # S2 has 100 → exists (not overwritten)
     r = requests.post(f"{API}/rc/courses/{A}/import", headers=admin, files=files(), data={"field": "second_exam", "commit": "true"})
-    assert r.status_code == 200 and r.json()["saved"] == 1
+    assert r.status_code == 200 and r.json()["saved"] == 0 and r.json()["counts"]["exists"] == 1
     rows, _ = sheet(admin, A)
-    assert rows[S["S2"]]["second_exam"] == 95 and rows[S["S2"]]["final"] == 50
+    assert rows[S["S2"]]["second_exam"] == 100 and rows[S["S2"]]["final"] == 50
+
+
+# ---------- MAIN_COURSE (real course, self-seeded marks): exams before lock, flip guard, add-only import ----------
+def _xl(rows):
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.append(["رقم القيد", "الدرجة"])
+    for r in rows:
+        ws.append(list(r))
+    buf = io.BytesIO(); wb.save(buf)
+    return lambda: {"file": ("m.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+
+
+def test_main_exams_before_lock(env, admin):
+    _, d = sheet(admin, MAIN_COURSE)
+    assert d["sheet"]["coursework_locked"] is False
+    r = marks(admin, MAIN_COURSE, "first_exam", [("M3", 40)])  # no coursework yet
+    assert r["saved"] == 0 and "ارصد سعي" in r["errors"][0]["error"], r
+    r = marks(admin, MAIN_COURSE, "second_exam", [("M3", 40)])
+    assert r["saved"] == 0 and "ارصد سعي" in r["errors"][0]["error"], r
+    r = marks(admin, MAIN_COURSE, "coursework", [("M1", 30), ("M2", 10), ("M4", 30), ("M5", 30)])
+    assert r["saved"] == 3, r  # M1 already 30 from settings test
+    r = marks(admin, MAIN_COURSE, "first_exam", [("M1", 40), ("M2", 40)])
+    assert r["saved"] == 1 and "غير مؤهل" in r["errors"][0]["error"], r
+    r = marks(admin, MAIN_COURSE, "second_exam", [("M2", 60), ("M1", 60)])
+    assert r["saved"] == 1 and "ليس من طلاب الدور الثاني" in r["errors"][0]["error"], r
+    rows, d = sheet(admin, MAIN_COURSE)
+    assert d["sheet"]["coursework_locked"] is False
+    assert rows[M["M1"]]["total1"] == 70 and rows[M["M1"]]["stage"] == "first" and rows[M["M1"]]["letter"] == "جيد"
+    assert rows[M["M2"]]["final2"] == 50 and rows[M["M2"]]["stage"] == "second"
+    assert rows[M["M3"]]["first_exam"] is None and rows[M["M3"]]["eligibility"] == "بانتظار السعي"
+
+
+def test_main_eligibility_flip_guard(env, admin):
+    r = marks(admin, MAIN_COURSE, "coursework", [("M1", 10)])  # eligible→not, has first_exam
+    assert r["saved"] == 0 and "يغيّر أهلية" in r["errors"][0]["error"], r
+    r = marks(admin, MAIN_COURSE, "coursework", [("M2", 30)])  # not→eligible, has second_exam
+    assert r["saved"] == 0 and "يغيّر أهلية" in r["errors"][0]["error"], r
+    assert marks(admin, MAIN_COURSE, "coursework", [("M1", 20)])["saved"] == 1  # still eligible
+    assert marks(admin, MAIN_COURSE, "coursework", [("M2", 12)])["saved"] == 1  # still not eligible
+    r = marks(admin, MAIN_COURSE, "coursework", [("M1", "")])  # clearing coursework of exam-holder
+    assert r["saved"] == 0, r
+    rows, _ = sheet(admin, MAIN_COURSE)
+    assert rows[M["M1"]]["coursework"] == 20 and rows[M["M1"]]["total1"] == 60
+    assert rows[M["M2"]]["coursework"] == 12 and rows[M["M2"]]["second_exam"] == 60
+
+
+def test_main_clear_coursework_with_second_exam_blocked(env, admin):
+    # Clearing coursework of a not-eligible student with a second_exam mark would orphan the second mark
+    r = marks(admin, MAIN_COURSE, "coursework", [("M2", "")])
+    rows, _ = sheet(admin, MAIN_COURSE)
+    if r["saved"]:
+        marks(admin, MAIN_COURSE, "coursework", [("M2", 12)])  # restore
+    assert r["saved"] == 0, f"coursework cleared while second_exam exists → in_second False, orphan mark: {rows[M['M2']]['result']}"
+
+
+def test_main_import_add_only(env, admin):
+    f = _xl([(MREG["M1"], 55), (MREG["M4"], 45), (MREG["M5"], None), (MREG["M3"], 30), (MREG["M2"], 30)])
+    r = requests.post(f"{API}/rc/courses/{MAIN_COURSE}/import", headers=admin, files=f(), data={"field": "first_exam", "commit": "false"})
+    assert r.status_code == 200, r.text
+    st = {x["reg_no"]: x["status"] for x in r.json()["rows"]}
+    assert st[MREG["M1"]] == "exists" and st[MREG["M4"]] == "ok" and st[MREG["M3"]] == "rejected" and st[MREG["M2"]] == "rejected", st
+    assert r.json()["counts"]["exists"] == 1 and r.json()["counts"]["ok"] == 1
+    r = requests.post(f"{API}/rc/courses/{MAIN_COURSE}/import", headers=admin, files=f(), data={"field": "first_exam", "commit": "true"})
+    assert r.status_code == 200 and r.json()["saved"] == 1 and r.json()["counts"]["exists"] == 1, r.json()
+    rows, _ = sheet(admin, MAIN_COURSE)
+    assert rows[M["M1"]]["first_exam"] == 40 and rows[M["M4"]]["first_exam"] == 45 and rows[M["M5"]]["first_exam"] is None
+    # empty cell for a student with a mark never wipes it
+    f2 = _xl([(MREG["M1"], None), (MREG["M4"], "")])
+    r = requests.post(f"{API}/rc/courses/{MAIN_COURSE}/import", headers=admin, files=f2(), data={"field": "first_exam", "commit": "true"})
+    assert r.status_code == 200 and r.json()["saved"] == 0, r.json()
+    rows, _ = sheet(admin, MAIN_COURSE)
+    assert rows[M["M1"]]["first_exam"] == 40 and rows[M["M4"]]["first_exam"] == 45
+    # coursework import also add-only
+    f3 = _xl([(MREG["M1"], 35), (MREG["M6"], 25)])
+    r = requests.post(f"{API}/rc/courses/{MAIN_COURSE}/import", headers=admin, files=f3(), data={"field": "coursework", "commit": "true"})
+    assert r.status_code == 200 and r.json()["saved"] == 1 and r.json()["counts"]["exists"] == 1, r.json()
+    rows, _ = sheet(admin, MAIN_COURSE)
+    assert rows[M["M1"]]["coursework"] == 20 and rows[M["M6"]]["coursework"] == 25
+    # manual edit still changes an existing exam mark
+    assert marks(admin, MAIN_COURSE, "first_exam", [("M1", 41)])["saved"] == 1
+
+
+def test_main_lock_and_publish_require_lock(env, admin):
+    r = requests.post(f"{API}/rc/courses/{MAIN_COURSE}/lock", headers=admin, json={"locked": True})
+    assert r.status_code == 400 and "بلا درجة سعي" in r.json()["detail"]
+    _, d = sheet(admin, MAIN_COURSE)
+    assert d["sheet"]["coursework_locked"] is False  # guard: never publish real data
+    co = db.courses.find_one({"_id": ObjectId(MAIN_COURSE)})
+    body = {"department_id": DEP, "level": co["level"], "semester_id": co["semester_id"], "semester_no": 1, "academic_year": YEAR, "notify": False}
+    r = requests.post(f"{API}/rc/publish", headers=admin, json=body)
+    assert r.status_code == 400 and "أقفل السعي أولاً" in r.json()["detail"], r.text
 
 
 # ---------- RBAC / scope ----------
