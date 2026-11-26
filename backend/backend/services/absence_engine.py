@@ -3,16 +3,17 @@
 القاعدة:
 - المقام = ساعات المحاضرات المنفَّذة فعلاً (status=completed) حتى تاريخه — لا المجدولة ولا الملغاة ولا غياب الأستاذ.
 - العدّ بالساعات (كل محاضرة بمدتها الفعلية).
-- غياب بلا عذر > حد الكلية (افتراضياً 10%)  أو  (بعذر + بلا عذر) > الحد الإجمالي (افتراضياً 25%)  ⇒ مرشَّح للحرمان (قرار مجلس الكلية).
-- «تجاوز» = أكبر من (وليس يساوي). لا حالة «متأخر» (تُعامل حضوراً). السجل المفقود في محاضرة منفَّذة = غياب بلا عذر (إلا إن سبقت المحاضرة تاريخ تسجيل الطالب).
+- غياب بلا عذر > 10.9%  أو  بعذر > 15.9%  أو  الإجمالي (بعذر + بلا عذر) يبلغ 25.9% ⇒ مرشَّح للحرمان (قرار مجلس الكلية). الحدود من إعدادات الكلية.
+- الحدّان الفرديان: أكبر من · الإجمالي: يبلغ أو يتجاوز. لا حالة «متأخر» (تُعامل حضوراً). السجل المفقود في محاضرة منفَّذة = غياب بلا عذر (إلا إن سبقت المحاضرة تاريخ تسجيل الطالب).
 - قبل تنفيذ MIN_EXECUTED محاضرات تُعرض النسب بعلامة «مؤشر مبكر».
 """
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from bson import ObjectId
 
-DEFAULT_UNEXCUSED_LIMIT = 10.0
-DEFAULT_TOTAL_LIMIT = 25.0
+DEFAULT_UNEXCUSED_LIMIT = 10.9
+DEFAULT_EXCUSED_LIMIT = 15.9
+DEFAULT_TOTAL_LIMIT = 25.9
 MIN_EXECUTED = 4
 
 STATUS_AR = {
@@ -33,9 +34,10 @@ def lecture_hours(lec: dict) -> float:
 
 
 async def faculty_limits(db, faculty_id: Optional[str]) -> dict:
-    fac = await db.faculties.find_one({"_id": ObjectId(faculty_id)}, {"max_absence_percent": 1, "max_unexcused_percent": 1}) if faculty_id and ObjectId.is_valid(faculty_id) else None
+    fac = await db.faculties.find_one({"_id": ObjectId(faculty_id)}, {"max_absence_percent": 1, "max_unexcused_percent": 1, "max_excused_percent": 1}) if faculty_id and ObjectId.is_valid(faculty_id) else None
     fac = fac or {}
     return {"unexcused_limit": float(fac.get("max_unexcused_percent") or DEFAULT_UNEXCUSED_LIMIT),
+            "excused_limit": float(fac.get("max_excused_percent") or DEFAULT_EXCUSED_LIMIT),
             "total_limit": float(fac.get("max_absence_percent") or DEFAULT_TOTAL_LIMIT), "min_executed": MIN_EXECUTED}
 
 
@@ -49,12 +51,15 @@ async def course_limits(db, course: dict) -> dict:
 
 def classify(unexcused_h: float, excused_h: float, executed_h: float, executed_count: int, limits: dict) -> dict:
     lu, lt = limits["unexcused_limit"], limits["total_limit"]
+    le = limits.get("excused_limit", DEFAULT_EXCUSED_LIMIT)
     pct_u = round(unexcused_h / executed_h * 100, 2) if executed_h > 0 else 0.0
+    pct_e = round(excused_h / executed_h * 100, 2) if executed_h > 0 else 0.0
     pct_t = round((unexcused_h + excused_h) / executed_h * 100, 2) if executed_h > 0 else 0.0
-    severity = max(pct_u / lu if lu else 0, pct_t / lt if lt else 0)
+    ex_u, ex_e, ex_t = pct_u > lu, pct_e > le, pct_t >= lt
+    severity = max(pct_u / lu if lu else 0, pct_e / le if le else 0, pct_t / lt if lt else 0)
     if executed_h <= 0:
         status = "excellent"
-    elif pct_u > lu or pct_t > lt:
+    elif ex_u or ex_e or ex_t:
         status = "candidate"
     elif severity >= 0.8:
         status = "danger"
@@ -68,11 +73,11 @@ def classify(unexcused_h: float, excused_h: float, executed_h: float, executed_c
         "executed_count": executed_count, "executed_hours": round(executed_h, 2),
         "unexcused_hours": round(unexcused_h, 2), "excused_hours": round(excused_h, 2), "absent_hours": round(unexcused_h + excused_h, 2),
         "present_hours": round(max(0.0, executed_h - unexcused_h - excused_h), 2),
-        "pct_unexcused": pct_u, "pct_total": pct_t, "attendance_rate": round(100 - pct_t, 2) if executed_h > 0 else 100.0,
+        "pct_unexcused": pct_u, "pct_excused": pct_e, "pct_total": pct_t, "limit_excused": le, "exceeded_excused": ex_e, "attendance_rate": round(100 - pct_t, 2) if executed_h > 0 else 100.0,
         "limit_unexcused": lu, "limit_total": lt,
         "remaining_unexcused_hours": round(max(0.0, executed_h * lu / 100 - unexcused_h), 2),
         "remaining_total_hours": round(max(0.0, executed_h * lt / 100 - unexcused_h - excused_h), 2),
-        "exceeded_unexcused": pct_u > lu, "exceeded_total": pct_t > lt,
+        "exceeded_unexcused": ex_u, "exceeded_total": ex_t,
         "early": executed_count < limits.get("min_executed", MIN_EXECUTED),
         "status": status, "status_ar": STATUS_AR[status] + (" · مؤشر مبكر" if executed_count < limits.get("min_executed", MIN_EXECUTED) and executed_count > 0 else ""),
     }

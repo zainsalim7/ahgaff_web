@@ -82,6 +82,7 @@ interface Settings {
   sections: string[];
   attendance_late_minutes: number;
   max_unexcused_percent: number;
+  max_excused_percent?: number;
   max_absence_percent: number;
   primary_color: string;
   secondary_color: string;
@@ -161,8 +162,9 @@ export default function GeneralSettingsScreen() {
     levels_count: 5,
     sections: [],
     attendance_late_minutes: 15,
-    max_unexcused_percent: 10,
-    max_absence_percent: 25,
+    max_unexcused_percent: 10.9,
+    max_excused_percent: 15.9,
+    max_absence_percent: 25.9,
     primary_color: '#1565c0',
     secondary_color: '#ff9800',
     academic_years: [],
@@ -179,6 +181,7 @@ export default function GeneralSettingsScreen() {
     sections: string[];
     attendance_late_minutes: number;
     max_unexcused_percent: number;
+    max_excused_percent?: number;
     max_absence_percent: number;
     attendance_duration_minutes: number;
     max_attendance_delay_minutes: number;
@@ -192,8 +195,9 @@ export default function GeneralSettingsScreen() {
     levels_count: 5,
     sections: ['أ', 'ب', 'ج'],
     attendance_late_minutes: 15,
-    max_unexcused_percent: 10,
-    max_absence_percent: 25,
+    max_unexcused_percent: 10.9,
+    max_excused_percent: 15.9,
+    max_absence_percent: 25.9,
     attendance_duration_minutes: 15,
     max_attendance_delay_minutes: 30,
     excuse_window_days: 3,
@@ -1127,8 +1131,9 @@ export default function GeneralSettingsScreen() {
           levels_count: data.levels_count || 5,
           sections: data.sections || ['أ', 'ب', 'ج'],
           attendance_late_minutes: data.attendance_late_minutes || 15,
-          max_unexcused_percent: data.max_unexcused_percent || 10,
-          max_absence_percent: data.max_absence_percent || 25,
+          max_unexcused_percent: data.max_unexcused_percent || 10.9,
+          max_excused_percent: data.max_excused_percent || 15.9,
+          max_absence_percent: data.max_absence_percent || 25.9,
           attendance_duration_minutes: data.attendance_duration_minutes || 15,
           max_attendance_delay_minutes: data.max_attendance_delay_minutes || 30,
           excuse_window_days: data.excuse_window_days || 3,
@@ -1298,7 +1303,7 @@ export default function GeneralSettingsScreen() {
 
               <Text style={styles.label}>حد الغياب بلا عذر (%) — من ساعات المحاضرات المنفَّذة</Text>
               <View style={styles.optionsRow}>
-                {[5, 10, 15, 20].map(percent => (
+                {[5, 10, 10.9, 15, 20].map(percent => (
                   <TouchableOpacity
                     key={percent}
                     style={[styles.optionBtn, facultySettings.max_unexcused_percent === percent && styles.optionBtnActive]}
@@ -1310,9 +1315,23 @@ export default function GeneralSettingsScreen() {
                 ))}
               </View>
 
-              <Text style={styles.label}>الحد الإجمالي للغياب (بعذر + بلا عذر) (%) — تجاوز أيٍّ من الحدين = مرشَّح للحرمان</Text>
+              <Text style={styles.label}>حد الغياب بعذر (%) — تجاوزه وحده = مرشَّح للحرمان</Text>
               <View style={styles.optionsRow}>
-                {[15, 20, 25, 30, 35].map(percent => (
+                {[10, 15, 15.9, 20, 25].map(percent => (
+                  <TouchableOpacity
+                    key={percent}
+                    style={[styles.optionBtn, facultySettings.max_excused_percent === percent && styles.optionBtnActive]}
+                    onPress={() => setFacultySettings({ ...facultySettings, max_excused_percent: percent })}
+                    testID={`excused-limit-${percent}`}
+                  >
+                    <Text style={[styles.optionText, facultySettings.max_excused_percent === percent && styles.optionTextActive]}>{percent}%</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.label}>الحد الإجمالي للغياب (بعذر + بلا عذر) (%) — بلوغه أو تجاوز أيٍّ من الحدين السابقين = مرشَّح للحرمان</Text>
+              <View style={styles.optionsRow}>
+                {[20, 25, 25.9, 30, 35].map(percent => (
                   <TouchableOpacity
                     key={percent}
                     style={[

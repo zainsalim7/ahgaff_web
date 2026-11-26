@@ -112,6 +112,9 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 'student-results', label: 'النتائج', icon: 'ribbon', path: '/student-results', category: 'academic', permissions: [
     'view_results', 'manage_results'
   ]},
+  { id: 'results-center', label: 'مركز النتائج', icon: 'school', path: '/results-center', category: 'academic', permissions: [
+    'rc_view', 'rc_enter_coursework', 'rc_enter_exams', 'rc_board_decisions', 'rc_approve', 'rc_manage_settings'
+  ]},
 
   // 🏢 إدارة الأقسام
   { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', category: 'academic', permissions: [

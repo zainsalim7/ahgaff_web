@@ -850,7 +850,7 @@ async def import_grades(
 
     # 🛡 منع الاعتماد المكرر لنفس (القسم/المستوى/الفصل/العام) — إلا بالاستبدال الصريح
     scope_q = {"department_id": department_id, "level": level,
-               "semester_no": semester_no, "academic_year": academic_year}
+               "semester_no": semester_no, "academic_year": academic_year, "source": {"$ne": "results_center"}}
     if existing and replace != "true":
         raise HTTPException(status_code=409,
                             detail="يوجد استيراد سابق لنفس (القسم/المستوى/الفصل/العام). فعّل خيار «استبدال الاستيراد السابق» أو احذفه من تبويب الاستيرادات أولاً.")

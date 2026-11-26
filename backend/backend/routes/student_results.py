@@ -437,11 +437,23 @@ async def publish_batch(batch_id: str, data: dict = Body(default={}), current_us
         "published_by": current_user.get("id"), "published_by_name": current_user.get("full_name", "")}})
     if uids:
         asyncio.create_task(_notify_students(db, uids))
+    await _drop_superseded(db, b)
     await log_activity(current_user, "publish_results_batch", "result_batches", batch_id, b.get("scope_name", ""), {"notified": len(uids)})
     msg = f"تم النشر: أصبحت {r.matched_count} نتيجة ظاهرة للطلاب" if r.matched_count else "تم النشر"
     if uids:
         msg += f" · أُرسل إشعار «صدرت نتيجتك» إلى {len(uids)} طالب"
     return {"published": r.matched_count, "notified": len(uids), "message": msg}
+
+
+async def _drop_superseded(db, b: dict) -> None:
+    """مركز النتائج: بعد نشر الكشف الجديد يُحذف بيان الدرجات القديم الذي استبدله"""
+    imp = await db.grade_imports.find_one({"_id": ObjectId(b["grade_import_id"])}) if ObjectId.is_valid(b.get("grade_import_id") or "") else None
+    if not imp or imp.get("source") != "results_center":
+        return
+    for old in imp.get("supersedes") or []:
+        if ObjectId.is_valid(old) and await db.grade_imports.find_one({"_id": ObjectId(old), "source": "results_center"}):
+            await db.student_grades.delete_many({"import_id": old})
+            await db.grade_imports.delete_one({"_id": ObjectId(old)})
 
 
 async def _undo_batch(db, current_user: dict, b: dict, batch_id: str):
@@ -465,6 +477,11 @@ async def _undo_batch(db, current_user: dict, b: dict, batch_id: str):
                                                      "$setOnInsert": {"created_at": datetime.now(timezone.utc)}}, upsert=True)
         restored += 1
     await db.result_entries.update_many({"draft_batch_id": batch_id}, {"$set": {"batch_hidden": False, "draft_batch_id": None, "prev_visible": None}})
+    if b.get("draft") and ObjectId.is_valid(b.get("grade_import_id") or ""):
+        gi = b["grade_import_id"]
+        if await db.grade_imports.find_one({"_id": ObjectId(gi), "source": "results_center"}):
+            await db.student_grades.delete_many({"import_id": gi})
+            await db.grade_imports.delete_one({"_id": ObjectId(gi)})
     await db.result_batches.update_one({"_id": b["_id"]}, {"$set": {
         "undone": True, "undone_at": datetime.now(timezone.utc), "undone_by_name": current_user.get("full_name", ""),
         "undo_result": {"restored": restored, "skipped": skipped}}})
@@ -693,7 +710,7 @@ async def link_grades_import(db, user: dict, import_id: str, imp: dict, students
         if not st or not s.get("sem_status"):
             continue
         vals = {"status": _text(s.get("sem_status")), "gpa": _text(s.get("sem_gpa")),
-                "grade": f"تراكمي {s['cum_gpa']}" if _text(s.get("cum_gpa")) else None}
+                "grade": f"تراكمي {s['cum_gpa']}" if _text(s.get("cum_gpa")) else _text(s.get("sem_grade"))}
         ekey = {"reg_no": st["student_id"], **key}
         before = await _snapshot(db, ekey)
         if not (before and all(before.get(k) == vals[k] for k in VALS)):
@@ -736,7 +753,7 @@ async def get_my_grades(current_user: dict = Depends(get_current_user)):
         {"grade_import_id": {"$in": list({r.get("import_id") for r in recs if r.get("import_id")})}, "draft": True, "undone": {"$ne": True}},
         {"grade_import_id": 1})}
     latest: dict = {}
-    for r in sorted(recs, key=lambda r: _year_key(r.get("academic_year")), reverse=True):
+    for r in sorted(recs, key=lambda r: (_year_key(r.get("academic_year")), str(r.get("created_at") or "")), reverse=True):
         k = (r.get("level"), r.get("semester_no"))
         if k in latest or r.get("import_id") in draft_imports:
             continue

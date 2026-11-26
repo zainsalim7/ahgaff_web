@@ -167,6 +167,7 @@ export default function RootLayout() {
           <Stack.Screen name="attendance-locations" options={{ title: 'مواقع تحضير المحاضرات' }} />
           <Stack.Screen name="grades" options={{ title: 'نظام الدرجات', headerShown: false }} />
           <Stack.Screen name="student-results" options={{ title: 'النتائج' }} />
+          <Stack.Screen name="results-center" options={{ title: 'مركز النتائج' }} />
           <Stack.Screen name="schedule" options={{ title: 'جدول المحاضرات' }} />
           <Stack.Screen name="students" options={{ title: 'الطلاب' }} />
           <Stack.Screen name="add-teacher" options={{ title: 'إضافة معلم' }} />

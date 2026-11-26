@@ -217,6 +217,13 @@ class Permission:
     MANAGE_PREP_LEAVE = "manage_prep_leave"
     VIEW_RESULTS = "view_results"
     MANAGE_RESULTS = "manage_results"
+    RC_VIEW = "rc_view"
+    RC_MANAGE_SETTINGS = "rc_manage_settings"
+    RC_ENTER_COURSEWORK = "rc_enter_coursework"
+    RC_UNLOCK_COURSEWORK = "rc_unlock_coursework"
+    RC_ENTER_EXAMS = "rc_enter_exams"
+    RC_BOARD_DECISIONS = "rc_board_decisions"
+    RC_APPROVE = "rc_approve"
 
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
@@ -503,6 +510,13 @@ ALL_PERMISSIONS = [
     {"key": Permission.MANAGE_PREP_LEAVE, "label": "تحديد أيام الإجازة التحضيرية", "category": "الحضور"},
     {"key": Permission.VIEW_RESULTS, "label": "عرض جدول نتائج الطلاب وبطاقاتهم (قراءة فقط)", "category": "النتائج"},
     {"key": Permission.MANAGE_RESULTS, "label": "إدارة النتائج (رفع، تعديل، إخفاء، تراجع)", "category": "النتائج"},
+    {"key": Permission.RC_VIEW, "label": "عرض مركز النتائج (السعي، الأهلية، الأدوار) — قراءة فقط", "category": "مركز النتائج"},
+    {"key": Permission.RC_MANAGE_SETTINGS, "label": "إعدادات لائحة الدرجات للكلية (درجة السعي، نسب النجاح، السقف)", "category": "مركز النتائج"},
+    {"key": Permission.RC_ENTER_COURSEWORK, "label": "رصد درجات أعمال السعي وإقفالها", "category": "مركز النتائج"},
+    {"key": Permission.RC_UNLOCK_COURSEWORK, "label": "فتح السعي بعد إقفاله للتعديل", "category": "مركز النتائج"},
+    {"key": Permission.RC_ENTER_EXAMS, "label": "رصد درجات الدور الأول والثاني والاستثنائي", "category": "مركز النتائج"},
+    {"key": Permission.RC_BOARD_DECISIONS, "label": "قرارات مجلس الكلية في الدرجات (الدور الاستثنائي، احتساب الدرجة كاملة)", "category": "مركز النتائج"},
+    {"key": Permission.RC_APPROVE, "label": "اعتماد الكشوف ونقلها إلى النتائج (مسودة)", "category": "مركز النتائج"},
 ]
 
 DASHBOARD_PERMISSIONS = [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_ATTENDANCE, Permission.DASHBOARD_TEACHERS,
@@ -572,6 +586,12 @@ ADMIN_ROLE_PRESETS = [
 
 FULL_PERMISSION_MAPPING = {
     Permission.MANAGE_RESULTS: [Permission.VIEW_RESULTS],
+    Permission.RC_MANAGE_SETTINGS: [Permission.RC_VIEW],
+    Permission.RC_ENTER_COURSEWORK: [Permission.RC_VIEW],
+    Permission.RC_UNLOCK_COURSEWORK: [Permission.RC_VIEW, Permission.RC_ENTER_COURSEWORK],
+    Permission.RC_ENTER_EXAMS: [Permission.RC_VIEW],
+    Permission.RC_BOARD_DECISIONS: [Permission.RC_VIEW],
+    Permission.RC_APPROVE: [Permission.RC_VIEW],
     Permission.MANAGE_DEPARTMENTS: [
         Permission.VIEW_DEPARTMENTS, Permission.ADD_DEPARTMENT, 
         Permission.EDIT_DEPARTMENT, Permission.DELETE_DEPARTMENT
