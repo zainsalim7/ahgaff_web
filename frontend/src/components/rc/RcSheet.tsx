@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { downloadBlob } from '../results/resultsUi';
-import { Sheet, RcRow, TABS, TabId, TAB_FIELD, Btn, Msg, confirmBox, rc } from './rcUi';
+import { Sheet, RcRow, TABS, TabId, TAB_FIELD, Field, FIELD_AR, Btn, Msg, confirmBox, rc } from './rcUi';
 import { RcMarksTable, DecKind } from './RcMarksTable';
 import { RcImportModal } from './RcImportModal';
 import { RcDecisionModal } from './RcDecisionModal';
@@ -40,14 +40,21 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
   };
   const field = TAB_FIELD[tab];
   const canEdit = field === 'coursework' ? perms.cw : !!field && perms.exams;
+  const canSave = canEdit || (tab === 'coursework' && perms.exams);
 
   const save = async () => {
     setBusy(true); setMsg(null);
     try {
-      const r = await api.put(`/rc/courses/${courseId}/marks`, { field, marks: Object.entries(edits).map(([student_db_id, value]) => ({ student_db_id, value })) });
-      setErrors(Object.fromEntries((r.data.errors || []).map((e: any) => [e.student_db_id, e.error])));
-      setEdits(Object.fromEntries(Object.entries(edits).filter(([k]) => (r.data.errors || []).some((e: any) => e.student_db_id === k))));
-      setMsg({ ok: !(r.data.errors || []).length, text: r.data.message }); await load();
+      const errs: Record<string, string> = {}; const keep: Record<string, string> = {}; const texts: string[] = [];
+      for (const fld of ['coursework', 'first_exam', 'second_exam', 'exceptional_exam'] as Field[]) {
+        const items = Object.entries(edits).filter(([k]) => k.startsWith(`${fld}:`)).map(([k, value]) => ({ student_db_id: k.slice(fld.length + 1), value }));
+        if (!items.length) continue;
+        const r = await api.put(`/rc/courses/${courseId}/marks`, { field: fld, marks: items });
+        texts.push(r.data.message);
+        (r.data.errors || []).forEach((e: any) => { errs[e.student_db_id] = `${FIELD_AR[fld]}: ${e.error}`; const k = `${fld}:${e.student_db_id}`; if (edits[k] !== undefined) keep[k] = edits[k]; });
+      }
+      setErrors(errs); setEdits(keep);
+      setMsg({ ok: !Object.keys(errs).length, text: texts.join(' · ') }); await load();
     } catch (e: any) { setMsg({ ok: false, text: e?.response?.data?.detail || 'فشل الحفظ' }); } finally { setBusy(false); }
   };
   const lock = async (locked: boolean) => {
@@ -102,7 +109,7 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
       </ScrollView>
 
       <View style={{ flexDirection: 'row-reverse', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-        {field && canEdit && <Btn icon="save-outline" label={dirty ? `حفظ التعديلات (${dirty})` : 'حفظ التعديلات'} color="#2962ff" onPress={save} disabled={busy || !dirty} testID="rc-save-btn" />}
+        {field && canSave && <Btn icon="save-outline" label={dirty ? `حفظ التعديلات (${dirty})` : 'حفظ التعديلات'} color="#2962ff" onPress={save} disabled={busy || !dirty} testID="rc-save-btn" />}
         {field && canEdit && <Btn icon="cloud-upload-outline" label="استيراد من Excel" color="#0f766e" onPress={() => setModal('import')} testID="rc-import-open-btn" disabled={field === 'coursework' && locked} />}
         {(tab === 'coursework' || tab === 'eligibility') && !locked && perms.cw && <Btn icon="lock-closed-outline" label="إقفال السعي واعتماد الأهلية" color="#2e7d32" onPress={() => lock(true)} testID="rc-lock-btn" />}
         {(tab === 'coursework' || tab === 'eligibility') && locked && perms.unlock && <Btn icon="lock-open-outline" label="فتح السعي" color="#ef6c00" outline onPress={() => lock(false)} testID="rc-unlock-btn" />}
@@ -111,7 +118,7 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
       </View>
       <Msg m={msg} testID="rc-sheet-msg" />
       <View style={[rc.card, { overflow: 'hidden' }]}>
-        <RcMarksTable tab={tab} sheet={sheet} edits={edits} errors={errors} canEdit={canEdit} canDecide={perms.decide}
+        <RcMarksTable tab={tab} sheet={sheet} edits={edits} errors={errors} canEdit={canEdit} canDecide={perms.decide} canExams={perms.exams}
           setEdit={(id, v) => setEdits({ ...edits, [id]: v })} onDecision={(row, kind) => setDec({ row, kind })} />
       </View>
       <Text style={{ fontSize: 11.5, color: '#64748b', textAlign: 'right' }}>اكتب «غ» لمن غاب عن امتحان الدور. حدود الغياب: بلا عذر أكبر من الحد · بعذر أكبر من الحد · الإجمالي يبلغ الحد = غير مؤهل (ما لم يستثنه مجلس الكلية).</Text>

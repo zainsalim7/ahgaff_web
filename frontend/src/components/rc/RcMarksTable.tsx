@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { RcRow, Sheet, TabId, TAB_FIELD, fmt, Badge, resultColor, rc } from './rcUi';
+import { RcRow, Sheet, TabId, TAB_FIELD, Field, fmt, Badge, resultColor, rc } from './rcUi';
 
 type Col = { label: string; flex: number; render: (r: RcRow) => React.ReactNode };
 export type DecKind = 'second_uncapped' | 'exceptional';
@@ -16,12 +16,28 @@ export const rowsForTab = (tab: TabId, rows: RcRow[]) =>
 export const editable = (tab: TabId, r: RcRow, locked: boolean) =>
   tab === 'coursework' ? !locked : r.coursework === null ? false : tab === 'first' ? r.eligible : tab === 'second' ? r.in_second : tab === 'exceptional' ? r.in_exc : false;
 
-const columns = (tab: TabId, s: Sheet, onDecision: (r: RcRow, k: DecKind) => void, canDecide: boolean): Col[] => {
+export const ekey = (f: Field, id: string) => `${f}:${id}`;
+
+const MarkCell = ({ field, r, can, edits, setEdit }: { field: Field; r: RcRow; can: boolean; edits: Record<string, string>; setEdit: (k: string, v: string) => void }) => {
+  const k = ekey(field, r.student_db_id);
+  if (!can) return <Text style={[rc.td, { fontWeight: '700', minWidth: 40, textAlign: 'center', color: r[field] === null ? '#cbd5e1' : '#1a2540' }]} testID={`mark-ro-${field}-${r.student_db_id}`}>{fmt(r[field])}</Text>;
+  return <TextInput style={[rc.input, edits[k] !== undefined && { borderColor: '#f59e0b', backgroundColor: '#fffbeb' }]}
+    value={edits[k] ?? (r[field] === null ? '' : String(r[field]))} onChangeText={(v) => setEdit(k, v)} placeholder="—" testID={`mark-${field}-${r.student_db_id}`} />;
+};
+
+type CellFn = (f: Field, r: RcRow, can: boolean) => React.ReactNode;
+
+const columns = (tab: TabId, s: Sheet, onDecision: (r: RcRow, k: DecKind) => void, canDecide: boolean, cell: CellFn, canExams: boolean): Col[] => {
   const cfg = s.settings;
   switch (tab) {
     case 'coursework': return [
-      { label: `الحد الأدنى (${cfg.coursework_pass_pct}%)`, flex: 1, render: (r) => <Text style={rc.td}>{r.cw_need}</Text> },
-      { label: 'حالة السعي', flex: 1, render: (r) => r.coursework === null ? res('لم يُرصد', `cw-st-${r.student_db_id}`) : res(r.cw_ok ? 'مؤهل' : 'غير مؤهل', `cw-st-${r.student_db_id}`) },
+      { label: `الدور الأول (من ${cfg.final_max})`, flex: 0.9, render: (r) => cell('first_exam', r, canExams && r.coursework !== null && r.eligible) },
+      { label: 'الدور الثاني (من 100)', flex: 0.9, render: (r) => cell('second_exam', r, canExams && r.coursework !== null && r.in_second) },
+      { label: 'المجموع', flex: 0.7, render: (r) => <Text style={[rc.td, { fontWeight: '800', fontSize: 15 }]} testID={`cw-total-${r.student_db_id}`}>{fmt(r.pass1 !== null ? r.total1 : r.final2 ?? r.total1)}</Text> },
+      { label: 'الأهلية', flex: 1.1, render: (r) => r.coursework === null ? res('لم يُرصد', `cw-st-${r.student_db_id}`)
+        : <View><Badge text={r.eligible ? 'مؤهل للأول' : 'دور ثان'} color={r.eligible ? '#2e7d32' : '#ef6c00'} testID={`cw-st-${r.student_db_id}`} />
+            {!r.eligible && <Text style={{ fontSize: 10.5, color: '#c62828', textAlign: 'right' }} numberOfLines={1}>{r.reasons.join('، ')}</Text>}</View> },
+      { label: 'النتيجة', flex: 1.1, render: (r) => r.coursework === null ? <Text style={rc.td}>—</Text> : res(r.result, `cw-res-${r.student_db_id}`) },
     ];
     case 'eligibility': return [
       { label: 'السعي', flex: 0.7, render: (r) => <Text style={[rc.td, !r.cw_ok && { color: '#c62828' }]}>{fmt(r.coursework)}</Text> },
@@ -67,13 +83,14 @@ const columns = (tab: TabId, s: Sheet, onDecision: (r: RcRow, k: DecKind) => voi
   }
 };
 
-export const RcMarksTable = ({ tab, sheet, edits, setEdit, errors, onDecision, canEdit, canDecide }: {
-  tab: TabId; sheet: Sheet; edits: Record<string, string>; setEdit: (id: string, v: string) => void; errors: Record<string, string>;
-  onDecision: (r: RcRow, k: DecKind) => void; canEdit: boolean; canDecide: boolean;
+export const RcMarksTable = ({ tab, sheet, edits, setEdit, errors, onDecision, canEdit, canDecide, canExams }: {
+  tab: TabId; sheet: Sheet; edits: Record<string, string>; setEdit: (k: string, v: string) => void; errors: Record<string, string>;
+  onDecision: (r: RcRow, k: DecKind) => void; canEdit: boolean; canDecide: boolean; canExams: boolean;
 }) => {
   const field = TAB_FIELD[tab];
   const rows = rowsForTab(tab, sheet.rows);
-  const cols = columns(tab, sheet, onDecision, canDecide);
+  const cell: CellFn = (f, r, can) => <MarkCell field={f} r={r} can={can} edits={edits} setEdit={setEdit} />;
+  const cols = columns(tab, sheet, onDecision, canDecide, cell, canExams);
   const locked = sheet.sheet.coursework_locked;
   const mx = field === 'coursework' ? sheet.settings.coursework_max : field === 'first_exam' ? sheet.settings.final_max : 100;
   return (
@@ -89,7 +106,6 @@ export const RcMarksTable = ({ tab, sheet, edits, setEdit, errors, onDecision, c
         {rows.length === 0 && <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }} testID={`rc-empty-${tab}`}>{{ first: 'لا يوجد مؤهلون بعد — يظهر هنا من نجح في السعي ولم يتجاوز حد الغياب', second: 'لا يوجد طلاب دور ثانٍ بعد — يظهر هنا غير المؤهلين (بعد رصد سعيهم) والراسبون في الدور الأول', exceptional: 'يظهر هنا من رسب في الدور الثاني بعد رصد درجته' }[tab as string] || 'لا يوجد طلاب في هذه المرحلة'}</Text>}
         {rows.map((r, i) => {
           const can = !!field && canEdit && editable(tab, r, locked);
-          const cur = field ? (edits[r.student_db_id] ?? (r[field] === null ? '' : String(r[field]))) : '';
           return (
             <View key={r.student_db_id} style={[rc.tr, i % 2 === 1 && { backgroundColor: '#fbfcfe' }]} testID={`rc-row-${r.student_db_id}`}>
               <Text style={[rc.td, { width: 30, color: '#94a3b8' }]}>{i + 1}</Text>
@@ -100,15 +116,8 @@ export const RcMarksTable = ({ tab, sheet, edits, setEdit, errors, onDecision, c
               <Text style={[rc.td, { flex: 0.9, color: '#475569' }]}>{r.reg_no}</Text>
               {field && (
                 <View style={{ width: 96, flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
-                  {can ? (
-                    <TextInput style={[rc.input, edits[r.student_db_id] !== undefined && { borderColor: '#f59e0b', backgroundColor: '#fffbeb' }]}
-                      value={cur} onChangeText={(v) => setEdit(r.student_db_id, v)} placeholder="—" keyboardType="default" testID={`mark-${field}-${r.student_db_id}`} />
-                  ) : (
-                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
-                      <Text style={[rc.td, { fontWeight: '700', minWidth: 40, textAlign: 'center' }]} testID={`mark-ro-${field}-${r.student_db_id}`}>{fmt(r[field])}</Text>
-                      {tab === 'coursework' && locked && <Ionicons name="lock-closed" size={12} color="#94a3b8" />}
-                    </View>
-                  )}
+                  {cell(field, r, can)}
+                  {tab === 'coursework' && locked && <Ionicons name="lock-closed" size={12} color="#94a3b8" />}
                 </View>
               )}
               {cols.map((c) => <View key={c.label} style={{ flex: c.flex }}>{c.render(r)}</View>)}

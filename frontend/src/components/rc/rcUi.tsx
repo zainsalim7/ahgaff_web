@@ -22,7 +22,7 @@ export interface Sheet {
 }
 
 export const TABS = [
-  { id: 'coursework', label: 'أعمال السعي', icon: 'create-outline' },
+  { id: 'coursework', label: 'السعي والدورين', icon: 'create-outline' },
   { id: 'eligibility', label: 'كشف الأهلية', icon: 'shield-checkmark-outline' },
   { id: 'first', label: 'الدور الأول', icon: 'document-text-outline' },
   { id: 'second', label: 'الدور الثاني', icon: 'repeat-outline' },
