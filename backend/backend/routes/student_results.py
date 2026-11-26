@@ -34,7 +34,7 @@ def _guard_view(user: dict):
         raise HTTPException(status_code=403, detail="غير مصرح لك — تتطلب صلاحية «عرض النتائج»")
 
 
-SNAP = VALS + ["hidden", "batch_id", "batch_hidden", "student_db_id", "department_id"]
+SNAP = VALS + ["hidden", "batch_id", "batch_hidden", "draft_batch_id", "student_db_id", "department_id"]
 
 
 async def _snapshot(db, key: dict):
@@ -42,10 +42,13 @@ async def _snapshot(db, key: dict):
     return {k: e.get(k) for k in SNAP} if e else None
 
 
+DRAFT = {"draft": True, "hidden": True}
+
+
 async def _new_batch(db, user: dict, kind: str, meta: dict, department_ids: list) -> str:
     r = await db.result_batches.insert_one({
-        "kind": kind, **meta, "department_ids": [d for d in department_ids if d], "changes": [],
-        "hidden": False, "undone": False, "created_at": datetime.now(timezone.utc),
+        "kind": kind, "hidden": False, **meta, "department_ids": [d for d in department_ids if d], "changes": [],
+        "undone": False, "created_at": datetime.now(timezone.utc),
         "created_by": user.get("id"), "created_by_name": user.get("full_name", ""),
     })
     return str(r.inserted_id)
@@ -280,9 +283,13 @@ async def upsert_entry(data: dict = Body(...), current_user: dict = Depends(get_
     bid = await _new_batch(db, current_user, "manual", meta, [st.get("department_id")])
     await _push_change(db, bid, key, before, True)
     now = datetime.now(timezone.utc)
+    draft_of = None
+    if before and ObjectId.is_valid(before.get("batch_id") or ""):
+        pb = await db.result_batches.find_one({"_id": ObjectId(before["batch_id"])}, {"draft": 1, "undone": 1})
+        draft_of = before["batch_id"] if pb and pb.get("draft") and not pb.get("undone") else before.get("draft_batch_id")
     await db.result_entries.update_one(key, {
         "$set": {**vals, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"), "batch_id": bid,
-                 "batch_hidden": False, "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
+                 "batch_hidden": bool(draft_of), "draft_batch_id": draft_of, "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
         "$setOnInsert": {"created_at": now}}, upsert=True)
     await log_activity(current_user, "edit_student_result", "result_entries", str(st["_id"]), f"{st['student_id']} م{level} ف{sem} {year or ''}", vals)
     return {"message": "تم الحفظ", "batch_id": bid}
@@ -351,7 +358,9 @@ async def list_batches(current_user: dict = Depends(get_current_user)):
             "id": str(b["_id"]), "kind": b["kind"], "kind_name": KIND_AR.get(b["kind"], b["kind"]),
             "academic_year": b.get("academic_year"), "level": b.get("level"), "semester": b.get("semester"),
             "scope_name": (b.get("scope_name", "") + (f" · شعبة {b['section']}" if b.get("section") else "")), "student_name": b.get("student_name", ""), "file_name": b.get("file_name", ""),
-            "counts": b.get("counts") or {}, "notified": b.get("notified", 0), "hidden": b.get("hidden", False),
+            "counts": b.get("counts") or {}, "notified": b.get("notified", 0), "hidden": b.get("hidden", False), "draft": b.get("draft", False),
+            "notify_pending": len(b.get("notify_uids") or []) if b.get("draft") and b.get("notify_on_publish") else 0,
+            "published_by_name": b.get("published_by_name", ""),
             "undone": b.get("undone", False), "event_only": b.get("event_only", False), "undone_by_name": b.get("undone_by_name", ""),
             "created_by_name": b.get("created_by_name", ""),
             "created_at": b["created_at"].isoformat() if isinstance(b.get("created_at"), datetime) else b.get("created_at"),
@@ -369,12 +378,46 @@ async def batch_visibility(batch_id: str, data: dict = Body(...), current_user: 
         raise HTTPException(status_code=400, detail="هذا سجل حدث وليس رفعة")
     if b.get("undone"):
         raise HTTPException(status_code=400, detail="تم التراجع عن هذه الرفعة")
+    if b.get("draft"):
+        raise HTTPException(status_code=400, detail="هذه الرفعة مسودة — استخدم زر «نشر للطلاب»")
     hidden = bool(data.get("hidden"))
     r = await db.result_entries.update_many({"batch_id": batch_id}, {"$set": {"batch_hidden": hidden}})
     await db.result_batches.update_one({"_id": b["_id"]}, {"$set": {"hidden": hidden}})
     await log_activity(current_user, "hide_results_batch" if hidden else "show_results_batch", "result_batches", batch_id, b.get("scope_name", ""))
     return {"hidden": hidden, "affected": r.modified_count,
             "message": f"تم إخفاء {r.modified_count} نتيجة عن الطلاب" if hidden else f"أصبحت {r.matched_count} نتيجة ظاهرة للطلاب"}
+
+
+@router.post("/results/batches/{batch_id}/publish")
+async def publish_batch(batch_id: str, data: dict = Body(default={}), current_user: dict = Depends(get_current_user)):
+    """📢 نشر مسودة للطلاب + إرسال الإشعار لحظة النشر"""
+    _guard(current_user)
+    db = get_db()
+    b = await _batch_scoped(db, current_user, batch_id)
+    if b.get("event_only") or b.get("kind") != "import":
+        raise HTTPException(status_code=400, detail="هذا السجل ليس رفعة نتائج")
+    if b.get("undone"):
+        raise HTTPException(status_code=400, detail="تم التراجع عن هذه الرفعة")
+    if not b.get("draft"):
+        raise HTTPException(status_code=400, detail="هذه الرفعة منشورة مسبقاً")
+    r = await db.result_entries.update_many({"$or": [{"batch_id": batch_id}, {"draft_batch_id": batch_id}]},
+                                            {"$set": {"batch_hidden": False, "draft_batch_id": None}})
+    send = bool(data.get("notify", b.get("notify_on_publish", True)))
+    uids = []
+    if send and b.get("notify_uids"):
+        uids = [d["user_id"] async for d in db.students.find(
+            {"user_id": {"$in": b["notify_uids"]}, "department_id": {"$in": b.get("department_ids") or []}}, {"user_id": 1}) if d.get("user_id")]
+        uids = list(set(uids))
+    await db.result_batches.update_one({"_id": b["_id"]}, {"$set": {
+        "draft": False, "hidden": False, "notified": len(uids), "published_at": datetime.now(timezone.utc),
+        "published_by": current_user.get("id"), "published_by_name": current_user.get("full_name", "")}})
+    if uids:
+        asyncio.create_task(_notify_students(db, uids))
+    await log_activity(current_user, "publish_results_batch", "result_batches", batch_id, b.get("scope_name", ""), {"notified": len(uids)})
+    msg = f"تم النشر: أصبحت {r.matched_count} نتيجة ظاهرة للطلاب"
+    if uids:
+        msg += f" · أُرسل إشعار «صدرت نتيجتك» إلى {len(uids)} طالب"
+    return {"published": r.matched_count, "notified": len(uids), "message": msg}
 
 
 async def _undo_batch(db, current_user: dict, b: dict, batch_id: str):
@@ -583,7 +626,7 @@ async def import_results(file: UploadFile = File(...), academic_year: str = Form
     scope_doc = await db[("faculties" if scope == "faculty" else "departments")].find_one({"_id": ObjectId(scope_id)}, {"name": 1}) if ObjectId.is_valid(scope_id) else None
     dep_ids = q["department_id"]["$in"] if isinstance(q.get("department_id"), dict) else [q.get("department_id")]
     bid = await _new_batch(db, current_user, "import", {**key, "scope": scope, "scope_id": scope_id, "scope_name": (scope_doc or {}).get("name", ""),
-                                                        "section": section or None, "file_name": file.filename or "", "counts": counts}, dep_ids)
+                                                        "section": section or None, "file_name": file.filename or "", "counts": counts, **DRAFT}, dep_ids)
     for r in items:
         if r["status_code"] not in ("new", "changed"):
             continue
@@ -593,25 +636,21 @@ async def import_results(file: UploadFile = File(...), academic_year: str = Form
         await db.result_entries.update_one(
             ekey,
             {"$set": {**{k: r[k] for k in VALS}, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"),
-                      "batch_id": bid, "batch_hidden": False, "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
+                      "batch_id": bid, "batch_hidden": True, "updated_at": now, "updated_by": current_user.get("id"), "updated_by_name": current_user.get("full_name", "")},
              "$setOnInsert": {"created_at": now}},
             upsert=True,
         )
         if st.get("user_id"):
             notify_uids.append(st["user_id"])
-    notified = len(set(notify_uids)) if notify.lower() == "true" else 0
-    await db.result_batches.update_one({"_id": ObjectId(bid)}, {"$set": {"notified": notified}})
-    if notified:
-        asyncio.create_task(_notify_students(db, list(set(notify_uids))))
+    await db.result_batches.update_one({"_id": ObjectId(bid)}, {"$set": {"notify_uids": list(set(notify_uids)), "notify_on_publish": notify.lower() == "true"}})
     await log_activity(current_user, "import_student_results", "result_entries", "", file.filename or "",
-                       {**counts, **key, "scope": scope, "scope_id": scope_id, "notified": notified})
+                       {**counts, **key, "scope": scope, "scope_id": scope_id, "draft": True})
     msg = f"تم الحفظ ({year} · المستوى {lvl} · الفصل {'الأول' if sem == 1 else 'الثاني'}): {counts['new']} جديد · {counts['changed']} مُحدَّث · {counts['unchanged']} بلا تغيير"
     rejected = counts["invalid"] + counts["out_of_scope"]
     if rejected:
         msg += f" · رُفض {rejected} صف"
-    if notified:
-        msg += f" · أُرسل إشعار صدور النتيجة إلى {notified} طالب"
-    return {"preview": False, "counts": counts, "notified": notified, "batch_id": bid, "message": msg}
+    msg += " · حُفظت كمسودة مخفية عن الطلاب — انشرها من «سجل العمليات»"
+    return {"preview": False, "counts": counts, "notified": 0, "draft": True, "batch_id": bid, "message": msg}
 
 
 # ==================== 🔗 ربط كشف الدرجات بالنتائج + بيان الدرجات في التطبيق ====================
@@ -638,7 +677,7 @@ async def link_grades_import(db, user: dict, import_id: str, imp: dict, students
     dep = await db.departments.find_one({"_id": ObjectId(imp["department_id"])}, {"name": 1}) if ObjectId.is_valid(imp.get("department_id") or "") else None
     bid = await _new_batch(db, user, "import", {**key, "scope": "department", "scope_id": imp.get("department_id"),
                                                 "scope_name": (dep or {}).get("name", ""), "file_name": f"كشف درجات: {imp.get('filename', '')}",
-                                                "grade_import_id": import_id}, [imp.get("department_id")])
+                                                "grade_import_id": import_id, **DRAFT}, [imp.get("department_id")])
     now = datetime.now(timezone.utc)
     linked, uids = 0, set()
     counts = {"new": 0, "changed": 0, "unchanged": len(students) - len(rows)}
@@ -647,16 +686,13 @@ async def link_grades_import(db, user: dict, import_id: str, imp: dict, students
         await _push_change(db, bid, ekey, before, True)
         await db.result_entries.update_one(ekey, {
             "$set": {**vals, "student_db_id": str(st["_id"]), "department_id": st.get("department_id"), "batch_id": bid,
-                     "batch_hidden": False, "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("full_name", "")},
+                     "batch_hidden": True, "updated_at": now, "updated_by": user.get("id"), "updated_by_name": user.get("full_name", "")},
             "$setOnInsert": {"created_at": now}}, upsert=True)
         linked += 1
         if st.get("user_id"):
             uids.add(st["user_id"])
-    notified = len(uids) if notify else 0
-    await db.result_batches.update_one({"_id": ObjectId(bid)}, {"$set": {"counts": counts, "notified": notified}})
-    if notified:
-        asyncio.create_task(_notify_students(db, list(uids)))
-    return {"linked": linked, "notified": notified, "results_batch_id": bid}
+    await db.result_batches.update_one({"_id": ObjectId(bid)}, {"$set": {"counts": counts, "notify_uids": list(uids), "notify_on_publish": bool(notify)}})
+    return {"linked": linked, "notified": 0, "draft": True, "results_batch_id": bid}
 
 
 @router.get("/students/me/grades")

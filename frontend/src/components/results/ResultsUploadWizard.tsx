@@ -120,11 +120,12 @@ export const ResultsUploadWizard = ({ years, faculties, departments, restrictedF
           <Text style={rs.hint} testID="up-preview-counts">جديد: {c.new} · مُحدَّث: {c.changed} · بلا تغيير: {c.unchanged} · مرفوض: {c.invalid + c.out_of_scope} · مكرر: {c.duplicate} · تنبيهات مستوى: {c.warnings}</Text>
           <TouchableOpacity style={{ flexDirection: 'row-reverse', alignItems: 'center', marginVertical: 8 }} onPress={() => setNotify(!notify)} testID="up-notify-toggle">
             <Ionicons name={notify ? 'checkbox' : 'square-outline'} size={20} color="#1565c0" />
-            <Text style={{ marginRight: 6, color: '#1a2540' }}>إرسال إشعار «صدرت نتيجتك» للطلاب الذين أُضيفت أو تغيّرت نتيجتهم</Text>
+            <Text style={{ marginRight: 6, color: '#1a2540' }}>عند النشر: إرسال إشعار «صدرت نتيجتك» للطلاب الذين أُضيفت أو تغيّرت نتيجتهم</Text>
           </TouchableOpacity>
+          <Text style={[rs.hint, { color: '#6d28d9', marginBottom: 6 }]} testID="up-draft-note">تُحفظ النتائج مخفية عن الطلاب، ولا تظهر في التطبيق إلا بعد الضغط على «نشر للطلاب» من «سجل العمليات»</Text>
           <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 8 }}>
             <TouchableOpacity style={[rs.btn, { flex: 1, backgroundColor: '#2e7d32', opacity: busy || !saveable ? 0.5 : 1 }]} onPress={() => send(true)} disabled={busy || !saveable} testID="up-commit-btn">
-              {busy ? <ActivityIndicator color="#fff" /> : <Text style={rs.btnTxt}>{saveable ? `اعتماد وحفظ (${saveable} صف)` : 'لا يوجد ما يُحفظ'}</Text>}
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={rs.btnTxt}>{saveable ? `حفظ كمسودة (${saveable} صف)` : 'لا يوجد ما يُحفظ'}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={[rs.btn, { flex: 1, backgroundColor: '#78909c' }]} onPress={() => setPreview(null)} testID="up-cancel-btn"><Text style={rs.btnTxt}>إلغاء</Text></TouchableOpacity>
           </View>

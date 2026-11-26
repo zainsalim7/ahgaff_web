@@ -912,7 +912,7 @@ async def import_grades(
     if linked.get("link_skipped"):
         result["message"] += f" · {linked['link_skipped']}"
     if linked.get("linked"):
-        result["message"] += f" · رُبطت {linked['linked']} نتيجة بصفحة النتائج" + (f" · إشعار لـ {linked['notified']} طالب" if linked.get("notified") else "")
+        result["message"] += f" · رُبطت {linked['linked']} نتيجة بصفحة النتائج كمسودة — انشرها من «سجل العمليات»"
     return result
 
 

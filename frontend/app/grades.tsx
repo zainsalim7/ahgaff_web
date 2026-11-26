@@ -379,7 +379,7 @@ export default function GradesScreen() {
                   onPress={() => setNotifyStudents((v) => !v)}
                   testID="grades-notify-toggle"
                 >
-                  <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#1565c0' }}>إشعار الطلاب الذين أُضيفت أو تغيّرت نتيجتهم (نتيجة الفصل تُنشر تلقائياً في «النتائج»)</Text>
+                  <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#1565c0' }}>عند النشر: إشعار الطلاب الذين أُضيفت أو تغيّرت نتيجتهم (تُحفظ نتيجة الفصل كمسودة في «النتائج» ولا تظهر للطلاب قبل النشر)</Text>
                   <Ionicons name={notifyStudents ? 'checkbox' : 'square-outline'} size={20} color="#1565c0" />
                 </TouchableOpacity>
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
