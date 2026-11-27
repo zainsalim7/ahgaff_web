@@ -27,7 +27,15 @@ export const editable = (tab: TabId, r: RcRow, locked: boolean) =>
 
 export const ekey = (f: Field, id: string) => `${f}:${id}`;
 
-const MarkCell = ({ field, r, can, edits, setEdit }: { field: Field; r: RcRow; can: boolean; edits: Record<string, string>; setEdit: (k: string, v: string) => void }) => {
+const MarkCell = (p: { field: Field; r: RcRow; can: boolean; edits: Record<string, string>; setEdit: (k: string, v: string) => void }) => {
+  const { field, r } = p;
+  const fin = field === 'second_exam' ? r.final2 : field === 'exceptional_exam' ? r.final3 : null;
+  if (fin === null || fin === undefined) return <RawCell {...p} />;
+  return <View style={{ alignItems: 'center' }}><RawCell {...p} />
+    <Text style={{ fontSize: 11, fontWeight: '800', color: fin > 0 ? '#2e7d32' : '#c62828', marginTop: 2 }} testID={`approved-${field}-${r.student_db_id}`}>المعتمد: {fmt(fin)}</Text></View>;
+};
+
+const RawCell = ({ field, r, can, edits, setEdit }: { field: Field; r: RcRow; can: boolean; edits: Record<string, string>; setEdit: (k: string, v: string) => void }) => {
   const k = ekey(field, r.student_db_id);
   if (!can) return <Text style={[rc.td, { fontWeight: '700', minWidth: 40, textAlign: 'center', color: r[field] === null ? '#cbd5e1' : '#1a2540' }]} testID={`mark-ro-${field}-${r.student_db_id}`}>{fmt(r[field])}</Text>;
   return <TextInput style={[rc.input, edits[k] !== undefined && { borderColor: '#f59e0b', backgroundColor: '#fffbeb' }]}
@@ -35,7 +43,7 @@ const MarkCell = ({ field, r, can, edits, setEdit }: { field: Field; r: RcRow; c
 };
 
 const Note = ({ r }: { r: RcRow }) => {
-  const t = r.in_second ? `دور ثان${r.pass2 === true ? ' · ناجح' : r.pass2 === false ? ' · راسب' : ''}`
+  const t = r.in_second ? `دور ثان${r.pass2 === true ? ` · ناجح (المعتمد ${fmt(r.final2)})` : r.pass2 === false ? ' · راسب (المعتمد 0)' : ''}`
     : r.pass1 ? 'ناجح دور أول' : r.eligible && r.need_first !== null && r.first_exam === null ? `يحتاج ${r.need_first} في الدور الأول` : '';
   const c = r.in_second ? (r.pass2 ? '#2e7d32' : r.pass2 === false ? '#c62828' : '#ef6c00') : r.pass1 ? '#2e7d32' : '#64748b';
   const why = r.in_second ? (!r.att_ok ? 'بسبب الغياب' : r.pass1 === false ? 'رسب في الدور الأول' : !r.cw_ok ? 'لم يبلغ حد السعي' : '') : '';
