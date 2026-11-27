@@ -103,6 +103,7 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
             logger.error(f"Expo push failed: {e}")
             expo_result = {"success": 0, "failure": len(expo_tokens), "failed_details": [], "error": str(e)}
     if not tokens:
+        await _purge_dead(expo_result.get("dead_tokens") or [])
         return expo_result
 
     import asyncio
@@ -124,6 +125,7 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
         dead += r.get("dead_tokens", [])
         if r.get("error"):
             errors.append(r["error"])
+    await _purge_dead(dead)
     out = {"success": ok + expo_result["success"], "failure": bad + expo_result["failure"],
            "failed_details": failed_details + expo_result.get("failed_details", []), "dead_tokens": dead}
     if errors:
@@ -181,3 +183,15 @@ def _send_fcm_chunk(tokens: list, title: str, body: str, data: dict = None) -> d
             if type(exc).__name__ in ("UnregisteredError", "SenderIdMismatchError") or (err_code == "INVALID_ARGUMENT" and "registration token" in str(exc).lower()):
                 dead.append(tokens[idx])
     return {"success": response.success_count, "failure": response.failure_count, "failed_details": failed_details, "dead_tokens": dead}
+
+
+async def _purge_dead(dead: list) -> None:
+    """حذف رموز الأجهزة التي لم تعد صالحة حتى لا تتراكم"""
+    if not dead:
+        return
+    try:
+        from routes.deps import get_db
+        n = (await get_db().fcm_tokens.delete_many({"token": {"$in": dead}})).deleted_count
+        logger.info(f"removed {n} dead push tokens")
+    except Exception as e:
+        logger.error(f"dead token purge failed: {e}")

@@ -212,3 +212,4 @@
 - 2026-11: Notifications: FCM sent in chunks of 100 (FCM multicast limit) via asyncio.to_thread; push delivery moved to background task (_push_bg) updating notification_history status; API returns immediately. Fixes failures for role/faculty/department/all audiences.
 - 2026-11: Notifications send waits up to 25s for push (3 parallel FCM chunks of 100), then continues in background (Cloud Run-safe). Prod backend is Cloud Run api.ahgaff.net (not Emergent deploy).
 - 2026-11: Dead push tokens (FCM Unregistered/SenderIdMismatch/invalid token, Expo DeviceNotRegistered) auto-deleted after each send; history stores removed_devices. Prod had 2465 registered devices (>500 FCM cap) — root cause of bulk send failures.
+- 2026-11: Results publish notification (_notify_students) awaited in publish request, push via task with 25s bounded wait; dead-token purge centralized in firebase_service._purge_dead (applies to all senders).

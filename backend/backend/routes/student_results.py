@@ -436,7 +436,7 @@ async def publish_batch(batch_id: str, data: dict = Body(default={}), current_us
         "draft": False, "hidden": False, "notified": len(uids), "published_at": datetime.now(timezone.utc),
         "published_by": current_user.get("id"), "published_by_name": current_user.get("full_name", "")}})
     if uids:
-        asyncio.create_task(_notify_students(db, uids))
+        await _notify_students(db, uids)
     await _drop_superseded(db, b)
     await log_activity(current_user, "publish_results_batch", "result_batches", batch_id, b.get("scope_name", ""), {"notified": len(uids)})
     msg = f"تم النشر: أصبحت {r.matched_count} نتيجة ظاهرة للطلاب" if r.matched_count else "تم النشر"
@@ -629,10 +629,26 @@ async def _notify_students(db, user_ids: list) -> None:
                                          "is_read": False, "created_at": now} for u in user_ids])
     tokens = list({t["token"] for t in await db.fcm_tokens.find({"user_id": {"$in": user_ids}}).to_list(20000)})
     if tokens:
+        # دفعات + انتظار محدود ثم إكمال في الخلفية حتى لا يتعطل الاعتماد مع آلاف الأجهزة
+        t = asyncio.create_task(_push_results(tokens, title, body, data))
+        _BG.add(t)
+        t.add_done_callback(_BG.discard)
         try:
-            await send_notification_to_many(tokens, title, body, data)
-        except Exception as ex:
-            logging.getLogger(__name__).error("results notification failed: %s", ex)
+            await asyncio.wait_for(asyncio.shield(t), timeout=25)
+        except asyncio.TimeoutError:
+            pass
+
+
+_BG: set = set()
+
+
+async def _push_results(tokens, title, body, data):
+    from services.firebase_service import send_notification_to_many
+    try:
+        r = await send_notification_to_many(tokens, title, body, data)
+        logging.getLogger(__name__).info("results push: %s ok, %s failed", r.get("success"), r.get("failure"))
+    except Exception as ex:
+        logging.getLogger(__name__).error("results notification failed: %s", ex)
 
 
 @router.post("/results/import")
