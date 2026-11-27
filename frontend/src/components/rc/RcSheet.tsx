@@ -20,7 +20,7 @@ const Count = ({ label, value, color }: { label: string; value: number; color: s
 
 export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: string; perms: RcPerms; onBack: () => void; onFaculty?: (id: string) => void }) => {
   const [sheet, setSheet] = useState<Sheet | null>(null);
-  const [tab, setTab] = useState<TabId>('coursework');
+  const [tab, setTab] = useState<TabId>('eligibility');
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -121,10 +121,10 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
         <RcMarksTable tab={tab} sheet={sheet} edits={edits} errors={errors} canEdit={canEdit} canDecide={perms.decide} canExams={perms.exams}
           setEdit={(id, v) => setEdits({ ...edits, [id]: v })} onDecision={(row, kind) => setDec({ row, kind })} />
       </View>
-      <Text style={{ fontSize: 11.5, color: '#64748b', textAlign: 'right' }}>اكتب «غ» لمن غاب عن امتحان الدور. حدود الغياب: بلا عذر أكبر من الحد · بعذر أكبر من الحد · الإجمالي يبلغ الحد = غير مؤهل (ما لم يستثنه مجلس الكلية).</Text>
+      <Text style={{ fontSize: 11.5, color: '#64748b', textAlign: 'right' }}>اكتب «غ» لمن غاب عن امتحان الدور. للتراجع عن درجة محفوظة: امسح الخانة واحفظ، أو اضغط «تراجع» بجانبها في «سجل التعديلات». حدود الغياب: بلا عذر أكبر من الحد · بعذر أكبر من الحد · الإجمالي يبلغ الحد = غير مؤهل (ما لم يستثنه مجلس الكلية).</Text>
 
       {modal === 'import' && field && <RcImportModal courseId={courseId} courseName={sheet.course.name} field={field} onClose={() => setModal('')} onDone={load} />}
-      {modal === 'log' && <RcLogModal courseId={courseId} onClose={() => setModal('')} />}
+      {modal === 'log' && <RcLogModal courseId={courseId} onClose={() => setModal('')} onChanged={load} canUndo={perms.cw || perms.exams} />}
       {dec && <RcDecisionModal courseId={courseId} row={dec.row} kind={dec.kind} cap={dec.kind === 'exceptional' ? s.exceptional_cap : s.second_cap}
         onClose={() => setDec(null)} onDone={() => { setDec(null); load(); }} />}
     </View>

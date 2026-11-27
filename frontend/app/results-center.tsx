@@ -120,7 +120,7 @@ export default function ResultsCenterPage() {
         {open ? <RcSheet courseId={open} perms={perms} onBack={() => { setOpen(null); setOpenFac(''); }} onFaculty={setOpenFac} /> : (
           <>
             <View style={st.flow} testID="rc-flow">
-              {['أعمال السعي', 'كشف الأهلية', 'الدور الأول', 'الدور الثاني', 'الاستثنائي', 'الاعتماد ← النتائج'].map((x, i, a) => (
+              {['كشف الأهلية (الحضور)', 'أعمال السعي', 'الدور الأول', 'الدور الثاني', 'الاستثنائي', 'الاعتماد ← النتائج'].map((x, i, a) => (
                 <View key={x} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
                   <View style={st.flowDot}><Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>{i + 1}</Text></View>
                   <Text style={{ color: '#1a2540', fontWeight: '700', fontSize: 12.5 }}>{x}</Text>

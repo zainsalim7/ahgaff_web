@@ -204,7 +204,7 @@ def _allowed(field: str, row: dict, locked: bool) -> Optional[str]:
     """None = مسموح · وإلا سبب المنع"""
     if field == "coursework":
         return "السعي مقفل — يلزم فتحه بصلاحية أعلى" if locked else None
-    if row.get("coursework") is None:
+    if row.get("coursework") is None and not (field == "second_exam" and row["in_second"]):
         return "ارصد سعي الطالب أولاً لتحديد أهليته"
     if field == "first_exam":
         return None if row["eligible"] else "الطالب غير مؤهل للدور الأول"
@@ -369,9 +369,9 @@ async def lock(course_id: str, data: dict = Body(...), current_user: dict = Depe
     if locked:
         _need(current_user, "rc_enter_coursework", "رصد السعي")
         d = await _build(db, course)
-        missing = sum(1 for r in d["rows"] if r["coursework"] is None)
+        missing = sum(1 for r in d["rows"] if r["coursework"] is None and r["att_ok"])
         if missing:
-            raise HTTPException(status_code=400, detail=f"لا يمكن الإقفال: {missing} طالب بلا درجة سعي")
+            raise HTTPException(status_code=400, detail=f"لا يمكن الإقفال: {missing} طالب مؤهل بالحضور بلا درجة سعي")
     else:
         _need(current_user, "rc_unlock_coursework", "فتح السعي بعد إقفاله")
     now = _now()
@@ -389,10 +389,30 @@ async def course_log(course_id: str, current_user: dict = Depends(get_current_us
     await _course_scoped(db, current_user, course_id)
     items = []
     async for x in db.rc_log.find({"course_id": course_id}).sort("at", -1).limit(300):
-        items.append({"field": x.get("field"), "field_name": E.FIELDS.get(x.get("field"), {"lock": "إقفال/فتح السعي", "decision": "قرار مجلس"}.get(x.get("field"), "")),
+        items.append({"id": str(x["_id"]), "undone": bool(x.get("undone")), "field": x.get("field"), "field_name": E.FIELDS.get(x.get("field"), {"lock": "إقفال/فتح السعي", "decision": "قرار مجلس"}.get(x.get("field"), "")),
                       "name": x.get("name", ""), "reg_no": x.get("reg_no", ""), "old": x.get("old"), "new": x.get("new"), "via": x.get("via", ""),
                       "note": x.get("note", ""), "by_name": x.get("by_name", ""), "at": x["at"].isoformat() if isinstance(x.get("at"), datetime) else x.get("at")})
     return {"items": items}
+
+
+@router.post("/rc/courses/{course_id}/log/{log_id}/undo")
+async def undo_mark(course_id: str, log_id: str, current_user: dict = Depends(get_current_user)):
+    """↩️ التراجع عن رصد درجة: تعود القيمة السابقة (ضمن نفس قواعد الرصد والصلاحيات)"""
+    db = get_db()
+    course = await _course_scoped(db, current_user, course_id)
+    x = await db.rc_log.find_one({"_id": ObjectId(log_id), "course_id": course_id}) if ObjectId.is_valid(log_id) else None
+    if not x or x.get("field") not in E.FIELDS:
+        raise HTTPException(status_code=404, detail="السجل غير موجود")
+    if x.get("undone"):
+        raise HTTPException(status_code=400, detail="تم التراجع عن هذا الرصد مسبقاً")
+    m = await db.rc_marks.find_one({"course_id": course_id, "student_db_id": x["student_db_id"]}) or {}
+    if m.get(x["field"]) != x.get("new"):
+        raise HTTPException(status_code=400, detail="تغيّرت الدرجة بعد هذا الرصد — تراجع عن آخر تعديل أولاً")
+    res = await _save(db, current_user, course, x["field"], [{"student_db_id": x["student_db_id"], "value": x.get("old")}], "undo")
+    if res["errors"]:
+        raise HTTPException(status_code=400, detail=res["errors"][0]["error"])
+    await db.rc_log.update_one({"_id": x["_id"]}, {"$set": {"undone": True, "undone_by_name": current_user.get("full_name", "")}})
+    return {"message": f"تم التراجع: {E.FIELDS[x['field']]} لـ {x.get('name', '')} عادت إلى {E.fmt(x.get('old')) if isinstance(x.get('old'), (int, float)) else (x.get('old') or 'فارغ')}"}
 
 
 # ==================== 🏛️ قرارات مجلس الكلية (درجات) ====================

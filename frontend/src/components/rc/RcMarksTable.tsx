@@ -14,7 +14,7 @@ export const rowsForTab = (tab: TabId, rows: RcRow[]) =>
     : tab === 'exceptional' ? rows.filter((r) => r.pass2 === false) : rows;
 
 export const editable = (tab: TabId, r: RcRow, locked: boolean) =>
-  tab === 'coursework' ? !locked : r.coursework === null ? false : tab === 'first' ? r.eligible : tab === 'second' ? r.in_second : tab === 'exceptional' ? r.in_exc : false;
+  tab === 'coursework' ? !locked : r.coursework === null && !(tab === 'second' && r.in_second) ? false : tab === 'first' ? r.eligible : tab === 'second' ? r.in_second : tab === 'exceptional' ? r.in_exc : false;
 
 export const ekey = (f: Field, id: string) => `${f}:${id}`;
 
@@ -32,14 +32,15 @@ const columns = (tab: TabId, s: Sheet, onDecision: (r: RcRow, k: DecKind) => voi
   switch (tab) {
     case 'coursework': return [
       { label: `الدور الأول (من ${cfg.final_max})`, flex: 0.9, render: (r) => cell('first_exam', r, canExams && r.coursework !== null && r.eligible) },
-      { label: 'الدور الثاني (من 100)', flex: 0.9, render: (r) => cell('second_exam', r, canExams && r.coursework !== null && r.in_second) },
+      { label: 'الدور الثاني (من 100)', flex: 0.9, render: (r) => cell('second_exam', r, canExams && r.in_second) },
       { label: 'المجموع', flex: 0.7, render: (r) => <Text style={[rc.td, { fontWeight: '800', fontSize: 15 }]} testID={`cw-total-${r.student_db_id}`}>{fmt(r.pass1 !== null ? r.total1 : r.final2 ?? r.total1)}</Text> },
-      { label: 'الأهلية', flex: 1.1, render: (r) => r.coursework === null ? res('لم يُرصد', `cw-st-${r.student_db_id}`)
+      { label: 'الأهلية', flex: 1.1, render: (r) => r.coursework === null && r.att_ok ? res('لم يُرصد', `cw-st-${r.student_db_id}`)
         : <View><Badge text={r.eligible ? 'مؤهل للأول' : 'دور ثان'} color={r.eligible ? '#2e7d32' : '#ef6c00'} testID={`cw-st-${r.student_db_id}`} />
             {!r.eligible && <Text style={{ fontSize: 10.5, color: '#c62828', textAlign: 'right' }} numberOfLines={1}>{r.reasons.join('، ')}</Text>}</View> },
-      { label: 'النتيجة', flex: 1.1, render: (r) => r.coursework === null ? <Text style={rc.td}>—</Text> : res(r.result, `cw-res-${r.student_db_id}`) },
+      { label: 'النتيجة', flex: 1.1, render: (r) => r.coursework === null && r.att_ok ? <Text style={rc.td}>—</Text> : res(r.result, `cw-res-${r.student_db_id}`) },
     ];
     case 'eligibility': return [
+      { label: 'أهلية الحضور', flex: 1.1, render: (r) => <Badge text={r.att_eligibility} color={r.att_ok ? '#2e7d32' : '#c62828'} testID={`att-elig-${r.student_db_id}`} /> },
       { label: 'السعي', flex: 0.7, render: (r) => <Text style={[rc.td, !r.cw_ok && { color: '#c62828' }]}>{fmt(r.coursework)}</Text> },
       { label: 'بلا عذر', flex: 0.7, render: (r) => pct(r.att.pct_unexcused, r.att.exceeded_unexcused) },
       { label: 'بعذر', flex: 0.7, render: (r) => pct(r.att.pct_excused, r.att.exceeded_excused) },

@@ -10,7 +10,7 @@ export interface RcRow {
   coursework: Mark; first_exam: Mark; second_exam: Mark; exceptional_exam: Mark;
   att: { pct_unexcused: number; pct_excused: number; pct_total: number; status: string; status_ar: string; exceeded_unexcused: boolean; exceeded_excused: boolean; exceeded_total: boolean };
   decisions: { second_uncapped?: Dec; exceptional?: Dec };
-  cw_need: number; cw_ok: boolean; att_ok: boolean; eligible: boolean; eligibility: string; reasons: string[]; need_first: number | null;
+  cw_need: number; cw_ok: boolean; att_ok: boolean; att_eligibility: string; eligible: boolean; eligibility: string; reasons: string[]; need_first: number | null;
   total1: number | null; pass1: boolean | null; in_second: boolean; pass2: boolean | null; final2: number | null;
   in_exc: boolean; pass3: boolean | null; final3: number | null; final: number | null; stage: string; stage_label: string; result: string; letter: string | null;
 }
@@ -22,8 +22,8 @@ export interface Sheet {
 }
 
 export const TABS = [
+  { id: 'eligibility', label: 'كشف الأهلية (الحضور)', icon: 'shield-checkmark-outline' },
   { id: 'coursework', label: 'السعي والدورين', icon: 'create-outline' },
-  { id: 'eligibility', label: 'كشف الأهلية', icon: 'shield-checkmark-outline' },
   { id: 'first', label: 'الدور الأول', icon: 'document-text-outline' },
   { id: 'second', label: 'الدور الثاني', icon: 'repeat-outline' },
   { id: 'exceptional', label: 'الاستثنائي (التصفية)', icon: 'flag-outline' },

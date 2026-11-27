@@ -59,20 +59,22 @@ def compute(m: dict, cfg: dict, att: dict, decs: dict) -> dict:
     att_ok = att_status not in ATT_BLOCK
     reasons = []
     if cw is None:
-        reasons.append("لم يُرصد السعي")
+        if att_ok:
+            reasons.append("لم يُرصد السعي")
     elif not cw_ok:
         reasons.append(f"السعي أقل من {fmt(cw_need)}")
     if not att_ok:
         reasons.append("محروم بقرار المجلس" if att_status == "deprived" else "تجاوز حد الغياب")
     eligible = cw_ok and att_ok
     r = {"cw_need": cw_need, "cw_ok": cw_ok, "att_ok": att_ok, "att_status": att_status, "eligible": eligible,
-         "eligibility": "مؤهل" if eligible else ("بانتظار السعي" if cw is None else "غير مؤهل"), "reasons": reasons,
+         "att_eligibility": "مؤهل بالحضور" if att_ok else "غير مؤهل بالغياب",
+         "eligibility": "مؤهل" if eligible else ("بانتظار السعي" if cw is None and att_ok else "غير مؤهل"), "reasons": reasons,
          "need_first": max(0, pm - cw) if eligible else None, "total1": None, "pass1": None,
          "in_second": False, "pass2": None, "final2": None, "in_exc": False, "pass3": None, "final3": None}
     if eligible and f1 is not None:
         r["total1"] = round(cw + (_num(f1) or 0), 2)
         r["pass1"] = _num(f1) is not None and r["total1"] >= pm
-    r["in_second"] = (cw is not None and not eligible) or r["pass1"] is False
+    r["in_second"] = not att_ok or (cw is not None and not cw_ok) or r["pass1"] is False
     unc = bool(decs.get("second_uncapped"))
     if r["in_second"] and s2 is not None:
         r["pass2"] = _num(s2) is not None and s2 >= pm
@@ -89,7 +91,7 @@ def compute(m: dict, cfg: dict, att: dict, decs: dict) -> dict:
         r.update(final=r["final2"], stage="second", result="ناجح")
     elif r["pass3"]:
         r.update(final=r["final3"], stage="tasfiya", result="ناجح")
-    elif cw is None:
+    elif cw is None and att_ok:
         r.update(final=None, stage="pending", result="بانتظار السعي")
     elif eligible and f1 is None:
         r.update(final=None, stage="pending", result="بانتظار الدور الأول")
