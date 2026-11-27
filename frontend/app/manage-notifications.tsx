@@ -164,6 +164,14 @@ export default function ManageNotifications() {
                     <Text style={styles.metaChipText}>{item.users_count || item.devices_count} مستخدم</Text>
                   </View>
                 )}
+                {item.devices_count !== undefined && (
+                  <View style={styles.metaChip} testID={`notif-devices-${item.id || item._id}`}>
+                    <Ionicons name="phone-portrait-outline" size={12} color={item.status === 'failed' || (item.devices_count > 0 && !item.success && item.status !== 'sending') ? '#c62828' : '#2962ff'} />
+                    <Text style={styles.metaChipText}>
+                      {item.devices_count} جهاز{item.status === 'sending' ? ' · جارٍ الإرسال' : ` · وصل ${item.success || 0}${item.failure ? ` · فشل ${item.failure}` : ''}`}
+                    </Text>
+                  </View>
+                )}
                 <Text style={styles.historyTime}>{formatDate(item.created_at)}</Text>
               </View>
             </View>
