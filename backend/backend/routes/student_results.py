@@ -382,7 +382,7 @@ async def list_batches(current_user: dict = Depends(get_current_user)):
             "id": str(b["_id"]), "kind": b["kind"], "kind_name": KIND_AR.get(b["kind"], b["kind"]),
             "academic_year": b.get("academic_year"), "level": b.get("level"), "semester": b.get("semester"),
             "scope_name": (b.get("scope_name", "") + (f" · شعبة {b['section']}" if b.get("section") else "")), "student_name": b.get("student_name", ""), "file_name": b.get("file_name", ""),
-            "counts": b.get("counts") or {}, "notified": b.get("notified", 0), "hidden": b.get("hidden", False), "draft": b.get("draft", False),
+            "counts": b.get("counts") or {}, "notified": b.get("notified", 0), "push": b.get("push"), "hidden": b.get("hidden", False), "draft": b.get("draft", False),
             "notify_pending": len(b.get("notify_uids") or []) if b.get("draft") and b.get("notify_on_publish") else 0,
             "published_by_name": b.get("published_by_name", ""),
             "undone": b.get("undone", False), "event_only": b.get("event_only", False), "undone_by_name": b.get("undone_by_name", ""),
@@ -436,7 +436,7 @@ async def publish_batch(batch_id: str, data: dict = Body(default={}), current_us
         "draft": False, "hidden": False, "notified": len(uids), "published_at": datetime.now(timezone.utc),
         "published_by": current_user.get("id"), "published_by_name": current_user.get("full_name", "")}})
     if uids:
-        await _notify_students(db, uids)
+        await _notify_students(db, uids, b["_id"])
     await _drop_superseded(db, b)
     await log_activity(current_user, "publish_results_batch", "result_batches", batch_id, b.get("scope_name", ""), {"notified": len(uids)})
     msg = f"تم النشر: أصبحت {r.matched_count} نتيجة ظاهرة للطلاب" if r.matched_count else "تم النشر"
@@ -618,7 +618,7 @@ async def _analyze(db, rows: list, students_by_reg: dict, key: dict) -> list:
     return out
 
 
-async def _notify_students(db, user_ids: list) -> None:
+async def _notify_students(db, user_ids: list, batch_oid=None) -> None:
     from services.firebase_service import send_notification_to_many
     if not user_ids:
         return
@@ -627,10 +627,15 @@ async def _notify_students(db, user_ids: list) -> None:
     now = datetime.now(timezone.utc).isoformat()
     await db.notifications.insert_many([{"user_id": u, "title": title, "message": body, "type": "results", "data": data,
                                          "is_read": False, "created_at": now} for u in user_ids])
-    tokens = list({t["token"] for t in await db.fcm_tokens.find({"user_id": {"$in": user_ids}}).to_list(20000)})
+    tok_docs = await db.fcm_tokens.find({"user_id": {"$in": user_ids}}, {"token": 1, "user_id": 1}).to_list(None)
+    tokens = list({t["token"] for t in tok_docs})
+    if batch_oid is not None:
+        await db.result_batches.update_one({"_id": batch_oid}, {"$set": {"push": {
+            "status": "sending" if tokens else "done", "devices": len(tokens), "students_with_device": len({t["user_id"] for t in tok_docs}),
+            "success": 0, "failure": 0}}})
     if tokens:
         # دفعات + انتظار محدود ثم إكمال في الخلفية حتى لا يتعطل الاعتماد مع آلاف الأجهزة
-        t = asyncio.create_task(_push_results(tokens, title, body, data))
+        t = asyncio.create_task(_push_results(db, batch_oid, tokens, title, body, data))
         _BG.add(t)
         t.add_done_callback(_BG.discard)
         try:
@@ -642,13 +647,17 @@ async def _notify_students(db, user_ids: list) -> None:
 _BG: set = set()
 
 
-async def _push_results(tokens, title, body, data):
+async def _push_results(db, batch_oid, tokens, title, body, data):
     from services.firebase_service import send_notification_to_many
     try:
         r = await send_notification_to_many(tokens, title, body, data)
-        logging.getLogger(__name__).info("results push: %s ok, %s failed", r.get("success"), r.get("failure"))
+        upd = {"push.status": "done", "push.success": r.get("success", 0), "push.failure": r.get("failure", 0),
+               "push.removed": len(r.get("dead_tokens") or [])}
     except Exception as ex:
         logging.getLogger(__name__).error("results notification failed: %s", ex)
+        upd = {"push.status": "failed", "push.failure": len(tokens)}
+    if batch_oid is not None:
+        await db.result_batches.update_one({"_id": batch_oid}, {"$set": upd})
 
 
 @router.post("/results/import")

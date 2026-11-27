@@ -213,3 +213,4 @@
 - 2026-11: Notifications send waits up to 25s for push (3 parallel FCM chunks of 100), then continues in background (Cloud Run-safe). Prod backend is Cloud Run api.ahgaff.net (not Emergent deploy).
 - 2026-11: Dead push tokens (FCM Unregistered/SenderIdMismatch/invalid token, Expo DeviceNotRegistered) auto-deleted after each send; history stores removed_devices. Prod had 2465 registered devices (>500 FCM cap) — root cause of bulk send failures.
 - 2026-11: Results publish notification (_notify_students) awaited in publish request, push via task with 25s bounded wait; dead-token purge centralized in firebase_service._purge_dead (applies to all senders).
+- 2026-11: result_batches.push {status,devices,students_with_device,success,failure,removed} recorded on publish; shown in ResultsHistory (PushLine) with 5s auto-refresh while sending.

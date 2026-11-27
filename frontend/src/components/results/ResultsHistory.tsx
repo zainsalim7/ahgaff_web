@@ -7,6 +7,7 @@ import { rs } from './resultsUi';
 interface Batch {
   id: string; kind: string; kind_name: string; academic_year: string | null; level: number; semester: number;
   scope_name: string; student_name: string; file_name: string; counts: any; notified: number; hidden: boolean;
+  push?: { status: string; devices: number; students_with_device?: number; success: number; failure: number; removed?: number } | null;
   undone: boolean; undone_by_name: string; created_by_name: string; created_at: string; event_only?: boolean;
   draft?: boolean; notify_pending?: number; published_by_name?: string;
 }
@@ -23,6 +24,7 @@ const BatchCard = ({ b, canManage, onAct }: { b: Batch; canManage: boolean; onAc
   if (b.event_only) return (
     <View style={[rs.card, { backgroundColor: b.kind === 'pause' ? '#fff7ed' : '#f0fdf4' }]} testID={`batch-${b.id}`}>
       <Text style={rs.title}>{b.kind_name} · {b.scope_name}</Text>
+      {!!b.push && <PushLine p={b.push} id={b.id} notified={b.notified} />}
       <Text style={{ color: '#94a3b8', textAlign: 'right', fontSize: 11.5 }}>{b.created_by_name} · {fmt(b.created_at)}</Text>
     </View>
   );
@@ -39,6 +41,7 @@ const BatchCard = ({ b, canManage, onAct }: { b: Batch; canManage: boolean; onAc
         {b.scope_name || b.student_name}{b.file_name ? ` · ${b.file_name}` : ''}
       </Text>
       {b.kind === 'import' && <Text style={{ color: '#475569', textAlign: 'right', fontSize: 12.5 }}>جديد {c.new ?? 0} · مُحدَّث {c.changed ?? 0} · {b.draft ? `سيُشعَر عند النشر ${b.notify_pending ?? 0}` : `إشعارات ${b.notified}`}</Text>}
+      {!!b.push && <PushLine p={b.push} id={b.id} notified={b.notified} />}
       <Text style={{ color: '#94a3b8', textAlign: 'right', fontSize: 11.5 }}>{b.created_by_name} · {fmt(b.created_at)}{b.published_by_name ? ` · نشر: ${b.published_by_name}` : ''}{b.undone ? ` · تراجع: ${b.undone_by_name}` : ''}</Text>
       {canManage && !b.undone && (
         <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 8 }}>
@@ -64,6 +67,22 @@ const BatchCard = ({ b, canManage, onAct }: { b: Batch; canManage: boolean; onAc
   );
 };
 
+const PushLine = ({ p, id, notified }: { p: NonNullable<Batch['push']>; id: string; notified: number }) => {
+  const bad = p.status === 'failed' || (p.status === 'done' && p.devices > 0 && !p.success);
+  const color = p.status === 'sending' ? '#ef6c00' : bad ? '#c62828' : '#1565c0';
+  const txt = p.status === 'sending' ? `جارٍ الإرسال إلى ${p.devices} جهاز…`
+    : p.devices === 0 ? 'لا توجد أجهزة مسجلة لهؤلاء الطلاب — وصلهم الإشعار داخل التطبيق فقط'
+    : `وصل إلى ${p.success} من ${p.devices} جهاز${p.failure ? ` · فشل ${p.failure}` : ''}${p.removed ? ` · حُذف ${p.removed} جهاز قديم` : ''}`;
+  return (
+    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, marginTop: 2 }} testID={`batch-push-${id}`}>
+      <Ionicons name="phone-portrait-outline" size={13} color={color} />
+      <Text style={{ color, fontSize: 12, fontWeight: '700', textAlign: 'right', flexShrink: 1 }}>
+        {txt}{p.students_with_device !== undefined && p.devices > 0 ? ` · ${p.students_with_device} من ${notified} طالب لديهم جهاز` : ''}
+      </Text>
+    </View>
+  );
+};
+
 export const ResultsHistory = ({ canManage }: { canManage: boolean }) => {
   const [items, setItems] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,6 +93,11 @@ export const ResultsHistory = ({ canManage }: { canManage: boolean }) => {
     catch (e: any) { setMsg({ ok: false, text: e?.response?.data?.detail || 'تعذر جلب السجل' }); } finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!items.some((b) => b.push?.status === 'sending')) return;
+    const t = setTimeout(() => api.get('/results/batches').then((r) => setItems(r.data.items || [])).catch(() => {}), 5000);
+    return () => clearTimeout(t);
+  }, [items]);
 
   const act = async (b: Batch, a: Act) => {
     const q = a === 'publish' ? `نشر نتائج هذه الرفعة للطلاب في التطبيق${b.notify_pending ? ` وإرسال إشعار «صدرت نتيجتك» إلى ${b.notify_pending} طالب` : ''}؟`
