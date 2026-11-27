@@ -33,6 +33,23 @@ const MarkCell = ({ field, r, can, edits, setEdit }: { field: Field; r: RcRow; c
     value={edits[k] ?? (r[field] === null ? '' : String(r[field]))} onChangeText={(v) => setEdit(k, v)} placeholder="—" testID={`mark-${field}-${r.student_db_id}`} />;
 };
 
+const Note = ({ r }: { r: RcRow }) => {
+  const t = r.in_second ? `دور ثان${r.pass2 === true ? ' · ناجح' : r.pass2 === false ? ' · راسب' : ''}`
+    : r.pass1 ? 'ناجح دور أول' : r.eligible && r.need_first !== null && r.first_exam === null ? `يحتاج ${r.need_first} في الدور الأول` : '';
+  const c = r.in_second ? (r.pass2 ? '#2e7d32' : r.pass2 === false ? '#c62828' : '#ef6c00') : r.pass1 ? '#2e7d32' : '#64748b';
+  const why = r.in_second ? (!r.att_ok ? 'بسبب الغياب' : r.pass1 === false ? 'رسب في الدور الأول' : !r.cw_ok ? 'لم يبلغ حد السعي' : '') : '';
+  return t ? <View><Text style={{ color: c, fontWeight: '800', fontSize: 13, textAlign: 'right' }} testID={`cw-note-${r.student_db_id}`}>{t}</Text>
+    {!!why && <Text style={{ fontSize: 10.5, color: '#64748b', textAlign: 'right' }}>{why}</Text>}</View> : <Text style={rc.td}> </Text>;
+};
+
+const EligBox = ({ r }: { r: RcRow }) => (
+  <View style={{ width: 54, alignItems: 'center' }} testID={`cw-elig-${r.student_db_id}`}>
+    <View style={{ width: 26, height: 26, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: r.att_ok ? '#e8f5e9' : '#ffebee', borderWidth: 1, borderColor: r.att_ok ? '#66bb6a' : '#ef5350' }}>
+      <Ionicons name={r.att_ok ? 'checkmark' : 'close'} size={18} color={r.att_ok ? '#2e7d32' : '#c62828'} />
+    </View>
+  </View>
+);
+
 type CellFn = (f: Field, r: RcRow, can: boolean) => React.ReactNode;
 
 const columns = (tab: TabId, s: Sheet, onDecision: (r: RcRow, k: DecKind) => void, canDecide: boolean, cell: CellFn, canExams: boolean): Col[] => {
@@ -41,21 +58,14 @@ const columns = (tab: TabId, s: Sheet, onDecision: (r: RcRow, k: DecKind) => voi
     case 'coursework': return [
       { label: `الدور الأول (من ${cfg.final_max})`, flex: 0.9, render: (r) => cell('first_exam', r, canExams && r.coursework !== null && r.eligible) },
       { label: 'الدور الثاني (من 100)', flex: 0.9, render: (r) => cell('second_exam', r, canExams && r.in_second) },
-      { label: 'المجموع', flex: 0.7, render: (r) => <Text style={[rc.td, { fontWeight: '800', fontSize: 15 }]} testID={`cw-total-${r.student_db_id}`}>{fmt(r.pass1 !== null ? r.total1 : r.final2 ?? r.total1)}</Text> },
-      { label: 'الأهلية', flex: 1.1, render: (r) => r.coursework === null && r.att_ok ? res('لم يُرصد', `cw-st-${r.student_db_id}`)
-        : <View><Badge text={r.eligible ? 'مؤهل للأول' : 'دور ثان'} color={r.eligible ? '#2e7d32' : '#ef6c00'} testID={`cw-st-${r.student_db_id}`} />
-            {!r.eligible && <Text style={{ fontSize: 10.5, color: '#c62828', textAlign: 'right' }} numberOfLines={1}>{r.reasons.join('، ')}</Text>}</View> },
-      { label: 'النتيجة', flex: 1.1, render: (r) => r.coursework === null && r.att_ok ? <Text style={rc.td}>—</Text> : res(r.result, `cw-res-${r.student_db_id}`) },
+      { label: 'الملاحظات', flex: 1.4, render: (r) => <Note r={r} /> },
     ];
     case 'eligibility': return [
+      { label: 'بلا عذر', flex: 0.8, render: (r) => pct(r.att.pct_unexcused, r.att.exceeded_unexcused) },
+      { label: 'بعذر', flex: 0.8, render: (r) => pct(r.att.pct_excused, r.att.exceeded_excused) },
+      { label: 'الإجمالي', flex: 0.8, render: (r) => pct(r.att.pct_total, r.att.exceeded_total) },
+      { label: 'حالة الغياب', flex: 1.6, render: (r) => <Text style={[rc.td, { fontSize: 12 }]} numberOfLines={2}>{r.att.status_ar}</Text> },
       { label: 'أهلية الحضور', flex: 1.1, render: (r) => <Badge text={r.att_eligibility} color={r.att_ok ? '#2e7d32' : '#c62828'} testID={`att-elig-${r.student_db_id}`} /> },
-      { label: 'السعي', flex: 0.7, render: (r) => <Text style={[rc.td, !r.cw_ok && { color: '#c62828' }]}>{fmt(r.coursework)}</Text> },
-      { label: 'بلا عذر', flex: 0.7, render: (r) => pct(r.att.pct_unexcused, r.att.exceeded_unexcused) },
-      { label: 'بعذر', flex: 0.7, render: (r) => pct(r.att.pct_excused, r.att.exceeded_excused) },
-      { label: 'الإجمالي', flex: 0.7, render: (r) => pct(r.att.pct_total, r.att.exceeded_total) },
-      { label: 'حالة الغياب', flex: 1.3, render: (r) => <Text style={[rc.td, { fontSize: 12 }]} numberOfLines={2}>{r.att.status_ar}</Text> },
-      { label: 'الأهلية', flex: 1, render: (r) => res(r.eligibility, `elig-${r.student_db_id}`) },
-      { label: 'السبب', flex: 1.5, render: (r) => <Text style={[rc.td, { color: '#c62828', fontSize: 12 }]}>{r.reasons.join('، ') || '—'}</Text> },
     ];
     case 'first': return [
       { label: 'السعي', flex: 0.7, render: (r) => <Text style={rc.td}>{fmt(r.coursework)}</Text> },
@@ -112,6 +122,7 @@ export const RcMarksTable = ({ tab, sheet, q = '', edits, setEdit, errors, onDec
           <Text style={[rc.th, { width: 30 }]}>#</Text>
           <Text style={[rc.th, { flex: 2 }]}>اسم الطالب</Text>
           <Text style={[rc.th, { flex: 0.9 }]}>رقم القيد</Text>
+          {tab === 'coursework' && <Text style={[rc.th, { width: 54, textAlign: 'center' }]}>الأهلية</Text>}
           {field && <Text style={[rc.th, { width: 96 }]}>{tab === 'coursework' ? `السعي (من ${mx})` : `الدرجة (من ${mx})`}</Text>}
           {cols.map((c) => <Text key={c.label} style={[rc.th, { flex: c.flex }]}>{c.label}</Text>)}
         </View>
@@ -128,6 +139,7 @@ export const RcMarksTable = ({ tab, sheet, q = '', edits, setEdit, errors, onDec
                 {errors[r.student_db_id] && <Text style={{ color: '#c62828', fontSize: 11, textAlign: 'right' }}>{errors[r.student_db_id]}</Text>}
               </View>
               <Text style={[rc.td, { flex: 0.9, color: '#475569' }]}>{r.reg_no}</Text>
+              {tab === 'coursework' && <EligBox r={r} />}
               {field && (
                 <View style={{ width: 96, flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
                   {cell(field, r, can)}

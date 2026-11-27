@@ -72,11 +72,11 @@ async def put_settings(data: dict = Body(...), current_user: dict = Depends(get_
     if not await _target_in_scope(db, await _user_scope(db, current_user), "faculty", fid):
         raise HTTPException(status_code=403, detail="هذه الكلية خارج نطاقك")
     try:
-        cfg = {k: float(data[k]) for k in ("coursework_max", "coursework_pass_pct", "pass_mark", "second_cap", "exceptional_cap")}
+        cfg = {k: float(data[k] if data.get(k) not in (None, "") else E.DEFAULTS[k]) for k in ("coursework_max", "coursework_pass_pct", "exam_pass_pct", "pass_mark", "second_cap", "exceptional_cap")}
     except (KeyError, TypeError, ValueError):
         raise HTTPException(status_code=400, detail="أكمل كل الحقول بأرقام صحيحة")
     cfg = {k: int(v) if v.is_integer() else v for k, v in cfg.items()}
-    if not (0 < cfg["coursework_max"] < 100) or not (0 < cfg["coursework_pass_pct"] <= 100) or not (0 < cfg["pass_mark"] <= 100):
+    if not (0 < cfg["coursework_max"] < 100) or not (0 < cfg["coursework_pass_pct"] <= 100) or not (0 < cfg["pass_mark"] <= 100) or not (0 < cfg["exam_pass_pct"] <= 100):
         raise HTTPException(status_code=400, detail="قيم غير صحيحة: درجة السعي بين 1 و99، والنسب بين 1 و100")
     if not (0 < cfg["second_cap"] <= 100) or not (0 < cfg["exceptional_cap"] <= 100):
         raise HTTPException(status_code=400, detail="السقف بين 1 و100")
@@ -92,7 +92,7 @@ async def put_settings(data: dict = Body(...), current_user: dict = Depends(get_
     if old["coursework_max"] != cfg["coursework_max"] and await db.rc_marks.find_one(
             {"course_id": {"$in": cids}, "$or": [{"coursework": {"$ne": None}}, {"first_exam": {"$ne": None}}]}):
         raise HTTPException(status_code=400, detail="لا يمكن تغيير درجة السعي بعد بدء رصد الدرجات في مقررات هذه الكلية")
-    rules = ("coursework_pass_pct", "pass_mark", "second_cap", "exceptional_cap")
+    rules = ("coursework_pass_pct", "exam_pass_pct", "pass_mark", "second_cap", "exceptional_cap")
     if any(old[k] != cfg[k] for k in rules) and await db.rc_sheets.find_one({"course_id": {"$in": cids}, "coursework_locked": True}):
         raise HTTPException(status_code=400, detail="لا يمكن تغيير نسب النجاح أو السقوف بعد إقفال السعي في مقررات هذه الكلية — افتح السعي أولاً")
     await db.rc_settings.update_one({"faculty_id": fid}, {"$set": {**cfg, "updated_at": _now(), "updated_by_name": current_user.get("full_name", "")}}, upsert=True)

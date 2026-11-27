@@ -4,7 +4,7 @@ from typing import Optional
 ABSENT = "غ"
 DEFAULT_SCALE = [{"min": 90, "label": "ممتاز"}, {"min": 80, "label": "جيد جداً"}, {"min": 65, "label": "جيد"},
                  {"min": 50, "label": "مقبول"}, {"min": 0, "label": "راسب"}]
-DEFAULTS = {"coursework_max": 40, "coursework_pass_pct": 40, "pass_mark": 50, "second_cap": 50, "exceptional_cap": 50,
+DEFAULTS = {"coursework_max": 40, "coursework_pass_pct": 40, "exam_pass_pct": 50, "pass_mark": 50, "second_cap": 50, "exceptional_cap": 50,
             "grade_scale": DEFAULT_SCALE}
 FIELDS = {"coursework": "السعي", "first_exam": "الدور الأول", "second_exam": "الدور الثاني", "exceptional_exam": "الدور الاستثنائي"}
 ATT_BLOCK = ("candidate", "deprived")
@@ -69,11 +69,15 @@ def compute(m: dict, cfg: dict, att: dict, decs: dict) -> dict:
     r = {"cw_need": cw_need, "cw_ok": cw_ok, "att_ok": att_ok, "att_status": att_status, "eligible": eligible,
          "att_eligibility": "مؤهل بالحضور" if att_ok else "غير مؤهل بالغياب",
          "eligibility": "مؤهل" if eligible else ("بانتظار السعي" if cw is None and att_ok else "غير مؤهل"), "reasons": reasons,
-         "need_first": max(0, pm - cw) if eligible else None, "total1": None, "pass1": None,
+         "need_first": None, "total1": None, "pass1": None,
          "in_second": False, "pass2": None, "final2": None, "in_exc": False, "pass3": None, "final3": None}
+    if eligible:
+        # النجاح في الأول: نصف درجة الامتحان + تعويض ما نقص السعي عن نصف درجته
+        p = cfg.get("exam_pass_pct", 50) / 100
+        r["need_first"] = round((100 - cwm) * p + max(0, cwm * p - cw), 2)
     if eligible and f1 is not None:
         r["total1"] = round(cw + (_num(f1) or 0), 2)
-        r["pass1"] = _num(f1) is not None and r["total1"] >= pm
+        r["pass1"] = _num(f1) is not None and f1 >= r["need_first"]
     r["in_second"] = not att_ok or (cw is not None and not cw_ok) or r["pass1"] is False
     unc = bool(decs.get("second_uncapped"))
     if r["in_second"] and s2 is not None:

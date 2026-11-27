@@ -84,7 +84,7 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
             <TouchableOpacity onPress={onBack} testID="rc-back-btn"><Ionicons name="arrow-forward" size={22} color="#2962ff" /></TouchableOpacity>
             <View>
               <Text style={{ fontSize: 18, fontWeight: '800', color: '#1a2540', textAlign: 'right' }} testID="rc-sheet-title">{sheet.course.name}</Text>
-              <Text style={{ fontSize: 12, color: '#64748b', textAlign: 'right' }}>السعي من {s.coursework_max} · الامتحان من {s.final_max} · التأهل {s.coursework_pass_pct}% من السعي · النجاح {s.pass_mark} · سقف الثاني {s.second_cap}</Text>
+              <Text style={{ fontSize: 12, color: '#64748b', textAlign: 'right' }}>السعي من {s.coursework_max} · الامتحان من {s.final_max} · التأهل {s.coursework_pass_pct}% من السعي · نجاح الأول {(s as any).exam_pass_pct ?? 50}% من الامتحان + التعويض · نجاح الثاني {s.pass_mark} · سقف الثاني {s.second_cap}</Text>
             </View>
           </View>
           <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
