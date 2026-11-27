@@ -2,6 +2,7 @@
 Notifications Routes - مسارات الإشعارات
 """
 from fastapi import APIRouter, HTTPException, Depends, Request, BackgroundTasks
+import asyncio
 import os
 import hmac
 from pydantic import BaseModel
@@ -478,14 +479,10 @@ async def _deliver(db, request, sender_id: str, sender_name: str) -> dict:
         await db.notifications.insert_many(in_app_notifications)
 
     # إرسال push notifications عبر FCM
-    tokens_docs = await db.fcm_tokens.find(query).to_list(10000)
+    tokens_docs = await db.fcm_tokens.find(query, {"token": 1}).to_list(None)
     tokens = list(set(doc["token"] for doc in tokens_docs))
 
-    result = {"success": 0, "failure": 0}
-    if tokens:
-        result = await send_notification_to_many(tokens, request.title, request.body)
-
-    await db.notification_history.insert_one({
+    hist = await db.notification_history.insert_one({
         "title": request.title,
         "body": request.body,
         "sent_by": sender_id,
@@ -495,17 +492,39 @@ async def _deliver(db, request, sender_id: str, sender_name: str) -> dict:
         "target_desc": target_desc,
         "devices_count": len(tokens),
         "users_count": len(target_user_ids),
-        "success": result.get("success", 0),
-        "failure": result.get("failure", 0),
+        "success": 0,
+        "failure": 0,
+        "status": "sending" if tokens else "done",
         "created_at": get_yemen_time().isoformat(),
     })
+    if tokens:
+        # الدفع للأجهزة في الخلفية حتى لا تنتهي مهلة الطلب مع الجماهير الكبيرة
+        t = asyncio.create_task(_push_bg(db, hist.inserted_id, tokens, request.title, request.body))
+        _BG.add(t)
+        t.add_done_callback(_BG.discard)
 
     return {
         "message": f"تم إرسال الإشعار إلى {target_desc}",
         "devices": len(tokens),
         "users": len(target_user_ids),
-        **result
+        "success": 0,
+        "failure": 0,
+        "push": "background" if tokens else "none",
     }
+
+
+_BG: set = set()
+
+
+async def _push_bg(db, hist_id, tokens: list, title: str, body: str):
+    from services.firebase_service import send_notification_to_many
+    try:
+        r = await send_notification_to_many(tokens, title, body)
+        upd = {"success": r.get("success", 0), "failure": r.get("failure", 0), "status": "done", "error": r.get("error")}
+    except Exception as e:
+        logger.error(f"background push failed: {e}")
+        upd = {"status": "failed", "failure": len(tokens), "error": str(e)}
+    await db.notification_history.update_one({"_id": hist_id}, {"$set": upd})
 
 
 def _parse_schedule(v: str) -> datetime:

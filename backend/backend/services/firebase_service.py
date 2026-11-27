@@ -105,6 +105,32 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
     if not tokens:
         return expo_result
 
+    import asyncio
+    ok, bad, failed_details, errors = 0, 0, [], []
+    all_tokens = tokens
+    for i in range(0, len(all_tokens), FCM_BATCH):
+        tokens = all_tokens[i:i + FCM_BATCH]
+        try:
+            r = await asyncio.to_thread(_send_fcm_chunk, tokens, title, body, data)
+        except Exception as e:
+            logger.error(f"Failed to send notifications chunk: {e}")
+            bad += len(tokens)
+            errors.append(str(e))
+            continue
+        ok += r["success"]
+        bad += r["failure"]
+        failed_details += r["failed_details"]
+    out = {"success": ok + expo_result["success"], "failure": bad + expo_result["failure"],
+           "failed_details": failed_details + expo_result.get("failed_details", [])}
+    if errors:
+        out["error"] = errors[0]
+    return out
+
+
+FCM_BATCH = 500  # حد FCM لكل MulticastMessage
+
+
+def _send_fcm_chunk(tokens: list, title: str, body: str, data: dict = None) -> dict:
     message = messaging.MulticastMessage(
         notification=messaging.Notification(
             title=title,
@@ -136,31 +162,14 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
         ),
     )
     
-    try:
-        response = messaging.send_each_for_multicast(message)
-        logger.info(f"Notifications sent: {response.success_count} success, {response.failure_count} failure")
-        
-        # سجل تفصيلي لكل فشل (لتشخيص مشاكل FCM)
-        failed_details = []
-        if response.failure_count > 0:
-            for idx, resp in enumerate(response.responses):
-                if not resp.success:
-                    token_preview = tokens[idx][:30] + '...' if len(tokens[idx]) > 30 else tokens[idx]
-                    exc = resp.exception
-                    err_code = getattr(exc, 'code', None) or type(exc).__name__
-                    err_msg = str(exc)
-                    logger.error(f"FCM send failed [token={token_preview}] [code={err_code}] [msg={err_msg}]")
-                    failed_details.append({
-                        "token_preview": token_preview,
-                        "error_code": err_code,
-                        "error_message": err_msg,
-                    })
-        
-        return {
-            "success": response.success_count + expo_result["success"],
-            "failure": response.failure_count + expo_result["failure"],
-            "failed_details": failed_details + expo_result.get("failed_details", []),
-        }
-    except Exception as e:
-        logger.error(f"Failed to send notifications: {e}")
-        return {"success": expo_result["success"], "failure": expo_result["failure"], "failed_details": expo_result.get("failed_details", []), "error": str(e)}
+    response = messaging.send_each_for_multicast(message)
+    logger.info(f"Notifications sent: {response.success_count} success, {response.failure_count} failure")
+    failed_details = []
+    for idx, resp in enumerate(response.responses):
+        if not resp.success:
+            token_preview = tokens[idx][:30] + '...' if len(tokens[idx]) > 30 else tokens[idx]
+            exc = resp.exception
+            err_code = getattr(exc, 'code', None) or type(exc).__name__
+            logger.error(f"FCM send failed [token={token_preview}] [code={err_code}] [msg={exc}]")
+            failed_details.append({"token_preview": token_preview, "error_code": err_code, "error_message": str(exc)})
+    return {"success": response.success_count, "failure": response.failure_count, "failed_details": failed_details}
