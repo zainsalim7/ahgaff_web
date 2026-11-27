@@ -7,6 +7,7 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { ResultsNav } from '../src/components/results/ResultsNav';
 import api from '../src/services/api';
 import { departmentsAPI, facultiesAPI } from '../src/services/api';
 
@@ -258,6 +259,7 @@ export default function GradesScreen() {
         <Text style={st.title}>نظام الدرجات وبيانات الطلاب</Text>
         <View style={{ width: 24 }} />
       </View>
+      <View style={{ paddingHorizontal: 16, paddingTop: 10 }}><ResultsNav current="/grades" crumbs={[{ label: 'الدرجات وكشوف الطلاب' }]} /></View>
 
       {msg && (
         <View style={[st.msg, { backgroundColor: msg.type === 'success' ? '#e8f5e9' : '#ffebee' }]}>

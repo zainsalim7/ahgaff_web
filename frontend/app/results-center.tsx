@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ResultsNav, useResultsGo } from '../src/components/results/ResultsNav';
 import api from '../src/services/api';
 import { useAcademicScope } from '../src/hooks/useAcademicScope';
 import { useAuth } from '../src/contexts/AuthContext';
@@ -44,13 +45,18 @@ export default function ResultsCenterPage() {
   const [departments, setDepartments] = useState<Dep[]>([]);
   const [sems, setSems] = useState<Sem[]>([]);
   const [years, setYears] = useState<string[]>([]);
-  const [f, setF] = useState({ faculty_id: '', department_id: '', level: '', semester_id: '' });
+  const qp = useLocalSearchParams<{ faculty_id?: string; department_id?: string; level?: string; semester_id?: string; view?: string; course?: string }>();
+  const go = useResultsGo();
+  const [f, setFState] = useState({ faculty_id: qp.faculty_id || '', department_id: qp.department_id || '', level: qp.level || '', semester_id: qp.semester_id || '' });
+  const setF = (v: typeof f) => { setFState(v); router.setParams(Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x || undefined])) as any); };
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
+  const open = qp.view === 'course' && qp.course ? String(qp.course) : null;
+  const levelView = qp.view === 'level';
   const [openFac, setOpenFac] = useState('');
-  const [levelView, setLevelView] = useState(false);
+  const toList = () => go({ pathname: '/results-center', params: f }, { back: true });
+  const openView = (p: Record<string, string>) => router.push({ pathname: '/results-center', params: Object.fromEntries(Object.entries({ ...f, ...p }).filter(([, x]) => x)) } as any);
   const [q, setQ] = useState('');
   const [size, setSize] = useState(12);
   const [page, setPage] = useState(1);
@@ -64,7 +70,7 @@ export default function ResultsCenterPage() {
       const list: Sem[] = (r.data || []).map((s: any) => ({ id: s.id, name: `${s.name}${s.status === 'active' ? ' (الحالي)' : ''}`, term: s.term, status: s.status }));
       setSems(list);
       const act = list.find((s) => s.status === 'active');
-      if (act) setF((x) => ({ ...x, semester_id: act.id }));
+      if (act && !qp.semester_id) setFState((x) => ({ ...x, semester_id: act.id }));
     }).catch(() => {});
   }, []);
 
@@ -95,11 +101,7 @@ export default function ResultsCenterPage() {
         <View dataSet={{ responsive: 'page-header' }} style={st.pageHeader}>
           <View style={{ alignItems: 'flex-end' }}>
             <Text dataSet={{ responsive: 'page-title' }} style={st.pageTitle}>مركز النتائج</Text>
-            <View style={st.breadcrumb}>
-              <TouchableOpacity onPress={() => router.replace('/')}><Text style={st.bcLink}>الرئيسية</Text></TouchableOpacity>
-              <Ionicons name="chevron-back" size={12} color="#8a95a8" />
-              <Text style={st.bcCur}>مركز النتائج</Text>
-            </View>
+            <ResultsNav current="/results-center" crumbs={open || levelView ? [{ label: 'مركز النتائج', onPress: toList }, { label: levelView ? 'كشف الدور الأول للمستوى' : 'كشف المقرر' }] : [{ label: 'مركز النتائج' }]} />
           </View>
           <View dataSet={{ responsive: 'page-header-actions' }} style={st.actions}>
             {!!facId && (
@@ -109,7 +111,7 @@ export default function ResultsCenterPage() {
             )}
             {!open && !levelView && (
               <TouchableOpacity style={[st.hBtn, { backgroundColor: f.department_id && f.level && f.semester_id ? '#1565c0' : '#94a3b8' }]} testID="rc-level-open-btn"
-                onPress={() => (f.department_id && f.level && f.semester_id ? setLevelView(true) : setErr('اختر القسم والمستوى والفصل أولاً لعرض كشف الدور الأول'))}>
+                onPress={() => (f.department_id && f.level && f.semester_id ? openView({ view: 'level' }) : setErr('اختر القسم والمستوى والفصل أولاً لعرض كشف الدور الأول'))}>
                 <Ionicons name="grid-outline" size={16} color="#fff" /><Text style={st.hBtnTxt}>كشف الدور الأول للمستوى</Text>
               </TouchableOpacity>
             )}
@@ -119,15 +121,12 @@ export default function ResultsCenterPage() {
                 <Ionicons name="checkmark-done-outline" size={16} color="#fff" /><Text style={st.hBtnTxt}>اعتماد ونقل إلى النتائج</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity style={[st.hBtn, st.ghost]} onPress={() => router.push('/student-results' as any)} testID="rc-go-results-btn">
-              <Ionicons name="ribbon-outline" size={16} color="#1a2540" /><Text style={[st.hBtnTxt, { color: '#1a2540' }]}>صفحة النتائج</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
         {levelView ? <RcLevelSheet departmentId={f.department_id} departmentName={departments.find((d) => d.id === f.department_id)?.name || ''} level={f.level}
-          semesterId={f.semester_id} canImport={hasPermission('rc_approve')} onBack={() => setLevelView(false)} />
-        : open ? <RcSheet courseId={open} perms={perms} onBack={() => { setOpen(null); setOpenFac(''); }} onFaculty={setOpenFac} /> : (
+          semesterId={f.semester_id} canImport={hasPermission('rc_approve')} onBack={toList} />
+        : open ? <RcSheet courseId={open} perms={perms} onBack={() => { setOpenFac(''); toList(); }} onFaculty={setOpenFac} /> : (
           <>
             <View style={st.flow} testID="rc-flow">
               {['كشف الأهلية (الحضور)', 'أعمال السعي', 'الدور الأول', 'الدور الثاني', 'الاستثنائي', 'الاعتماد ← النتائج'].map((x, i, a) => (
@@ -166,7 +165,7 @@ export default function ResultsCenterPage() {
             {loading ? <ActivityIndicator style={{ marginTop: 30 }} /> : courses.length === 0
               ? <Text style={{ textAlign: 'center', color: '#94a3b8', marginTop: 30 }} testID="rc-courses-empty">لا توجد مقررات ضمن نطاقك لهذه الفلاتر</Text>
               : shown.length === 0 ? <Text style={{ textAlign: 'center', color: '#94a3b8', marginTop: 30 }} testID="rc-search-empty">لا توجد مقررات تطابق «{q}»</Text>
-              : <View style={st.grid} testID="rc-courses-grid">{visible.map((c) => <CourseCard key={c.id} c={c} onOpen={() => setOpen(c.id)} />)}</View>}
+              : <View style={st.grid} testID="rc-courses-grid">{visible.map((c) => <CourseCard key={c.id} c={c} onOpen={() => openView({ view: 'course', course: c.id })} />)}</View>}
             {!loading && pages > 1 && (
               <View style={st.pager} testID="rc-pager">
                 <TouchableOpacity disabled={cur <= 1} onPress={() => setPage(cur - 1)} style={[st.chip, cur <= 1 && { opacity: 0.4 }]} testID="rc-page-prev"><Ionicons name="chevron-forward" size={16} color="#1a2540" /></TouchableOpacity>

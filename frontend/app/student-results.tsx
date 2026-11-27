@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { ResultsNav } from '../src/components/results/ResultsNav';
 import api from '../src/services/api';
 import { useAcademicScope } from '../src/hooks/useAcademicScope';
 import { useAuth } from '../src/contexts/AuthContext';
@@ -34,7 +35,9 @@ export default function ResultsPage() {
   const [faculties, setFaculties] = useState<Fac[]>([]);
   const [departments, setDepartments] = useState<Dep[]>([]);
   const [years, setYears] = useState<string[]>([]);
-  const [f, setF] = useState(EMPTY);
+  const qp = useLocalSearchParams<Record<string, string>>();
+  const [f, setFState] = useState({ ...EMPTY, ...Object.fromEntries(Object.keys(EMPTY).filter((k) => qp[k]).map((k) => [k, String(qp[k])])) });
+  const setF = (v: typeof EMPTY) => { setFState(v); router.setParams(Object.fromEntries(Object.entries(v).map(([k, x]) => [k, x || undefined])) as any); };
   const [data, setData] = useState<{ items: SRow[]; total: number; pages: number; sections?: string[] }>({ items: [], total: 0, pages: 1 });
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(24);
@@ -83,11 +86,7 @@ export default function ResultsPage() {
         <View dataSet={{ responsive: 'page-header' }} style={st.pageHeader}>
           <View style={{ alignItems: 'flex-end' }}>
             <Text dataSet={{ responsive: 'page-title' }} style={st.pageTitle}>النتائج</Text>
-            <View style={st.breadcrumb}>
-              <TouchableOpacity onPress={() => router.replace('/')}><Text style={st.bcLink}>الرئيسية</Text></TouchableOpacity>
-              <Ionicons name="chevron-back" size={12} color="#8a95a8" />
-              <Text style={st.bcCur}>النتائج</Text>
-            </View>
+            <ResultsNav current="/student-results" crumbs={[{ label: 'النتائج' }]} />
           </View>
           <View dataSet={{ responsive: 'page-header-actions' }} style={st.actions}>
             {canManage && (
