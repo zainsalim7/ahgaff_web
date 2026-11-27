@@ -16,7 +16,7 @@ def field_max(field: str, cfg: dict) -> float:
 
 def parse_mark(v, mx: float, allow_absent: bool):
     """→ (القيمة, خطأ) · فارغ = None · «غ» = غائب عن الامتحان"""
-    if v is None or str(v).strip() == "":
+    if v is None or str(v).strip() in ("", "-", "—", "–", "ـ"):
         return None, None
     s = str(v).strip().replace("٫", ".").translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
     if s in (ABSENT, "غائب", "غ."):

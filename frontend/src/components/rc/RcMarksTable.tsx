@@ -13,6 +13,14 @@ export const rowsForTab = (tab: TabId, rows: RcRow[]) =>
   tab === 'first' ? rows.filter((r) => r.eligible) : tab === 'second' ? rows.filter((r) => r.in_second)
     : tab === 'exceptional' ? rows.filter((r) => r.pass2 === false) : rows;
 
+export const visibleRows = (tab: TabId, rows: RcRow[], q: string) => {
+  const term = q.trim().toLowerCase();
+  return rowsForTab(tab, rows).filter((r) => !term || r.name.toLowerCase().includes(term) || r.reg_no.includes(term));
+};
+
+export const canField = (f: Field, r: RcRow, locked: boolean, cw: boolean, exams: boolean) =>
+  f === 'coursework' ? cw && !locked : !exams ? false : f === 'first_exam' ? r.coursework !== null && r.eligible : f === 'second_exam' ? r.in_second : r.in_exc;
+
 export const editable = (tab: TabId, r: RcRow, locked: boolean) =>
   tab === 'coursework' ? !locked : r.coursework === null && !(tab === 'second' && r.in_second) ? false : tab === 'first' ? r.eligible : tab === 'second' ? r.in_second : tab === 'exceptional' ? r.in_exc : false;
 
@@ -84,13 +92,13 @@ const columns = (tab: TabId, s: Sheet, onDecision: (r: RcRow, k: DecKind) => voi
   }
 };
 
-export const RcMarksTable = ({ tab, sheet, q = '', edits, setEdit, errors, onDecision, canEdit, canDecide, canExams }: {
-  tab: TabId; q?: string; sheet: Sheet; edits: Record<string, string>; setEdit: (k: string, v: string) => void; errors: Record<string, string>;
+export const RcMarksTable = ({ tab, sheet, q = '', edits, setEdit, errors, onDecision, canEdit, canDecide, canExams, sel, onSel, onSelAll }: {
+  tab: TabId; q?: string; sel: Set<string>; onSel: (id: string) => void; onSelAll: (ids: string[]) => void; sheet: Sheet; edits: Record<string, string>; setEdit: (k: string, v: string) => void; errors: Record<string, string>;
   onDecision: (r: RcRow, k: DecKind) => void; canEdit: boolean; canDecide: boolean; canExams: boolean;
 }) => {
   const field = TAB_FIELD[tab];
-  const term = q.trim().toLowerCase();
-  const rows = rowsForTab(tab, sheet.rows).filter((r) => !term || r.name.toLowerCase().includes(term) || r.reg_no.includes(term));
+  const rows = visibleRows(tab, sheet.rows, q);
+  const allSel = rows.length > 0 && rows.every((r) => sel.has(r.student_db_id));
   const cell: CellFn = (f, r, can) => <MarkCell field={f} r={r} can={can} edits={edits} setEdit={setEdit} />;
   const cols = columns(tab, sheet, onDecision, canDecide, cell, canExams);
   const locked = sheet.sheet.coursework_locked;
@@ -99,6 +107,8 @@ export const RcMarksTable = ({ tab, sheet, q = '', edits, setEdit, errors, onDec
     <ScrollView horizontal contentContainerStyle={{ minWidth: '100%' }}>
       <View style={{ minWidth: 900, flex: 1 }} testID={`rc-table-${tab}`}>
         <View style={[rc.tr, { backgroundColor: '#f8fafc' }]}>
+          {field && <TouchableOpacity style={{ width: 24 }} onPress={() => onSelAll(rows.map((r) => r.student_db_id))} testID={`rc-sel-all-${tab}`}>
+            <Ionicons name={allSel ? 'checkbox' : 'square-outline'} size={18} color="#2962ff" /></TouchableOpacity>}
           <Text style={[rc.th, { width: 30 }]}>#</Text>
           <Text style={[rc.th, { flex: 2 }]}>اسم الطالب</Text>
           <Text style={[rc.th, { flex: 0.9 }]}>رقم القيد</Text>
@@ -109,7 +119,9 @@ export const RcMarksTable = ({ tab, sheet, q = '', edits, setEdit, errors, onDec
         {rows.map((r, i) => {
           const can = !!field && canEdit && editable(tab, r, locked);
           return (
-            <View key={r.student_db_id} style={[rc.tr, i % 2 === 1 && { backgroundColor: '#fbfcfe' }]} testID={`rc-row-${r.student_db_id}`}>
+            <View key={r.student_db_id} style={[rc.tr, i % 2 === 1 && { backgroundColor: '#fbfcfe' }, sel.has(r.student_db_id) && { backgroundColor: '#eef4ff' }]} testID={`rc-row-${r.student_db_id}`}>
+              {field && <TouchableOpacity style={{ width: 24 }} onPress={() => onSel(r.student_db_id)} testID={`rc-sel-${r.student_db_id}`}>
+                <Ionicons name={sel.has(r.student_db_id) ? 'checkbox' : 'square-outline'} size={18} color="#2962ff" /></TouchableOpacity>}
               <Text style={[rc.td, { width: 30, color: '#94a3b8' }]}>{i + 1}</Text>
               <View style={{ flex: 2 }}>
                 <Text style={[rc.td, { fontWeight: '700' }]} numberOfLines={1}>{r.name}</Text>

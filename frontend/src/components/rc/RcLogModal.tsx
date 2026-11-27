@@ -56,7 +56,7 @@ export const RcLogModal = ({ courseId, onClose, onChanged, canUndo }: { courseId
   (items || []).forEach((x) => { const g = groups.find((y) => y.op === x.op_id); g ? g.list.push(x) : groups.push({ op: x.op_id, list: [x] }); });
   let idx = 0;
   return (
-    <ModalShell title="سجل تعديلات المقرر" icon="time-outline" onClose={onClose} testID="rc-log-modal">
+    <ModalShell title="سجل العمليات (للاطلاع)" icon="time-outline" onClose={onClose} testID="rc-log-modal">
       <Msg m={msg} testID="rc-log-msg" />
       {canUndo && sel.size > 0 && (
         <View style={{ flexDirection: 'row-reverse', marginBottom: 10 }}>
