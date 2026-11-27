@@ -18,7 +18,7 @@ async def send_expo_push_to_many(tokens: List[str], title: str, body: str, data:
     if not tokens:
         return {"success": 0, "failure": 0, "failed_details": []}
     messages = [{"to": t, "title": title, "body": body, "sound": "default", "data": data or {}} for t in tokens]
-    success, failure, failed_details = 0, 0, []
+    success, failure, failed_details, dead = 0, 0, [], []
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             for i in range(0, len(messages), EXPO_BATCH):
@@ -34,12 +34,14 @@ async def send_expo_push_to_many(tokens: List[str], title: str, body: str, data:
                         tok = chunk[idx]["to"] if idx < len(chunk) else ""
                         err = (d.get("details") or {}).get("error") or d.get("message") or "unknown"
                         logger.error(f"Expo push failed [token={tok[:30]}...] [error={err}]")
+                        if err == "DeviceNotRegistered":
+                            dead.append(tok)
                         failed_details.append({"token_preview": tok[:30] + "...", "error_code": err, "error_message": d.get("message", "")})
                 if not data_list and result.get("errors"):
                     failure += len(chunk)
                     logger.error(f"Expo push request error: {result['errors']}")
         logger.info(f"Expo push sent: {success} success, {failure} failure")
-        return {"success": success, "failure": failure, "failed_details": failed_details}
+        return {"success": success, "failure": failure, "failed_details": failed_details, "dead_tokens": dead}
     except Exception as e:
         logger.error(f"Expo push failed: {e}")
-        return {"success": success, "failure": len(tokens) - success, "failed_details": failed_details, "error": str(e)}
+        return {"success": success, "failure": len(tokens) - success, "failed_details": failed_details, "dead_tokens": dead, "error": str(e)}

@@ -531,7 +531,11 @@ async def _push_bg(db, hist_id, tokens: list, title: str, body: str):
     from services.firebase_service import send_notification_to_many
     try:
         r = await send_notification_to_many(tokens, title, body)
-        upd = {"success": r.get("success", 0), "failure": r.get("failure", 0), "status": "done", "error": r.get("error")}
+        dead = r.get("dead_tokens") or []
+        if dead:
+            removed = (await db.fcm_tokens.delete_many({"token": {"$in": dead}})).deleted_count
+            logger.info(f"removed {removed} dead push tokens")
+        upd = {"success": r.get("success", 0), "failure": r.get("failure", 0), "status": "done", "error": r.get("error"), "removed_devices": len(dead)}
     except Exception as e:
         logger.error(f"background push failed: {e}")
         upd = {"status": "failed", "failure": len(tokens), "error": str(e)}

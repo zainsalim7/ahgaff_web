@@ -106,7 +106,7 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
         return expo_result
 
     import asyncio
-    ok, bad, failed_details, errors = 0, 0, [], []
+    ok, bad, failed_details, errors, dead = 0, 0, [], [], list(expo_result.get("dead_tokens", []))
     sem = asyncio.Semaphore(FCM_PARALLEL)
 
     async def one(chunk):
@@ -121,10 +121,11 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
         ok += r["success"]
         bad += r["failure"]
         failed_details += r["failed_details"]
+        dead += r.get("dead_tokens", [])
         if r.get("error"):
             errors.append(r["error"])
     out = {"success": ok + expo_result["success"], "failure": bad + expo_result["failure"],
-           "failed_details": failed_details + expo_result.get("failed_details", [])}
+           "failed_details": failed_details + expo_result.get("failed_details", []), "dead_tokens": dead}
     if errors:
         out["error"] = errors[0]
     return out
@@ -168,7 +169,7 @@ def _send_fcm_chunk(tokens: list, title: str, body: str, data: dict = None) -> d
     
     response = messaging.send_each_for_multicast(message)
     logger.info(f"Notifications sent: {response.success_count} success, {response.failure_count} failure")
-    failed_details = []
+    failed_details, dead = [], []
     for idx, resp in enumerate(response.responses):
         if not resp.success:
             token_preview = tokens[idx][:30] + '...' if len(tokens[idx]) > 30 else tokens[idx]
@@ -176,4 +177,7 @@ def _send_fcm_chunk(tokens: list, title: str, body: str, data: dict = None) -> d
             err_code = getattr(exc, 'code', None) or type(exc).__name__
             logger.error(f"FCM send failed [token={token_preview}] [code={err_code}] [msg={exc}]")
             failed_details.append({"token_preview": token_preview, "error_code": err_code, "error_message": str(exc)})
-    return {"success": response.success_count, "failure": response.failure_count, "failed_details": failed_details}
+            # أجهزة لم تعد صالحة (حُذف التطبيق/انتهى الرمز) — تُحذف من القاعدة
+            if type(exc).__name__ in ("UnregisteredError", "SenderIdMismatchError") or (err_code == "INVALID_ARGUMENT" and "registration token" in str(exc).lower()):
+                dead.append(tokens[idx])
+    return {"success": response.success_count, "failure": response.failure_count, "failed_details": failed_details, "dead_tokens": dead}
