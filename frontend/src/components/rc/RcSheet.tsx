@@ -8,6 +8,7 @@ import { RcMarksTable, DecKind } from './RcMarksTable';
 import { RcImportModal } from './RcImportModal';
 import { RcDecisionModal } from './RcDecisionModal';
 import { RcLogModal } from './RcLogModal';
+import { RcResetModal } from './RcResetModal';
 
 export type RcPerms = { cw: boolean; unlock: boolean; exams: boolean; decide: boolean };
 
@@ -24,7 +25,7 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [modal, setModal] = useState<'' | 'import' | 'log'>('');
+  const [modal, setModal] = useState<'' | 'import' | 'log' | 'reset'>('');
   const [dec, setDec] = useState<{ row: RcRow; kind: DecKind } | null>(null);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
@@ -116,6 +117,7 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
         {(tab === 'coursework' || tab === 'eligibility') && locked && perms.unlock && <Btn icon="lock-open-outline" label="فتح السعي" color="#ef6c00" outline onPress={() => lock(false)} testID="rc-unlock-btn" />}
         <Btn icon="download-outline" label="تصدير الكشف Excel" color="#475569" outline onPress={exportX} testID="rc-export-btn" />
         <Btn icon="time-outline" label="سجل التعديلات" color="#475569" outline onPress={() => setModal('log')} testID="rc-log-btn" />
+        {(perms.cw || perms.exams) && <Btn icon="trash-outline" label="تفريغ الدرجات" color="#c62828" outline onPress={() => setModal('reset')} testID="rc-reset-open-btn" />}
       </View>
       <Msg m={msg} testID="rc-sheet-msg" />
       <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 12, height: 40, maxWidth: 420, marginBottom: 10 }}>
@@ -131,6 +133,8 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
       <Text style={{ fontSize: 11.5, color: '#64748b', textAlign: 'right' }}>اكتب «غ» لمن غاب عن امتحان الدور. للتراجع عن درجة محفوظة: امسح الخانة واحفظ، أو اضغط «تراجع» بجانبها في «سجل التعديلات». حدود الغياب: بلا عذر أكبر من الحد · بعذر أكبر من الحد · الإجمالي يبلغ الحد = غير مؤهل (ما لم يستثنه مجلس الكلية).</Text>
 
       {modal === 'import' && field && <RcImportModal courseId={courseId} courseName={sheet.course.name} field={field} onClose={() => setModal('')} onDone={load} />}
+      {modal === 'reset' && <RcResetModal courseId={courseId} courseName={sheet.course.name} locked={locked} onClose={() => setModal('')} onDone={load}
+        allowed={[...(perms.cw ? ['coursework'] : []), ...(perms.exams ? ['first_exam', 'second_exam', 'exceptional_exam'] : [])] as Field[]} />}
       {modal === 'log' && <RcLogModal courseId={courseId} onClose={() => setModal('')} onChanged={load} canUndo={perms.cw || perms.exams} />}
       {dec && <RcDecisionModal courseId={courseId} row={dec.row} kind={dec.kind} cap={dec.kind === 'exceptional' ? s.exceptional_cap : s.second_cap}
         onClose={() => setDec(null)} onDone={() => { setDec(null); load(); }} />}

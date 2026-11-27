@@ -213,7 +213,7 @@ def _allowed(field: str, row: dict, locked: bool) -> Optional[str]:
     return None if row["in_exc"] else "لا يوجد قرار مجلس بدخول الطالب الدور الاستثنائي (أو لم يرسب في الثاني)"
 
 
-async def _save(db, user: dict, course: dict, field: str, items: list, via: str) -> dict:
+async def _save(db, user: dict, course: dict, field: str, items: list, via: str, op_id: Optional[str] = None) -> dict:
     if field not in E.FIELDS:
         raise HTTPException(status_code=400, detail="حقل غير معروف")
     _need(user, FIELD_PERM[field], "رصد السعي" if field == "coursework" else "رصد درجات الأدوار")
@@ -222,6 +222,7 @@ async def _save(db, user: dict, course: dict, field: str, items: list, via: str)
     by_id = {r["student_db_id"]: r for r in data["rows"]}
     mx = E.field_max(field, cfg)
     saved, errors, now = 0, [], _now()
+    op_id = op_id or str(ObjectId())
     for it in items:
         row = by_id.get(it.get("student_db_id") or "")
         if not row:
@@ -248,14 +249,14 @@ async def _save(db, user: dict, course: dict, field: str, items: list, via: str)
                                      {"$set": {field: val, "updated_at": now, "updated_by_name": user.get("full_name", "")},
                                       "$setOnInsert": {"created_at": now}}, upsert=True)
         await db.rc_log.insert_one({"course_id": str(course["_id"]), "student_db_id": row["student_db_id"], "reg_no": row["reg_no"], "name": row["name"],
-                                    "field": field, "old": old, "new": val, "via": via, "by_name": user.get("full_name", ""), "by": user.get("id"), "at": now})
+                                    "field": field, "old": old, "new": val, "via": via, "op_id": op_id, "by_name": user.get("full_name", ""), "by": user.get("id"), "at": now})
         saved += 1
     if saved:
         await log_activity(user, "rc_save_marks", "rc_marks", str(course["_id"]), course.get("name", ""), {"field": field, "saved": saved, "via": via})
     msg = f"تم حفظ {saved} درجة ({E.FIELDS[field]})"
     if errors:
         msg += f" · لم تُحفظ {len(errors)}"
-    return {"saved": saved, "errors": errors, "message": msg}
+    return {"saved": saved, "errors": errors, "message": msg, "op_id": op_id}
 
 
 @router.put("/rc/courses/{course_id}/marks")
@@ -389,7 +390,7 @@ async def course_log(course_id: str, current_user: dict = Depends(get_current_us
     await _course_scoped(db, current_user, course_id)
     items = []
     async for x in db.rc_log.find({"course_id": course_id}).sort("at", -1).limit(300):
-        items.append({"id": str(x["_id"]), "undone": bool(x.get("undone")), "field": x.get("field"), "field_name": E.FIELDS.get(x.get("field"), {"lock": "إقفال/فتح السعي", "decision": "قرار مجلس"}.get(x.get("field"), "")),
+        items.append({"id": str(x["_id"]), "op_id": x.get("op_id") or str(x["_id"]), "undone": bool(x.get("undone")), "field": x.get("field"), "field_name": E.FIELDS.get(x.get("field"), {"lock": "إقفال/فتح السعي", "decision": "قرار مجلس"}.get(x.get("field"), "")),
                       "name": x.get("name", ""), "reg_no": x.get("reg_no", ""), "old": x.get("old"), "new": x.get("new"), "via": x.get("via", ""),
                       "note": x.get("note", ""), "by_name": x.get("by_name", ""), "at": x["at"].isoformat() if isinstance(x.get("at"), datetime) else x.get("at")})
     return {"items": items}
@@ -413,6 +414,73 @@ async def undo_mark(course_id: str, log_id: str, current_user: dict = Depends(ge
         raise HTTPException(status_code=400, detail=res["errors"][0]["error"])
     await db.rc_log.update_one({"_id": x["_id"]}, {"$set": {"undone": True, "undone_by_name": current_user.get("full_name", "")}})
     return {"message": f"تم التراجع: {E.FIELDS[x['field']]} لـ {x.get('name', '')} عادت إلى {E.fmt(x.get('old')) if isinstance(x.get('old'), (int, float)) else (x.get('old') or 'فارغ')}"}
+
+
+REVERSE = ["exceptional_exam", "second_exam", "first_exam", "coursework"]
+
+
+@router.post("/rc/courses/{course_id}/undo-bulk")
+async def undo_bulk(course_id: str, data: dict = Body(...), current_user: dict = Depends(get_current_user)):
+    """↩️ تراجع جماعي: عملية كاملة (op_id) أو مجموعة سجلات (log_ids) — الأحدث أولاً، وتُتخطّى الدرجة التي تغيّرت بعدها"""
+    db = get_db()
+    course = await _course_scoped(db, current_user, course_id)
+    q: dict = {"course_id": course_id, "field": {"$in": list(E.FIELDS)}, "undone": {"$ne": True}, "via": {"$ne": "undo"}}
+    if data.get("op_id"):
+        q["op_id"] = data["op_id"]
+    elif data.get("log_ids"):
+        q["_id"] = {"$in": [ObjectId(x) for x in data["log_ids"] if ObjectId.is_valid(x)]}
+    else:
+        raise HTTPException(status_code=400, detail="حدّد العملية أو السجلات")
+    logs = await db.rc_log.find(q).sort("at", -1).to_list(5000)
+    if not logs:
+        raise HTTPException(status_code=400, detail="لا يوجد ما يُتراجع عنه")
+    marks = {m["student_db_id"]: m async for m in db.rc_marks.find({"course_id": course_id})}
+    latest: dict = {}
+    first: dict = {}
+    for x in logs:
+        latest.setdefault((x["student_db_id"], x["field"]), x)
+        first[(x["student_db_id"], x["field"])] = x
+    op, done, skipped = str(ObjectId()), 0, []
+    # التفريغ أولاً (الأدوار قبل السعي) ثم الإعادة (السعي قبل الأدوار) حتى لا تتعارض قواعد الأهلية
+    passes = [(f, True) for f in REVERSE] + [(f, False) for f in reversed(REVERSE)]
+    for fld, clearing in passes:
+        xs = [x for (sid, f), x in latest.items() if f == fld and (first[(sid, f)].get("old") is None) == clearing]
+        ok = [x for x in xs if (marks.get(x["student_db_id"]) or {}).get(fld) == x.get("new")]
+        skipped += [{"name": x.get("name", ""), "error": "تغيّرت الدرجة بعد هذا الرصد"} for x in xs if x not in ok]
+        if not ok:
+            continue
+        res = await _save(db, current_user, course, fld, [{"student_db_id": x["student_db_id"], "value": first[(x["student_db_id"], fld)].get("old")} for x in ok], "undo", op)
+        bad = {e["student_db_id"] for e in res["errors"]}
+        skipped += [{"name": e.get("name", ""), "error": e["error"]} for e in res["errors"]]
+        good = {x["student_db_id"] for x in ok if x["student_db_id"] not in bad}
+        done += len(good)
+        if good:
+            await db.rc_log.update_many({"_id": {"$in": [y["_id"] for y in logs if y["field"] == fld and y["student_db_id"] in good]}},
+                                        {"$set": {"undone": True, "undone_by_name": current_user.get("full_name", "")}})
+    msg = f"تم التراجع عن {done} درجة"
+    if skipped:
+        msg += f" · تُخطّيت {len(skipped)}"
+    return {"undone": done, "skipped": skipped, "message": msg}
+
+
+@router.post("/rc/courses/{course_id}/reset")
+async def reset_marks(course_id: str, data: dict = Body(...), current_user: dict = Depends(get_current_user)):
+    """🧹 تفريغ الدرجات (تعود بلا إدخال) — مسجّل ويمكن التراجع عنه كعملية واحدة"""
+    db = get_db()
+    course = await _course_scoped(db, current_user, course_id)
+    fields = [f for f in REVERSE if f in (data.get("fields") or [])]
+    if not fields:
+        raise HTTPException(status_code=400, detail="اختر الدرجات المراد تفريغها")
+    op, total, errors = str(ObjectId()), 0, []
+    for fld in fields:
+        sids = [m["student_db_id"] async for m in db.rc_marks.find({"course_id": course_id, fld: {"$ne": None}}, {"student_db_id": 1})]
+        if not sids:
+            continue
+        res = await _save(db, current_user, course, fld, [{"student_db_id": x, "value": None} for x in sids], "reset", op)
+        total += res["saved"]
+        errors += [{**e, "field": E.FIELDS[fld]} for e in res["errors"]]
+    msg = f"تم تفريغ {total} درجة" + (f" · لم تُفرَّغ {len(errors)}" if errors else "")
+    return {"cleared": total, "errors": errors, "op_id": op, "message": msg}
 
 
 # ==================== 🏛️ قرارات مجلس الكلية (درجات) ====================
