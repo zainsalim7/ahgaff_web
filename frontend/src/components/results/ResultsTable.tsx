@@ -1,3 +1,4 @@
+import { ScrollBox } from '../ScrollBox';
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,12 +20,7 @@ const ResCell = ({ c, testID }: { c: Cell | null; testID: string }) => {
 
 const COLS: [string, number][] = [['#', 0.45], ['الطالب', 2.4], ['رقم القيد', 1], ['القسم', 1.5], ['المستوى', 0.7], ['الفصل الأول (المستوى الحالي)', 1.9], ['الفصل الثاني (المستوى الحالي)', 1.9], ['الصادرة', 0.8]];
 
-const Scroller = ({ children }: { children: React.ReactNode }) => {
-  const { width } = useWindowDimensions();
-  const ref = React.useRef<ScrollView>(null);
-  if (width >= 1000) return <>{children}</>;
-  return <ScrollView ref={ref} horizontal showsHorizontalScrollIndicator onContentSizeChange={() => ref.current?.scrollToEnd({ animated: false })} contentContainerStyle={{ minWidth: 980, flexDirection: 'column' }}><View style={{ width: 980 }}>{children}</View></ScrollView>;
-};
+const Scroller = ({ children }: { children: React.ReactNode }) => <ScrollBox rn minWidth={980} testID="results-scroll">{children}</ScrollBox>;
 
 export const ResultsTable = ({ items, total, page, pages, loading, offset, onOpen, onPage }: {
   items: SRow[]; total: number; page: number; pages: number; loading: boolean; offset: number; onOpen: (id: string) => void; onPage: (p: number) => void;
@@ -35,7 +31,7 @@ export const ResultsTable = ({ items, total, page, pages, loading, offset, onOpe
       <Text style={t.count} testID="results-total">إجمالي <Text style={{ color: '#2962ff', fontWeight: '700' }}>{total}</Text> طالب</Text>
     </View>
     <Scroller>
-    <View style={t.headRow}>
+    <View style={[t.headRow, { position: 'sticky' as any, top: 0, zIndex: 2 }]}>
       {COLS.map(([l, f]) => <Text key={l} style={[t.th, { flex: f }]} numberOfLines={1}>{l}</Text>)}
     </View>
     {loading ? <ActivityIndicator style={{ margin: 30 }} /> : items.length === 0 ? (

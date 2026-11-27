@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { ScrollBox } from '../ScrollBox';
 import { RcRow, Sheet, TabId, TAB_FIELD, Field, fmt, Badge, resultColor, rc } from './rcUi';
 
 type Col = { label: string; flex: number; render: (r: RcRow) => React.ReactNode };
@@ -114,9 +115,9 @@ export const RcMarksTable = ({ tab, sheet, q = '', edits, setEdit, errors, onDec
   const locked = sheet.sheet.coursework_locked;
   const mx = field === 'coursework' ? sheet.settings.coursework_max : field === 'first_exam' ? sheet.settings.final_max : 100;
   return (
-    <ScrollView horizontal contentContainerStyle={{ minWidth: '100%' }}>
+    <ScrollBox rn minWidth={900} testID={`rc-scroll-${tab}`}>
       <View style={{ minWidth: 900, flex: 1 }} testID={`rc-table-${tab}`}>
-        <View style={[rc.tr, { backgroundColor: '#f8fafc' }]}>
+        <View style={[rc.tr, { backgroundColor: '#f8fafc', position: 'sticky' as any, top: 0, zIndex: 2 }]}>
           {field && <TouchableOpacity style={{ width: 24 }} onPress={() => onSelAll(rows.map((r) => r.student_db_id))} testID={`rc-sel-all-${tab}`}>
             <Ionicons name={allSel ? 'checkbox' : 'square-outline'} size={18} color="#2962ff" /></TouchableOpacity>}
           <Text style={[rc.th, { width: 30 }]}>#</Text>
@@ -151,6 +152,6 @@ export const RcMarksTable = ({ tab, sheet, q = '', edits, setEdit, errors, onDec
           );
         })}
       </View>
-    </ScrollView>
+    </ScrollBox>
   );
 };

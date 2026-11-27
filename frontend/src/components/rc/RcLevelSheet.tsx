@@ -4,30 +4,22 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { ModalShell, downloadBlob } from '../results/resultsUi';
 import { Btn, Msg, Badge, rc } from './rcUi';
+import { ScrollBox } from '../ScrollBox';
 
 type Cell = { points: number | null; letter: string | null; weighted: number | null; state: 'pass' | 'second' | 'pending' } | null;
 type Tot = { points: number | null; units: number; gpa: number | null; label?: string | null; source?: string };
 type Row = { student_db_id: string; name: string; reg_no: string; cells: Cell[]; sem: Tot; prev: Tot; cum: Tot };
 type Data = { courses: { id: string; name: string; credits: any }[]; rows: Row[]; missing_credits: string[] };
 
-const W = 68;
+const T: Record<string, any> = {
+  table: { borderCollapse: 'separate', borderSpacing: 0, direction: 'rtl', fontFamily: 'inherit', minWidth: '100%' },
+  g: { fontSize: 12, fontWeight: 800, color: '#1a2540', padding: '6px 4px', borderLeft: '1px solid #e3e7ee', borderBottom: '1px solid #e3e7ee', whiteSpace: 'nowrap', textAlign: 'center' },
+  h: { fontSize: 11, fontWeight: 800, color: '#475569', padding: '6px 4px', background: '#f8fafc', borderLeft: '1px solid #eef1f6', borderBottom: '1px solid #e3e7ee', minWidth: 64, textAlign: 'center' },
+  c: { fontSize: 12.5, color: '#1a2540', padding: '7px 4px', borderLeft: '1px solid #f0f2f7', borderBottom: '1px solid #f0f2f7', textAlign: 'center' },
+  stick0: { position: 'sticky', top: 0, zIndex: 3 },
+  stick1: { position: 'sticky', top: 30, zIndex: 3 },
+};
 const n = (v: any) => (v === null || v === undefined ? '-' : String(v));
-const H = ({ t, w = W, bg = '#f8fafc' }: { t: string; w?: number; bg?: string }) => (
-  <Text style={{ width: w, fontSize: 11, fontWeight: '800', color: '#475569', textAlign: 'center', backgroundColor: bg, paddingVertical: 6, borderLeftWidth: 1, borderColor: '#eef1f6' }} numberOfLines={2}>{t}</Text>
-);
-const C = ({ t, w = W, color = '#1a2540', bold }: { t: string; w?: number; color?: string; bold?: boolean }) => (
-  <Text style={{ width: w, fontSize: 12.5, color, fontWeight: bold ? '800' : '500', textAlign: 'center', paddingVertical: 8, borderLeftWidth: 1, borderColor: '#f0f2f7' }}>{t}</Text>
-);
-const Group = ({ title, w, bg }: { title: string; w: number; bg: string }) => (
-  <Text style={{ width: w, textAlign: 'center', fontWeight: '800', fontSize: 12, color: '#1a2540', backgroundColor: bg, paddingVertical: 6, borderLeftWidth: 1, borderColor: '#e3e7ee' }} numberOfLines={1}>{title}</Text>
-);
-const TotCells = ({ t, gpaRed }: { t: Tot; gpaRed?: boolean }) => (
-  <>
-    <C t={n(t.points)} /><C t={n(t.units)} />
-    <C t={t.label || n(t.gpa)} bold color={t.label ? '#c62828' : gpaRed ? '#c62828' : '#1565c0'} />
-  </>
-);
-
 const PrevImport = ({ params, onClose, onDone }: { params: any; onClose: () => void; onDone: () => void }) => {
   const [file, setFile] = useState<File | null>(null);
   const [prev, setPrev] = useState<any>(null);
@@ -79,7 +71,6 @@ export const RcLevelSheet = ({ departmentId, departmentName, level, semesterId, 
   const exportX = async () => {
     try { downloadBlob((await api.get('/rc/level-sheet/export', { params, responseType: 'blob' })).data, `كشف الدور الأول - ${departmentName} م${level}.xlsx`); } catch { setErr('فشل التصدير'); }
   };
-  const tot = W * 3;
   return (
     <View testID="rc-level-sheet">
       <View style={[rc.card, { padding: 14, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' }]}>
@@ -93,36 +84,44 @@ export const RcLevelSheet = ({ departmentId, departmentName, level, semesterId, 
       {!!d?.missing_credits.length && <Text style={{ color: '#ef6c00', textAlign: 'right', marginBottom: 8 }} testID="rc-level-credits-warn">مقررات بلا وحدات دراسية مسجلة (تُحسب 0): {d.missing_credits.join('، ')}</Text>}
       {!d ? <ActivityIndicator style={{ marginTop: 20 }} /> : (
         <View style={[rc.card, { overflow: 'hidden' }]}>
-          <ScrollView horizontal>
-            <View testID="rc-level-table" style={{ direction: 'rtl' } as any}>
-              <View style={{ flexDirection: 'row-reverse' }}>
-                <Group title="" w={36 + 200} bg="#fff" />
-                {d.courses.map((c) => <Group key={c.id} title={`${c.name} · ${c.credits || '-'} و`} w={tot} bg="#eef4ff" />)}
-                <Group title="التحصيل الفصلي الحالي" w={tot} bg="#fff7e0" />
-                <Group title="التحصيل التراكمي السابق" w={tot} bg="#fff7e0" />
-                <Group title="التحصيل التراكمي الحالي" w={tot} bg="#fff7e0" />
-              </View>
-              <View style={{ flexDirection: 'row-reverse' }}>
-                <H t="الرقم" w={36} /><H t="الاسم" w={200} />
-                {d.courses.map((c) => <React.Fragment key={c.id}><H t="المعدل بالنقاط" /><H t="التقدير" /><H t="النقاط المرجحة" /></React.Fragment>)}
-                {[0, 1, 2].map((i) => <React.Fragment key={i}><H t="مجموع النقاط المرجحة" /><H t="مجموع الوحدات" /><H t={i === 0 ? 'المعدل الفصلي' : i === 1 ? 'المعدل السابق' : 'المعدل التراكمي'} /></React.Fragment>)}
-              </View>
-              {d.rows.map((r, i) => (
-                <View key={r.student_db_id} style={{ flexDirection: 'row-reverse', borderTopWidth: 1, borderColor: '#f0f2f7', backgroundColor: i % 2 ? '#fbfcfe' : '#fff' }} testID={`rc-level-row-${r.student_db_id}`}>
-                  <C t={String(i + 1)} w={36} color="#94a3b8" />
-                  <Text style={{ width: 200, fontSize: 13, fontWeight: '700', color: '#1a2540', textAlign: 'right', paddingHorizontal: 8, paddingVertical: 8 }} numberOfLines={1}>{r.name}</Text>
-                  {r.cells.map((c, j) => (
-                    <React.Fragment key={j}>
-                      <C t={!c || c.state === 'pending' ? '' : n(c.points)} color="#c2410c" bold />
-                      <C t={c?.letter || ''} color={c?.state === 'second' ? '#c62828' : '#1a2540'} bold />
-                      <C t={!c || c.state === 'pending' ? '' : n(c.weighted)} />
-                    </React.Fragment>
-                  ))}
-                  <TotCells t={r.sem} /><TotCells t={r.prev} /><TotCells t={r.cum} />
-                </View>
-              ))}
-            </View>
-          </ScrollView>
+          <ScrollBox testID="rc-level-table">
+            <table style={T.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...T.g, ...T.stick0, background: '#fff' }} colSpan={2} rowSpan={1}></th>
+                  {d.courses.map((c) => <th key={c.id} colSpan={3} style={{ ...T.g, ...T.stick0, background: '#eef4ff' }}>{c.name} · {c.credits || '-'} و</th>)}
+                  {['التحصيل الفصلي الحالي', 'التحصيل التراكمي السابق', 'التحصيل التراكمي الحالي'].map((x) => <th key={x} colSpan={3} style={{ ...T.g, ...T.stick0, background: '#fff7e0' }}>{x}</th>)}
+                </tr>
+                <tr>
+                  <th style={{ ...T.h, ...T.stick1, width: 36 }}>الرقم</th>
+                  <th style={{ ...T.h, ...T.stick1, minWidth: 200, right: 0 }}>الاسم</th>
+                  {d.courses.map((c) => <React.Fragment key={c.id}><th style={{ ...T.h, ...T.stick1 }}>المعدل بالنقاط</th><th style={{ ...T.h, ...T.stick1 }}>التقدير</th><th style={{ ...T.h, ...T.stick1 }}>النقاط المرجحة</th></React.Fragment>)}
+                  {['المعدل الفصلي', 'المعدل السابق', 'المعدل التراكمي'].map((x) => <React.Fragment key={x}><th style={{ ...T.h, ...T.stick1 }}>مجموع النقاط المرجحة</th><th style={{ ...T.h, ...T.stick1 }}>مجموع الوحدات</th><th style={{ ...T.h, ...T.stick1 }}>{x}</th></React.Fragment>)}
+                </tr>
+              </thead>
+              <tbody>
+                {d.rows.map((r, i) => (
+                  <tr key={r.student_db_id} style={{ background: i % 2 ? '#fbfcfe' : '#fff' }} data-testid={`rc-level-row-${r.student_db_id}`}>
+                    <td style={{ ...T.c, color: '#94a3b8' }}>{i + 1}</td>
+                    <td style={{ ...T.c, textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap', position: 'sticky', right: 0, background: i % 2 ? '#fbfcfe' : '#fff', zIndex: 1 }}>{r.name}</td>
+                    {r.cells.map((c, j) => (
+                      <React.Fragment key={j}>
+                        <td style={{ ...T.c, color: '#c2410c', fontWeight: 800 }}>{!c || c.state === 'pending' ? '' : n(c.points)}</td>
+                        <td style={{ ...T.c, fontWeight: 800, color: c?.state === 'second' ? '#c62828' : '#1a2540' }}>{c?.letter || ''}</td>
+                        <td style={T.c}>{!c || c.state === 'pending' ? '' : n(c.weighted)}</td>
+                      </React.Fragment>
+                    ))}
+                    {[r.sem, r.prev, r.cum].map((t, k) => (
+                      <React.Fragment key={k}>
+                        <td style={T.c}>{n(t.points)}</td><td style={T.c}>{n(t.units)}</td>
+                        <td style={{ ...T.c, fontWeight: 800, color: t.label ? '#c62828' : '#1565c0' }}>{t.label || n(t.gpa)}</td>
+                      </React.Fragment>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollBox>
         </View>
       )}
       <Text style={{ fontSize: 11.5, color: '#64748b', textAlign: 'right' }}>المعدل بالنقاط = المجموع ÷ 20 · أ ≥ 4.5 · ب ≥ 4 · ج ≥ 3.25 · د ≥ 2.5 · هـ أقل · من بقي له مقرر في الدور الثاني يظهر «دور ثان» مكان المعدل. التراكمي السابق من الملف المرفوع، وإلا من الفصول المعتمدة في النظام.</Text>
