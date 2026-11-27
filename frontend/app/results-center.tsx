@@ -10,6 +10,7 @@ import { PickerField, Opt, Fac, facultyMeta } from '../src/components/results/re
 import { RcSheet } from '../src/components/rc/RcSheet';
 import { RcSettingsModal } from '../src/components/rc/RcSettingsModal';
 import { RcPublishModal } from '../src/components/rc/RcPublishModal';
+import { RcLevelSheet } from '../src/components/rc/RcLevelSheet';
 import { Badge } from '../src/components/rc/rcUi';
 
 type Dep = Opt & { faculty_id?: string };
@@ -49,6 +50,7 @@ export default function ResultsCenterPage() {
   const [err, setErr] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [openFac, setOpenFac] = useState('');
+  const [levelView, setLevelView] = useState(false);
   const [q, setQ] = useState('');
   const [size, setSize] = useState(12);
   const [page, setPage] = useState(1);
@@ -105,7 +107,13 @@ export default function ResultsCenterPage() {
                 <Ionicons name="settings-outline" size={16} color="#1a2540" /><Text style={[st.hBtnTxt, { color: '#1a2540' }]}>إعدادات اللائحة</Text>
               </TouchableOpacity>
             )}
-            {canApprove && !open && (
+            {!open && !levelView && (
+              <TouchableOpacity style={[st.hBtn, { backgroundColor: f.department_id && f.level && f.semester_id ? '#1565c0' : '#94a3b8' }]} testID="rc-level-open-btn"
+                onPress={() => (f.department_id && f.level && f.semester_id ? setLevelView(true) : setErr('اختر القسم والمستوى والفصل أولاً لعرض كشف الدور الأول'))}>
+                <Ionicons name="grid-outline" size={16} color="#fff" /><Text style={st.hBtnTxt}>كشف الدور الأول للمستوى</Text>
+              </TouchableOpacity>
+            )}
+            {canApprove && !open && !levelView && (
               <TouchableOpacity style={[st.hBtn, { backgroundColor: f.department_id && f.level && f.semester_id ? '#2e7d32' : '#94a3b8' }]} testID="rc-publish-open-btn"
                 onPress={() => (f.department_id && f.level && f.semester_id ? setModal('publish') : setErr('اختر القسم والمستوى والفصل أولاً لاعتماد نتائجهم'))}>
                 <Ionicons name="checkmark-done-outline" size={16} color="#fff" /><Text style={st.hBtnTxt}>اعتماد ونقل إلى النتائج</Text>
@@ -117,7 +125,9 @@ export default function ResultsCenterPage() {
           </View>
         </View>
 
-        {open ? <RcSheet courseId={open} perms={perms} onBack={() => { setOpen(null); setOpenFac(''); }} onFaculty={setOpenFac} /> : (
+        {levelView ? <RcLevelSheet departmentId={f.department_id} departmentName={departments.find((d) => d.id === f.department_id)?.name || ''} level={f.level}
+          semesterId={f.semester_id} canImport={hasPermission('rc_approve')} onBack={() => setLevelView(false)} />
+        : open ? <RcSheet courseId={open} perms={perms} onBack={() => { setOpen(null); setOpenFac(''); }} onFaculty={setOpenFac} /> : (
           <>
             <View style={st.flow} testID="rc-flow">
               {['كشف الأهلية (الحضور)', 'أعمال السعي', 'الدور الأول', 'الدور الثاني', 'الاستثنائي', 'الاعتماد ← النتائج'].map((x, i, a) => (

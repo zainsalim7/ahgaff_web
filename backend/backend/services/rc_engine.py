@@ -108,3 +108,16 @@ def compute(m: dict, cfg: dict, att: dict, decs: dict) -> dict:
         r.update(final=last if last is not None else r["total1"], stage="failed", result="راسب")
     r["letter"] = letter(r["final"], cfg) if r["stage"] != "pending" else None
     return r
+
+
+POINT_SCALE = [(4.5, "أ"), (4.0, "ب"), (3.25, "ج"), (2.5, "د")]
+
+
+def points(total) -> Optional[float]:
+    return round(total / 20, 2) if isinstance(total, (int, float)) else None
+
+
+def points_letter(p) -> Optional[str]:
+    if not isinstance(p, (int, float)):
+        return None
+    return next((l for m, l in POINT_SCALE if p >= m), "هـ")

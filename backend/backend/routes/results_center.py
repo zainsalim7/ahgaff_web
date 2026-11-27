@@ -628,3 +628,140 @@ async def publish(data: dict = Body(...), current_user: dict = Depends(get_curre
     await log_activity(current_user, "rc_publish", "grade_imports", iid, f"م{level} ف{sem_no} {year}", {"students": len(docs), "courses": len(sheets)})
     return {"import_id": iid, "students": len(docs), "courses": len(sheets), **linked,
             "message": f"تم الاعتماد: {len(docs)} طالب و{len(sheets)} مقرر · حُفظت في «النتائج» كمسودة مخفية — انشرها من «سجل العمليات»"}
+
+
+# ==================== 📊 كشف الدور الأول للمستوى (نقاط · فصلي · تراكمي) ====================
+async def _prev_from_system(db, sids: list, level: int, term: Optional[int]) -> dict:
+    """التراكمي السابق من بيانات الفصول المعتمدة والمنشورة في مركز النتائج (غير الفصل الحالي)"""
+    pub = {b["grade_import_id"] async for b in db.result_batches.find(
+        {"grade_import_id": {"$exists": True, "$ne": None}, "draft": {"$ne": True}, "undone": {"$ne": True}}, {"grade_import_id": 1})}
+    imps = [str(i["_id"]) async for i in db.grade_imports.find({"source": "results_center", "_id": {"$in": [ObjectId(x) for x in pub if ObjectId.is_valid(x)]}},
+                                                              {"level": 1, "semester_no": 1}) if not (i.get("level") == level and i.get("semester_no") == term)]
+    out: dict = {}
+    async for g in db.student_grades.find({"import_id": {"$in": imps}, "student_db_id": {"$in": sids}}, {"student_db_id": 1, "grades": 1}):
+        o = out.setdefault(g["student_db_id"], {"points": 0.0, "units": 0.0})
+        for c in g.get("grades") or []:
+            try:
+                t, u = float(c.get("total")), float(c.get("credits"))
+            except (TypeError, ValueError):
+                continue
+            o["points"] += round(t / 20, 2) * u
+            o["units"] += u
+    return out
+
+
+async def _level_sheet(db, user: dict, department_id: str, level: int, semester_id: str) -> dict:
+    _, sheets = await _collect(db, user, department_id, level, semester_id)
+    sem = await db.semesters.find_one({"_id": ObjectId(semester_id)}, {"term": 1}) if ObjectId.is_valid(semester_id) else None
+    term = (sem or {}).get("term")
+    courses = [{"id": s["course"]["id"], "name": s["course"]["name"], "credits": s["credits"]} for s in sheets]
+    per: dict = {}
+    for i, s in enumerate(sheets):
+        try:
+            u = float(s["credits"] or 0)
+        except (TypeError, ValueError):
+            u = 0.0
+        for r in s["rows"]:
+            p = per.setdefault(r["student_db_id"], {"student_db_id": r["student_db_id"], "name": r["name"], "reg_no": r["reg_no"], "cells": [None] * len(sheets)})
+            if r["pass1"]:
+                pt = E.points(r["total1"])
+                cell = {"points": pt, "letter": E.points_letter(pt), "weighted": round(pt * u, 2), "units": u, "state": "pass"}
+            elif r["in_second"]:
+                cell = {"points": None, "letter": "هـ", "weighted": None, "units": u, "state": "second"}
+            else:
+                cell = {"points": None, "letter": None, "weighted": None, "units": u, "state": "pending"}
+            p["cells"][i] = cell
+    sids = list(per)
+    base = {b["student_db_id"]: b async for b in db.rc_prev_totals.find({"semester_id": semester_id, "student_db_id": {"$in": sids}})}
+    sysprev = await _prev_from_system(db, [x for x in sids if x not in base], level, term)
+    rows = []
+    for sid, p in per.items():
+        cells = [c for c in p["cells"] if c]
+        units = round(sum(c["units"] for c in cells), 2)
+        second = any(c["state"] == "second" for c in cells)
+        pending = any(c["state"] == "pending" for c in cells)
+        spts = None if second or pending else round(sum(c["weighted"] for c in cells), 2)
+        b = base.get(sid)
+        prev = {"points": b["points"], "units": b["units"], "source": "excel"} if b else (
+            {**{k: round(v, 2) for k, v in sysprev[sid].items()}, "source": "system"} if sid in sysprev else {"points": 0, "units": 0, "source": "none"})
+        prev["gpa"] = round(prev["points"] / prev["units"], 2) if prev["units"] else None
+        cu = round(prev["units"] + units, 2)
+        cpts = round(prev["points"] + spts, 2) if spts is not None else None
+        label = "دور ثان" if second else ("غير مكتمل" if pending else None)
+        rows.append({**p, "sem": {"points": spts, "units": units, "gpa": round(spts / units, 2) if spts is not None and units else None, "label": label},
+                     "prev": prev, "cum": {"points": cpts, "units": cu, "gpa": round(cpts / cu, 2) if cpts is not None and cu else None, "label": label}})
+    rows.sort(key=lambda x: x["name"])
+    return {"courses": courses, "rows": rows, "missing_credits": [c["name"] for c in courses if not c["credits"]]}
+
+
+@router.get("/rc/level-sheet")
+async def level_sheet(department_id: str, level: int, semester_id: str, current_user: dict = Depends(get_current_user)):
+    _view(current_user)
+    return await _level_sheet(get_db(), current_user, department_id, level, semester_id)
+
+
+@router.get("/rc/level-sheet/export")
+async def level_sheet_export(department_id: str, level: int, semester_id: str, current_user: dict = Depends(get_current_user)):
+    _view(current_user)
+    d = await _level_sheet(get_db(), current_user, department_id, level, semester_id)
+    v = lambda x: E.fmt(x) if isinstance(x, (int, float)) else (x if x else "-")
+    head = ["الرقم", "الاسم", "رقم القيد"]
+    for c in d["courses"]:
+        head += [f"{c['name']} · المعدل بالنقاط", f"{c['name']} · التقدير", f"{c['name']} · النقاط المرجحة ({c['credits'] or '-'} و)"]
+    head += ["الفصلي · مجموع النقاط المرجحة", "الفصلي · مجموع الوحدات", "المعدل الفصلي", "السابق · مجموع النقاط", "السابق · مجموع الوحدات", "المعدل السابق",
+             "التراكمي · مجموع النقاط", "التراكمي · مجموع الوحدات", "المعدل التراكمي"]
+    body = []
+    for i, r in enumerate(d["rows"], 1):
+        line = [i, r["name"], r["reg_no"]]
+        for c in r["cells"]:
+            c = c or {}
+            line += [v(c.get("points")), c.get("letter") or "", v(c.get("weighted"))]
+        line += [v(r["sem"]["points"]), v(r["sem"]["units"]), r["sem"]["label"] or v(r["sem"]["gpa"]), v(r["prev"]["points"]), v(r["prev"]["units"]), v(r["prev"]["gpa"]),
+                 v(r["cum"]["points"]), v(r["cum"]["units"]), r["cum"]["label"] or v(r["cum"]["gpa"])]
+        body.append(line)
+    return _xlsx("كشف الدور الأول", head, body, "rc_level_first_round.xlsx")
+
+
+@router.post("/rc/prev-totals/import")
+async def import_prev_totals(file: UploadFile = File(...), department_id: str = Form(...), level: int = Form(...), semester_id: str = Form(...),
+                             commit: str = Form("false"), current_user: dict = Depends(get_current_user)):
+    """Excel: رقم القيد | مجموع النقاط المرجحة السابق | مجموع الوحدات السابق"""
+    from .student_results import _rows, _text
+    _need(current_user, "rc_approve", "اعتماد الكشوف")
+    db = get_db()
+    d = await _level_sheet(db, current_user, department_id, level, semester_id)
+    by_reg = {r["reg_no"]: r for r in d["rows"]}
+    try:
+        rows = _rows(await file.read(), file.filename)
+    except Exception:
+        raise HTTPException(status_code=400, detail="تعذّرت قراءة الملف — استخدم Excel (xlsx/xls) أو CSV")
+    out = []
+    for x in rows:
+        x = list(x) + [None, None, None]
+        reg = _text(x[0])
+        if not reg or not any(ch.isdigit() for ch in reg):
+            continue
+        it = {"reg_no": reg, "name": (by_reg.get(reg) or {}).get("name", ""), "points": _text(x[1]), "units": _text(x[2])}
+        try:
+            pts, un = float(str(x[1]).replace("٫", ".")), float(str(x[2]).replace("٫", "."))
+            ok = pts >= 0 and un >= 0
+        except (TypeError, ValueError):
+            ok = False
+        if reg not in by_reg:
+            it.update(status="rejected", reason="ليس من طلاب هذا المستوى")
+        elif not ok:
+            it.update(status="rejected", reason="قيم غير رقمية")
+        else:
+            it.update(status="ok", student_db_id=by_reg[reg]["student_db_id"], p=pts, u=un)
+        out.append(it)
+    counts = {k: sum(1 for i in out if i["status"] == k) for k in ("ok", "rejected")}
+    if commit.lower() != "true":
+        return {"preview": True, "rows": out, "counts": counts}
+    now = _now()
+    for i in out:
+        if i["status"] == "ok":
+            await db.rc_prev_totals.update_one({"semester_id": semester_id, "student_db_id": i["student_db_id"]}, {"$set": {
+                "points": i["p"], "units": i["u"], "reg_no": i["reg_no"], "department_id": department_id, "level": level,
+                "updated_at": now, "updated_by_name": current_user.get("full_name", "")}}, upsert=True)
+    await log_activity(current_user, "rc_import_prev_totals", "rc_prev_totals", department_id, f"م{level}", counts)
+    return {"counts": counts, "message": f"تم حفظ التراكمي السابق لـ {counts['ok']} طالب"}
