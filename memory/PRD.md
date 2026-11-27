@@ -198,3 +198,4 @@
 - 2026-11: Coursework tab renamed «السعي والدورين»: inline inputs for first (eligible) & second (in_second) rounds + المجموع/الأهلية/النتيجة; multi-field save sequential coursework→first→second.
 - 2026-11: Second round failing (<pass_mark or غ) records final2 = 0.
 - 2026-11: RC eligibility by attendance precedes coursework (att_eligibility; absence-ineligible → in_second without coursework; lock requires coursework only for att_ok); per-mark undo POST /api/rc/courses/{id}/log/{log_id}/undo (only latest change, once) + clear-to-delete; tabs reordered (eligibility first, default).
+- 2026-11: student-results page size chips (24/48/100/all → /results/students?limit, 0=all) + live debounced search; RC course sheet student search (name/reg).

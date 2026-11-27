@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../../services/api';
 import { downloadBlob } from '../results/resultsUi';
@@ -27,6 +27,7 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
   const [modal, setModal] = useState<'' | 'import' | 'log'>('');
   const [dec, setDec] = useState<{ row: RcRow; kind: DecKind } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState('');
 
   const load = useCallback(async () => {
     try { const d = (await api.get(`/rc/courses/${courseId}/sheet`)).data; setSheet(d); onFaculty?.(d.course.faculty_id || ''); }
@@ -117,8 +118,14 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
         <Btn icon="time-outline" label="سجل التعديلات" color="#475569" outline onPress={() => setModal('log')} testID="rc-log-btn" />
       </View>
       <Msg m={msg} testID="rc-sheet-msg" />
+      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 12, height: 40, maxWidth: 420, marginBottom: 10 }}>
+        <Ionicons name="search" size={16} color="#8a95a8" />
+        <TextInput style={{ flex: 1, textAlign: 'right', fontSize: 14, color: '#1a2540', outlineStyle: 'none' as any }} value={q} onChangeText={setQ}
+          placeholder="ابحث عن طالب بالاسم أو رقم القيد" placeholderTextColor="#94a3b8" testID="rc-student-search" />
+        {!!q && <TouchableOpacity onPress={() => setQ('')} testID="rc-student-search-clear"><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity>}
+      </View>
       <View style={[rc.card, { overflow: 'hidden' }]}>
-        <RcMarksTable tab={tab} sheet={sheet} edits={edits} errors={errors} canEdit={canEdit} canDecide={perms.decide} canExams={perms.exams}
+        <RcMarksTable tab={tab} sheet={sheet} q={q} edits={edits} errors={errors} canEdit={canEdit} canDecide={perms.decide} canExams={perms.exams}
           setEdit={(id, v) => setEdits({ ...edits, [id]: v })} onDecision={(row, kind) => setDec({ row, kind })} />
       </View>
       <Text style={{ fontSize: 11.5, color: '#64748b', textAlign: 'right' }}>اكتب «غ» لمن غاب عن امتحان الدور. للتراجع عن درجة محفوظة: امسح الخانة واحفظ، أو اضغط «تراجع» بجانبها في «سجل التعديلات». حدود الغياب: بلا عذر أكبر من الحد · بعذر أكبر من الحد · الإجمالي يبلغ الحد = غير مؤهل (ما لم يستثنه مجلس الكلية).</Text>

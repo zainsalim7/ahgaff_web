@@ -84,12 +84,13 @@ const columns = (tab: TabId, s: Sheet, onDecision: (r: RcRow, k: DecKind) => voi
   }
 };
 
-export const RcMarksTable = ({ tab, sheet, edits, setEdit, errors, onDecision, canEdit, canDecide, canExams }: {
-  tab: TabId; sheet: Sheet; edits: Record<string, string>; setEdit: (k: string, v: string) => void; errors: Record<string, string>;
+export const RcMarksTable = ({ tab, sheet, q = '', edits, setEdit, errors, onDecision, canEdit, canDecide, canExams }: {
+  tab: TabId; q?: string; sheet: Sheet; edits: Record<string, string>; setEdit: (k: string, v: string) => void; errors: Record<string, string>;
   onDecision: (r: RcRow, k: DecKind) => void; canEdit: boolean; canDecide: boolean; canExams: boolean;
 }) => {
   const field = TAB_FIELD[tab];
-  const rows = rowsForTab(tab, sheet.rows);
+  const term = q.trim().toLowerCase();
+  const rows = rowsForTab(tab, sheet.rows).filter((r) => !term || r.name.toLowerCase().includes(term) || r.reg_no.includes(term));
   const cell: CellFn = (f, r, can) => <MarkCell field={f} r={r} can={can} edits={edits} setEdit={setEdit} />;
   const cols = columns(tab, sheet, onDecision, canDecide, cell, canExams);
   const locked = sheet.sheet.coursework_locked;

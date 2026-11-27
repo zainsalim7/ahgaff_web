@@ -37,6 +37,7 @@ export default function ResultsPage() {
   const [f, setF] = useState(EMPTY);
   const [data, setData] = useState<{ items: SRow[]; total: number; pages: number; sections?: string[] }>({ items: [], total: 0, pages: 1 });
   const [page, setPage] = useState(1);
+  const [size, setSize] = useState(24);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -52,13 +53,14 @@ export default function ResultsPage() {
   const load = useCallback(async (pg = 1, flt = f) => {
     setLoading(true); setErr('');
     try {
-      const params: any = { page: pg };
+      const params: any = { page: pg, limit: size };
       Object.entries(flt).forEach(([k, v]) => { if (v) params[k] = v; });
       setData((await api.get('/results/students', { params })).data); setPage(pg);
     } catch (e: any) { setErr(e?.response?.data?.detail || 'تعذر جلب الطلاب'); } finally { setLoading(false); }
-  }, [f]);
+  }, [f, size]);
 
-  useEffect(() => { load(1); }, [f.faculty_id, f.department_id, f.level, f.section, f.academic_year]);
+  useEffect(() => { load(1); }, [f.faculty_id, f.department_id, f.level, f.section, f.academic_year, size]);
+  useEffect(() => { const t = setTimeout(() => load(1), 400); return () => clearTimeout(t); }, [f.q]);
 
   const blank = async () => {
     try { downloadBlob((await api.get('/results/template/blank', { responseType: 'blob' })).data, 'نموذج نتائج فارغ.xlsx'); }
@@ -149,8 +151,18 @@ export default function ResultsPage() {
             <Text style={{ color: '#c2410c', fontWeight: '700', fontSize: 13, textAlign: 'right' }}>⏸ عرض النتائج موقوف في التطبيق: {pz.items.map((p) => p.scope_name).join('، ')}</Text>
           </View>
         )}
+        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+          <Text style={{ fontSize: 12.5, color: '#64748b' }}>عدد العرض:</Text>
+          {[24, 48, 100, 0].map((n) => (
+            <TouchableOpacity key={n} onPress={() => setSize(n)} testID={`results-page-size-${n || 'all'}`}
+              style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: size === n ? '#1a2540' : '#e3e7ee', backgroundColor: size === n ? '#1a2540' : '#fff' }}>
+              <Text style={{ fontSize: 12.5, fontWeight: '700', color: size === n ? '#fff' : '#1a2540' }}>{n || 'الكل'}</Text>
+            </TouchableOpacity>
+          ))}
+          <Text style={{ fontSize: 12.5, color: '#64748b', marginRight: 8 }} testID="results-total-count">{data.total} طالب</Text>
+        </View>
         {err ? <Text style={st.err} testID="results-error">{err}</Text> : null}
-        <ResultsTable items={data.items} total={data.total} page={page} pages={data.pages} loading={loading} offset={(page - 1) * 100}
+        <ResultsTable items={data.items} total={data.total} page={page} pages={data.pages} loading={loading} offset={(page - 1) * (size || 0)}
           onOpen={setOpenId} onPage={(p) => load(p)} />
       </ScrollView>
 

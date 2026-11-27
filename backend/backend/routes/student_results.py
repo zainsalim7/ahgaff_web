@@ -190,7 +190,7 @@ async def get_my_results(current_user: dict = Depends(get_current_user)):
 # ==================== جدول النتائج (الإدارة) ====================
 @router.get("/results/students")
 async def list_result_students(faculty_id: str = "", department_id: str = "", level: Optional[int] = None,
-                               section: str = "", academic_year: str = "", q: str = "", page: int = 1,
+                               section: str = "", academic_year: str = "", q: str = "", page: int = 1, limit: int = 100,
                                current_user: dict = Depends(get_current_user)):
     _guard_view(current_user)
     db = get_db()
@@ -204,7 +204,7 @@ async def list_result_students(faculty_id: str = "", department_id: str = "", le
         rx = {"$regex": re.escape(q.strip()), "$options": "i"}
         query["$or"] = [{"full_name": rx}, {"student_id": rx}]
     total = await db.students.count_documents(query)
-    limit = 100
+    limit = 5000 if limit == 0 else min(max(limit, 1), 500)
     studs = await db.students.find(query, {"student_id": 1, "full_name": 1, "department_id": 1, "level": 1}) \
         .sort([("level", 1), ("full_name", 1)]).skip((max(page, 1) - 1) * limit).limit(limit).to_list(limit)
     regs = [s.get("student_id") for s in studs if s.get("student_id")]
