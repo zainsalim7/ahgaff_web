@@ -177,6 +177,7 @@ async def _build(db, course: dict) -> dict:
         r = E.compute(m, cfg, att, decs.get(sid) or {})
         rows.append({
             "student_db_id": sid, "name": st.get("full_name", ""), "reg_no": str(st.get("student_id") or ""), "section": st.get("section", ""),
+            "st_level": st.get("level"), "st_department_id": str(st.get("department_id") or ""),
             **{k: m.get(k) for k in E.FIELDS},
             "att": {k: att.get(k) for k in ("pct_unexcused", "pct_excused", "pct_total", "status", "status_ar", "exceeded_unexcused", "exceeded_excused", "exceeded_total")},
             "decisions": decs.get(sid) or {}, **r, "stage_label": STAGE_AR.get(r["stage"], ""),
@@ -656,12 +657,17 @@ async def _level_sheet(db, user: dict, department_id: str, level: int, semester_
     term = (sem or {}).get("term")
     courses = [{"id": s["course"]["id"], "name": s["course"]["name"], "credits": s["credits"]} for s in sheets]
     per: dict = {}
+    others: dict = {}
     for i, s in enumerate(sheets):
         try:
             u = float(s["credits"] or 0)
         except (TypeError, ValueError):
             u = 0.0
         for r in s["rows"]:
+            if str(r.get("st_level") or "") != str(level) or (r.get("st_department_id") and r["st_department_id"] != department_id):
+                o = others.setdefault(r["student_db_id"], {"name": r["name"], "reg_no": r["reg_no"], "level": r.get("st_level"), "courses": []})
+                o["courses"].append(s["course"]["name"])
+                continue
             p = per.setdefault(r["student_db_id"], {"student_db_id": r["student_db_id"], "name": r["name"], "reg_no": r["reg_no"], "cells": [None] * len(sheets)})
             if r["pass1"]:
                 pt = E.points(r["total1"])
@@ -691,7 +697,7 @@ async def _level_sheet(db, user: dict, department_id: str, level: int, semester_
         rows.append({**p, "sem": {"points": spts, "units": units, "gpa": round(spts / units, 2) if spts is not None and units else None, "label": label},
                      "prev": prev, "cum": {"points": cpts, "units": cu, "gpa": round(cpts / cu, 2) if cpts is not None and cu else None, "label": label}})
     rows.sort(key=lambda x: x["name"])
-    return {"courses": courses, "rows": rows, "missing_credits": [c["name"] for c in courses if not c["credits"]]}
+    return {"courses": courses, "rows": rows, "excluded": sorted(others.values(), key=lambda x: x["name"]), "missing_credits": [c["name"] for c in courses if not c["credits"]]}
 
 
 @router.get("/rc/level-sheet")

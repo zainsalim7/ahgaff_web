@@ -208,3 +208,4 @@
 - 2026-11: Scroll box (70vh, sticky header, RTL) applied to DenseTable (all attendance reports), OvertimeSheet, teacher workload list. Master schedule already had it (72vh sticky).
 - 2026-11: Level sheet export (Excel+PDF) in paper-form layout with merged multi-row headers: services/level_sheet_export.py, GET /rc/level-sheet/export?fmt=xlsx|pdf
 - 2026-11: ResultsNav (src/components/results/ResultsNav.tsx): shared breadcrumb + tabs (النتائج/مركز النتائج/الدرجات) on student-results, results-center, grades; returns to existing stack instance (state kept). results-center course/level views are URL params (view, course) pushed to history; filters persisted in URL on both pages.
+- 2026-11: Level sheet excludes students from other levels/departments enrolled to repeat a course (listed in 'excluded'); publish unaffected.

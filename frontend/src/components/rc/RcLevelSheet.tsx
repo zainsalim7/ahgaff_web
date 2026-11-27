@@ -9,7 +9,7 @@ import { ScrollBox } from '../ScrollBox';
 type Cell = { points: number | null; letter: string | null; weighted: number | null; state: 'pass' | 'second' | 'pending' } | null;
 type Tot = { points: number | null; units: number; gpa: number | null; label?: string | null; source?: string };
 type Row = { student_db_id: string; name: string; reg_no: string; cells: Cell[]; sem: Tot; prev: Tot; cum: Tot };
-type Data = { courses: { id: string; name: string; credits: any }[]; rows: Row[]; missing_credits: string[] };
+type Data = { courses: { id: string; name: string; credits: any }[]; rows: Row[]; missing_credits: string[]; excluded?: { name: string; reg_no: string; level: any; courses: string[] }[] };
 
 const T: Record<string, any> = {
   table: { borderCollapse: 'separate', borderSpacing: 0, direction: 'rtl', fontFamily: 'inherit', minWidth: '100%' },
@@ -57,6 +57,19 @@ const PrevImport = ({ params, onClose, onDone }: { params: any; onClose: () => v
   );
 };
 
+const Excluded = ({ items }: { items: NonNullable<Data['excluded']> }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={{ backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, padding: 10, marginBottom: 8 }} testID="rc-level-excluded">
+      <TouchableOpacity onPress={() => setOpen(!open)} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }} testID="rc-level-excluded-toggle">
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color="#475569" />
+        <Text style={{ color: '#475569', fontSize: 12.5, fontWeight: '700', textAlign: 'right' }}>{items.length} طالب من مستويات أخرى مسجلون لإعادة مقررات من هذا المستوى — لا يظهرون في كشف المستوى (نتائجهم في كشف كل مقرر)</Text>
+      </TouchableOpacity>
+      {open && items.map((x, i) => <Text key={i} style={{ fontSize: 12, color: '#64748b', textAlign: 'right', marginTop: 4 }}>{x.name} ({x.reg_no}) — المستوى {x.level ?? '؟'}: {x.courses.join('، ')}</Text>)}
+    </View>
+  );
+};
+
 export const RcLevelSheet = ({ departmentId, departmentName, level, semesterId, canImport, onBack }: {
   departmentId: string; departmentName: string; level: string; semesterId: string; canImport: boolean; onBack: () => void;
 }) => {
@@ -82,6 +95,7 @@ export const RcLevelSheet = ({ departmentId, departmentName, level, semesterId, 
         <Btn icon="document-outline" label="تصدير PDF" color="#b91c1c" outline onPress={() => exportX('pdf')} testID="rc-level-export-pdf-btn" />
       </View>
       {!!err && <Text style={{ color: '#c62828', textAlign: 'right', marginBottom: 8 }} testID="rc-level-error">{err}</Text>}
+      {!!d?.excluded?.length && <Excluded items={d.excluded} />}
       {!!d?.missing_credits.length && <Text style={{ color: '#ef6c00', textAlign: 'right', marginBottom: 8 }} testID="rc-level-credits-warn">مقررات بلا وحدات دراسية مسجلة (تُحسب 0): {d.missing_credits.join('، ')}</Text>}
       {!d ? <ActivityIndicator style={{ marginTop: 20 }} /> : (
         <View style={[rc.card, { overflow: 'hidden' }]}>
