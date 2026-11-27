@@ -17,6 +17,7 @@ import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import { DASH, NUM_FONT, dashStyles } from '../src/components/dashboard/dashTheme';
 import { ReportKpis } from '../src/components/reports/ReportShell';
 import { getMyScope } from '../src/utils/scopeDefaults';
+import { ScrollBox } from '../src/components/ScrollBox';
 
 interface Course { course_name: string; course_code: string; level?: number; section?: string; weekly_hours?: number; expected_hours?: number; shortfall_hours?: number; completion_rate?: number; is_low?: boolean; note?: string; scheduled_lectures: number; executed_lectures: number; scheduled_hours: number; actual_hours: number; excluded_from_load?: boolean }
 interface TeacherWL { teacher_id: string; teacher_db_id?: string; teacher_name: string; academic_title?: string; department_id: string; department_name?: string; faculty_id?: string; weekly_hours: number; courses: Course[];
@@ -438,6 +439,7 @@ export default function TeacherWorkloadReport() {
                 <Text style={styles.count}>{rows.length} مدرس</Text>
               </View>
               {rows.length === 0 && <View style={dashStyles.empty}><Ionicons name="people-outline" size={36} color="#cbd5e1" /><Text style={dashStyles.emptyText}>لا توجد بيانات للفترة/الفلاتر المحددة</Text></View>}
+              <ScrollBox testID="tw-table-scrollbox">
               {rows.map((t, i) => {
                 const s = t.summary; const isOpen = !!open[t.teacher_id + i]; const lec = t.courses.reduce((a, c) => a + c.scheduled_lectures, 0); const exe = t.courses.reduce((a, c) => a + c.executed_lectures, 0);
                 return (
@@ -483,6 +485,7 @@ export default function TeacherWorkloadReport() {
                   </View>
                 );
               })}
+              </ScrollBox>
             </View>
             )}
           </>

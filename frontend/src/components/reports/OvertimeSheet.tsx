@@ -38,8 +38,9 @@ export const OvertimeSheet: React.FC<{ teachers: any[]; period: any; threshold: 
         <div style={{ fontSize: 15, fontWeight: 800, color: '#0f2440' }}>كشف يبين الساعات الإضافية للأساتذة {period?.semester_name ? `للفصل ${period.semester_name} ${period.academic_year || ''}` : ''}</div>
         <div style={{ fontSize: 12, color: '#64748b' }}>الفترة من {String(period?.start_date || '').slice(0, 10)} إلى {String(period?.end_date || '').slice(0, 10)} · عدد الأسابيع: {period?.total_weeks}{period?.holiday_days ? ` · أيام الإجازات الرسمية: ${period.holiday_days}` : ''}{anyBonus ? '' : ' · الإضافة غير مفعّلة'}</div>
       </div>
+      <div style={{ overflow: 'auto', maxHeight: '70vh', direction: 'rtl', border: '1px solid #e2e8f0', borderRadius: 8 }} data-testid="overtime-sheet-scrollbox">
       <table style={{ borderCollapse: 'collapse', width: '100%', fontFamily: 'inherit' }}>
-        <thead><tr>{headers.map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+        <thead><tr>{headers.map((h) => <th key={h} style={{ ...th, position: 'sticky', top: 0, zIndex: 2 }}>{h}</th>)}</tr></thead>
         <tbody>
           {teachers.map((t, i) => {
             const s = t.summary;
@@ -73,6 +74,7 @@ export const OvertimeSheet: React.FC<{ teachers: any[]; period: any; threshold: 
           })}
         </tbody>
       </table>
+      </div>
       <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, lineHeight: 1.8 }}>
         المنجز = محاضرات سُجّل لها حضور بمدتها الفعلية · الافتراضية = الساعات الأسبوعية × الأسابيع الكاملة من بداية المحاضرات حتى نهاية الفترة (يُخصم غياب الأستاذ بعذر فقط) · النصاب = النصاب الأسبوعي × الأسابيع الكاملة (حد قاطع) · الإجازات الرسمية لا تُخصم وتُحتسب ساعاتها للأستاذ {anyBonus ? ' · الإضافة = المنجز ÷ المُقسِّم (للكليات المفعَّل فيها) · الساعات الإضافية = (المنجز + الإضافة) − النصاب' : ' · الساعات الإضافية = المنجز − النصاب'} · تُظلَّل نسبة الإنجاز الأقل من {threshold}٪
         {muteOvertime && <div style={{ color: '#b45309', fontWeight: 700, marginTop: 4 }}>⚠ عمود «إجمالي الساعات الإضافية» مخفي لأن الفلتر الحالي يعرض مقررات قسم تدريس واحد فقط مقارنةً بالنصاب الكامل للأستاذ — غير دقيق في هذا الوضع.</div>}

@@ -205,3 +205,4 @@
 - 2026-11: Level first-round sheet GET /api/rc/level-sheet (+/export): per course points=total1/20, letter scale أ4.5 ب4 ج3.25 د2.5 هـ, weighted=points×credits; semester/prev/cumulative totals; 'دور ثان' label if any course in second; prev cumulative from rc_prev_totals (Excel POST /api/rc/prev-totals/import, perm rc_approve) else published rc imports. UI RcLevelSheet via «كشف الدور الأول للمستوى» button.
 - 2026-11: ScrollBox (src/components/ScrollBox.tsx): web div overflow:auto maxHeight 70vh, direction rtl, sticky headers; level sheet rewritten as HTML <table dir=rtl> (fixes LTR flip in prod), used in RcMarksTable & ResultsTable.
 - 2026-11: Second-round cell now shows 'المعتمد: X' under raw exam mark (engine already caps at 50/0).
+- 2026-11: Scroll box (70vh, sticky header, RTL) applied to DenseTable (all attendance reports), OvertimeSheet, teacher workload list. Master schedule already had it (72vh sticky).

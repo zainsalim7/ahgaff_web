@@ -103,9 +103,9 @@ export const DenseTable = ({ head, rows, keys, align, expand, onRowClick, footer
   expand?: (i: number) => React.ReactNode; onRowClick?: (i: number) => void; footer?: React.ReactNode; testID?: string; rowTestID?: (i: number) => string; emptyText?: string;
 }) => (
   <View style={[dashStyles.card, { padding: 0, overflow: 'hidden', marginBottom: 12 }]} testID={testID || 'report-table-card'}>
-    <div style={{ direction: 'rtl', overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }} data-testid={testID ? `${testID}-table` : 'report-table'}>
-        <thead><tr>{head.map((h, i) => <th key={i} style={{ ...tableStyles.th, textAlign: align?.[i] || 'right' }}>{h}</th>)}</tr></thead>
+    <div style={{ direction: 'rtl', overflow: 'auto', maxHeight: '70vh' }} data-testid={testID ? `${testID}-scrollbox` : 'report-scrollbox'}>
+      <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }} data-testid={testID ? `${testID}-table` : 'report-table'}>
+        <thead><tr>{head.map((h, i) => <th key={i} style={{ ...tableStyles.th, position: 'sticky', top: 0, zIndex: 2, textAlign: align?.[i] || 'right' }}>{h}</th>)}</tr></thead>
         <tbody>
           {rows.map((r, i) => {
             const ex = expand?.(i);
