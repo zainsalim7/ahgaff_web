@@ -127,7 +127,7 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
     return out
 
 
-FCM_BATCH = 500  # حد FCM لكل MulticastMessage
+FCM_BATCH = 100  # دفعات صغيرة: FCM يفتح خيطاً لكل جهاز (حد أقصى 500)
 
 
 def _send_fcm_chunk(tokens: list, title: str, body: str, data: dict = None) -> dict:
