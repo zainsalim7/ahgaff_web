@@ -189,7 +189,7 @@ async def _build(db, course: dict) -> dict:
               "pass2": sum(1 for r in rows if r["pass2"]), "in_exc": sum(r["in_exc"] for r in rows), "passed": sum(1 for r in rows if r["result"] == "ناجح"),
               "failed": sum(1 for r in rows if r["result"] == "راسب"), "pending": sum(1 for r in rows if r["stage"] == "pending")}
     return {"course": {"id": cid, "name": course.get("name", ""), "code": course.get("code", ""), "level": course.get("level"), "department_id": course.get("department_id"),
-                       "faculty_id": fid}, "settings": {**cfg, "final_max": 100 - cfg["coursework_max"]}, "rows": rows, "counts": counts,
+                       "semester_id": str(course.get("semester_id") or ""), "faculty_id": fid}, "settings": {**cfg, "final_max": 100 - cfg["coursework_max"]}, "rows": rows, "counts": counts,
             "sheet": {"coursework_locked": bool(sheet.get("coursework_locked")), "locked_by_name": sheet.get("locked_by_name", ""),
                       "locked_at": sheet["locked_at"].isoformat() if isinstance(sheet.get("locked_at"), datetime) else None}}
 
@@ -566,7 +566,16 @@ async def publish_preview(department_id: str, level: int, semester_id: str, curr
     _need(current_user, "rc_approve", "اعتماد الكشوف")
     db = get_db()
     _, sheets = await _collect(db, current_user, department_id, level, semester_id)
-    return {"courses": [{"id": s["course"]["id"], "name": s["course"]["name"], "credits": s["credits"], "locked": s["sheet"]["coursework_locked"], **s["counts"]} for s in sheets]}
+    approved = await _approved_ids(db, department_id, level, semester_id)
+    return {"courses": [{"id": s["course"]["id"], "name": s["course"]["name"], "credits": s["credits"], "locked": s["sheet"]["coursework_locked"],
+                         "approved": s["course"]["id"] in approved, **s["counts"]} for s in sheets]}
+
+
+async def _approved_ids(db, dep_id: str, level: int, sem_id: str) -> set:
+    """مقررات اعتُمدت سابقاً لهذا القسم/المستوى/الفصل (آخر اعتماد) — تبقى في البيان عند الاعتماد الجزئي التالي"""
+    last = await db.grade_imports.find_one({"source": "results_center", "department_id": dep_id, "level": level, "semester_id": sem_id},
+                                           {"course_ids": 1}, sort=[("_id", -1)])
+    return set((last or {}).get("course_ids") or [])
 
 
 @router.post("/rc/publish")
@@ -583,7 +592,12 @@ async def publish(data: dict = Body(...), current_user: dict = Depends(get_curre
         raise HTTPException(status_code=400, detail="اختر المستوى والفصل")
     if sem_no not in (1, 2) or not year:
         raise HTTPException(status_code=400, detail="اختر الفصل الدراسي (الأول/الثاني) والسنة الدراسية")
-    courses, sheets = await _collect(db, current_user, dep_id, level, sem_id)
+    courses, all_sheets = await _collect(db, current_user, dep_id, level, sem_id)
+    picked = set(data.get("course_ids") or [s["course"]["id"] for s in all_sheets]) | await _approved_ids(db, dep_id, level, sem_id)
+    sheets = [s for s in all_sheets if s["course"]["id"] in picked]
+    rest = [s for s in all_sheets if s["course"]["id"] not in picked]
+    if not sheets:
+        raise HTTPException(status_code=400, detail="اختر مقرراً واحداً على الأقل")
     unlocked = [s["course"]["name"] for s in sheets if not s["sheet"]["coursework_locked"]]
     if unlocked:
         raise HTTPException(status_code=400, detail="أقفل السعي أولاً في: " + "، ".join(unlocked))
@@ -597,10 +611,14 @@ async def publish(data: dict = Body(...), current_user: dict = Depends(get_curre
                                 "letter": r["letter"] or r["result"], "grade_letter": r["letter"] or r["result"],
                                 "stage": r["stage"] if r["stage"] in ("first", "second", "tasfiya") else "first"})
             p["rows"].append((r, s["credits"], s["settings"]))
+    for p in per.values():
+        p["grades"] += [{"course_name": s["course"]["name"], "credits": str(s["credits"] or ""), "total": "", "letter": "لم تصدر بعد",
+                         "grade_letter": "لم تصدر بعد", "stage": "first"} for s in rest]
     olds = [str(o["_id"]) async for o in db.grade_imports.find({"source": "results_center", "department_id": dep_id, "level": level,
                                                                  "semester_no": sem_no, "academic_year": year}, {"_id": 1})]
     imp = {"source": "results_center", "filename": "مركز النتائج", "faculty_id": fid, "department_id": dep_id, "level": level,
-           "semester_no": sem_no, "academic_year": year, "batch_no": "", "courses": [{"name": s["course"]["name"], "credits": s["credits"]} for s in sheets],
+           "semester_no": sem_no, "academic_year": year, "batch_no": "", "courses": [{"name": s["course"]["name"], "credits": s["credits"]} for s in all_sheets],
+           "semester_id": sem_id, "course_ids": [s["course"]["id"] for s in sheets], "partial": bool(rest),
            "students_count": len(per), "supersedes": olds, "imported_by": current_user.get("username", ""), "imported_at": _now().isoformat()}
     iid = str((await db.grade_imports.insert_one(imp)).inserted_id)
     docs, students = [], []
@@ -608,10 +626,11 @@ async def publish(data: dict = Body(...), current_user: dict = Depends(get_curre
         failed = sum(1 for r, _, _ in p["rows"] if r["result"] == "راسب")
         sec = sum(1 for r, _, _ in p["rows"] if r["stage"] == "pending")
         sec2 = sum(1 for r, _, _ in p["rows"] if r["result"] in ("بانتظار الدور الثاني", "بانتظار الدور الاستثنائي"))
-        status = ("ناجح" if not failed and not sec else f"راسب في {failed} مقرر" if failed and not sec else
+        status = (f"نتائج جزئية: صدرت {len(sheets)} من {len(all_sheets)} مقرر" + (f" · راسب في {failed}" if failed else "") if rest else
+                  "ناجح" if not failed and not sec else f"راسب في {failed} مقرر" if failed and not sec else
                   f"دور ثانٍ في {sec2} مقرر" if sec == sec2 and not failed else "النتيجة غير مكتملة")
         gpa = None
-        if not sec:
+        if not sec and not rest:
             w = [(r["final"], float(c)) for r, c, _ in p["rows"] if isinstance(r["final"], (int, float)) and str(c).replace(".", "", 1).isdigit() and float(c) > 0]
             if w and sum(c for _, c in w):
                 gpa = round(sum(v * c for v, c in w) / sum(c for _, c in w), 2)
@@ -626,9 +645,9 @@ async def publish(data: dict = Body(...), current_user: dict = Depends(get_curre
     by_id = {str(x["_id"]): x async for x in db.students.find({"_id": {"$in": [ObjectId(k) for k in per if ObjectId.is_valid(k)]}},
                                                               {"student_id": 1, "department_id": 1, "user_id": 1, "full_name": 1})}
     linked = await link_grades_import(db, current_user, iid, imp, students, by_id, bool(data.get("notify", True)))
-    await log_activity(current_user, "rc_publish", "grade_imports", iid, f"م{level} ف{sem_no} {year}", {"students": len(docs), "courses": len(sheets)})
-    return {"import_id": iid, "students": len(docs), "courses": len(sheets), **linked,
-            "message": f"تم الاعتماد: {len(docs)} طالب و{len(sheets)} مقرر · حُفظت في «النتائج» كمسودة مخفية — انشرها من «سجل العمليات»"}
+    await log_activity(current_user, "rc_publish", "grade_imports", iid, f"م{level} ف{sem_no} {year}", {"students": len(docs), "courses": len(sheets), "partial": bool(rest)})
+    return {"import_id": iid, "students": len(docs), "courses": len(sheets), "partial": bool(rest), **linked,
+            "message": f"تم الاعتماد: {len(docs)} طالب و{len(sheets)} من {len(all_sheets)} مقرر" + (" (اعتماد جزئي — بقية المقررات «لم تصدر بعد»)" if rest else "") + " · حُفظت في «النتائج» كمسودة مخفية — انشرها من «سجل العمليات»"}
 
 
 # ==================== 📊 كشف الدور الأول للمستوى (نقاط · فصلي · تراكمي) ====================

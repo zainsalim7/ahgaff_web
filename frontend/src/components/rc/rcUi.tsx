@@ -16,7 +16,7 @@ export interface RcRow {
 }
 export interface Settings { coursework_max: number; coursework_pass_pct: number; pass_mark: number; second_cap: number; exceptional_cap: number; final_max: number; grade_scale: { min: number; label: string }[] }
 export interface Sheet {
-  course: { id: string; name: string; code: string; level: number; department_id: string; faculty_id: string };
+  course: { id: string; name: string; code: string; level: number; department_id: string; semester_id: string; faculty_id: string };
   settings: Settings; rows: RcRow[]; counts: Record<string, number>;
   sheet: { coursework_locked: boolean; locked_by_name: string; locked_at: string | null };
 }

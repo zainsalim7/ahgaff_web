@@ -384,6 +384,24 @@ def _has_test_course(g):
     return any(c["name"] == "TEST_RC_A" for s in g["semesters"] for c in s["courses"])
 
 
+def test_partial_publish(env, admin):
+    A, sem = env["A"], env["sem"]
+    body = {"department_id": DEP, "level": 1, "semester_id": sem, "semester_no": 1, "academic_year": YEAR, "notify": False, "course_ids": [A]}
+    r = requests.post(f"{API}/rc/publish", headers=admin, json=body)
+    assert r.status_code == 200, r.text
+    d = r.json(); env["imports"].append(d["import_id"]); env["batches"].append(d.get("results_batch_id"))
+    assert d["partial"] is True and d["courses"] == 1
+    sg = db.student_grades.find_one({"import_id": d["import_id"], "student_db_id": S["S1"]})
+    gB = next(g for g in sg["grades"] if g["course_name"] == "TEST_RC_B")
+    assert gB["letter"] == "لم تصدر بعد" and gB["total"] == ""
+    assert sg["sem_gpa"] in (None, "") and sg["sem_status"].startswith("نتائج جزئية")
+    pv = requests.get(f"{API}/rc/publish/preview", headers=admin, params={"department_id": DEP, "level": 1, "semester_id": sem}).json()
+    assert next(c for c in pv["courses"] if c["id"] == A)["approved"] is True
+    assert requests.post(f"{API}/results/batches/{d['results_batch_id']}/undo", headers=admin).status_code == 200
+    pv = requests.get(f"{API}/rc/publish/preview", headers=admin, params={"department_id": DEP, "level": 1, "semester_id": sem}).json()
+    assert next(c for c in pv["courses"] if c["id"] == A)["approved"] is False
+
+
 def test_publish_flow(env, admin):
     A, B, sem = env["A"], env["B"], env["sem"]
     body = {"department_id": DEP, "level": 1, "semester_id": sem, "semester_no": 1, "academic_year": YEAR, "notify": False}

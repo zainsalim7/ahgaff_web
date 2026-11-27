@@ -19,7 +19,7 @@ const Count = ({ label, value, color }: { label: string; value: number; color: s
   </View>
 );
 
-export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: string; perms: RcPerms; onBack: () => void; onFaculty?: (id: string) => void }) => {
+export const RcSheet = ({ courseId, perms, onBack, onFaculty, onPublish }: { courseId: string; perms: RcPerms; onBack: () => void; onFaculty?: (id: string) => void; onPublish?: (c: Sheet['course']) => void }) => {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [tab, setTab] = useState<TabId>('eligibility');
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -120,6 +120,7 @@ export const RcSheet = ({ courseId, perms, onBack, onFaculty }: { courseId: stri
         {field && canEdit && <Btn icon="cloud-upload-outline" label="استيراد من Excel" color="#0f766e" onPress={() => setModal('import')} testID="rc-import-open-btn" disabled={field === 'coursework' && locked} />}
         {(tab === 'coursework' || tab === 'eligibility') && !locked && perms.cw && <Btn icon="lock-closed-outline" label="إقفال السعي واعتماد الأهلية" color="#2e7d32" onPress={() => lock(true)} testID="rc-lock-btn" />}
         {(tab === 'coursework' || tab === 'eligibility') && locked && perms.unlock && <Btn icon="lock-open-outline" label="فتح السعي" color="#ef6c00" outline onPress={() => lock(false)} testID="rc-unlock-btn" />}
+        {onPublish && <Btn icon="checkmark-done-outline" label={locked ? 'اعتماد هذا المقرر ← النتائج' : 'اعتماد ← النتائج (أقفل السعي أولاً)'} color="#2e7d32" onPress={() => onPublish(sheet.course)} disabled={!locked || !sheet.course.department_id || !sheet.course.semester_id} testID="rc-course-publish-btn" />}
         <Btn icon="download-outline" label="تصدير الكشف Excel" color="#475569" outline onPress={exportX} testID="rc-export-btn" />
         <Btn icon="time-outline" label="سجل التعديلات" color="#475569" outline onPress={() => setModal('log')} testID="rc-log-btn" />
       </View>

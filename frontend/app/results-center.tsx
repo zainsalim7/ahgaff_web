@@ -55,6 +55,7 @@ export default function ResultsCenterPage() {
   const open = qp.view === 'course' && qp.course ? String(qp.course) : null;
   const levelView = qp.view === 'level';
   const [openFac, setOpenFac] = useState('');
+  const [pubCtx, setPubCtx] = useState<{ department_id: string; level: string; semester_id: string; preselect?: string } | null>(null);
   const toList = () => go({ pathname: '/results-center', params: f }, { back: true });
   const openView = (p: Record<string, string>) => router.push({ pathname: '/results-center', params: Object.fromEntries(Object.entries({ ...f, ...p }).filter(([, x]) => x)) } as any);
   const [q, setQ] = useState('');
@@ -117,7 +118,7 @@ export default function ResultsCenterPage() {
             )}
             {canApprove && !open && !levelView && (
               <TouchableOpacity style={[st.hBtn, { backgroundColor: f.department_id && f.level && f.semester_id ? '#2e7d32' : '#94a3b8' }]} testID="rc-publish-open-btn"
-                onPress={() => (f.department_id && f.level && f.semester_id ? setModal('publish') : setErr('اختر القسم والمستوى والفصل أولاً لاعتماد نتائجهم'))}>
+                onPress={() => (f.department_id && f.level && f.semester_id ? setPubCtx({ department_id: f.department_id, level: f.level, semester_id: f.semester_id }) : setErr('اختر القسم والمستوى والفصل أولاً لاعتماد نتائجهم'))}>
                 <Ionicons name="checkmark-done-outline" size={16} color="#fff" /><Text style={st.hBtnTxt}>اعتماد ونقل إلى النتائج</Text>
               </TouchableOpacity>
             )}
@@ -126,7 +127,7 @@ export default function ResultsCenterPage() {
 
         {levelView ? <RcLevelSheet departmentId={f.department_id} departmentName={departments.find((d) => d.id === f.department_id)?.name || ''} level={f.level}
           semesterId={f.semester_id} canImport={hasPermission('rc_approve')} onBack={toList} />
-        : open ? <RcSheet courseId={open} perms={perms} onBack={() => { setOpenFac(''); toList(); }} onFaculty={setOpenFac} /> : (
+        : open ? <RcSheet courseId={open} perms={perms} onPublish={canApprove ? (c) => setPubCtx({ department_id: c.department_id, level: String(c.level ?? ''), semester_id: c.semester_id, preselect: c.id }) : undefined} onBack={() => { setOpenFac(''); toList(); }} onFaculty={setOpenFac} /> : (
           <>
             <View style={st.flow} testID="rc-flow">
               {['كشف الأهلية (الحضور)', 'أعمال السعي', 'الدور الأول', 'الدور الثاني', 'الاستثنائي', 'الاعتماد ← النتائج'].map((x, i, a) => (
@@ -177,8 +178,8 @@ export default function ResultsCenterPage() {
         )}
       </ScrollView>
       {modal === 'settings' && !!facId && <RcSettingsModal facultyId={facId} facultyName={faculties.find((x) => x.id === facId)?.name || ''} canEdit={canSettings} onClose={() => setModal('')} onSaved={() => {}} />}
-      {modal === 'publish' && <RcPublishModal departmentId={f.department_id} departmentName={departments.find((d) => d.id === f.department_id)?.name || ''} level={f.level}
-        semesterId={f.semester_id} defaultTerm={String(sem?.term || '')} years={years} onClose={() => setModal('')} />}
+      {!!pubCtx && <RcPublishModal departmentId={pubCtx.department_id} departmentName={departments.find((d) => d.id === pubCtx.department_id)?.name || ''} level={pubCtx.level}
+        semesterId={pubCtx.semester_id} preselect={pubCtx.preselect} defaultTerm={String(sems.find((x) => x.id === pubCtx.semester_id)?.term || sem?.term || '')} years={years} onClose={() => setPubCtx(null)} />}
     </SafeAreaView>
   );
 }
