@@ -68,8 +68,8 @@ export const RcLevelSheet = ({ departmentId, departmentName, level, semesterId, 
     try { setD((await api.get('/rc/level-sheet', { params })).data); } catch (e: any) { setErr(e?.response?.data?.detail || 'تعذر جلب الكشف'); }
   }, [departmentId, level, semesterId]);
   useEffect(() => { load(); }, [load]);
-  const exportX = async () => {
-    try { downloadBlob((await api.get('/rc/level-sheet/export', { params, responseType: 'blob' })).data, `كشف الدور الأول - ${departmentName} م${level}.xlsx`); } catch { setErr('فشل التصدير'); }
+  const exportX = async (fmt: 'xlsx' | 'pdf') => {
+    try { downloadBlob((await api.get('/rc/level-sheet/export', { params: { ...params, fmt }, responseType: 'blob' })).data, `كشف الدور الأول - ${departmentName} م${level}.${fmt}`); } catch { setErr('فشل التصدير'); }
   };
   return (
     <View testID="rc-level-sheet">
@@ -78,7 +78,8 @@ export const RcLevelSheet = ({ departmentId, departmentName, level, semesterId, 
         <Text style={{ fontSize: 18, fontWeight: '800', color: '#1a2540' }}>كشف نتيجة الدور الأول · {departmentName} · المستوى {level}</Text>
         <View style={{ flex: 1 }} />
         {canImport && <Btn icon="cloud-upload-outline" label="رفع التراكمي السابق" color="#0f766e" onPress={() => setImp(true)} testID="rc-prev-open-btn" />}
-        <Btn icon="download-outline" label="تصدير Excel" color="#475569" outline onPress={exportX} testID="rc-level-export-btn" />
+        <Btn icon="download-outline" label="تصدير Excel" color="#475569" outline onPress={() => exportX('xlsx')} testID="rc-level-export-btn" />
+        <Btn icon="document-outline" label="تصدير PDF" color="#b91c1c" outline onPress={() => exportX('pdf')} testID="rc-level-export-pdf-btn" />
       </View>
       {!!err && <Text style={{ color: '#c62828', textAlign: 'right', marginBottom: 8 }} testID="rc-level-error">{err}</Text>}
       {!!d?.missing_credits.length && <Text style={{ color: '#ef6c00', textAlign: 'right', marginBottom: 8 }} testID="rc-level-credits-warn">مقررات بلا وحدات دراسية مسجلة (تُحسب 0): {d.missing_credits.join('، ')}</Text>}

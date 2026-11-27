@@ -206,3 +206,4 @@
 - 2026-11: ScrollBox (src/components/ScrollBox.tsx): web div overflow:auto maxHeight 70vh, direction rtl, sticky headers; level sheet rewritten as HTML <table dir=rtl> (fixes LTR flip in prod), used in RcMarksTable & ResultsTable.
 - 2026-11: Second-round cell now shows 'المعتمد: X' under raw exam mark (engine already caps at 50/0).
 - 2026-11: Scroll box (70vh, sticky header, RTL) applied to DenseTable (all attendance reports), OvertimeSheet, teacher workload list. Master schedule already had it (72vh sticky).
+- 2026-11: Level sheet export (Excel+PDF) in paper-form layout with merged multi-row headers: services/level_sheet_export.py, GET /rc/level-sheet/export?fmt=xlsx|pdf

@@ -701,25 +701,20 @@ async def level_sheet(department_id: str, level: int, semester_id: str, current_
 
 
 @router.get("/rc/level-sheet/export")
-async def level_sheet_export(department_id: str, level: int, semester_id: str, current_user: dict = Depends(get_current_user)):
+async def level_sheet_export(department_id: str, level: int, semester_id: str, fmt: str = "xlsx", current_user: dict = Depends(get_current_user)):
+    from services import level_sheet_export as X
     _view(current_user)
-    d = await _level_sheet(get_db(), current_user, department_id, level, semester_id)
-    v = lambda x: E.fmt(x) if isinstance(x, (int, float)) else (x if x else "-")
-    head = ["الرقم", "الاسم", "رقم القيد"]
-    for c in d["courses"]:
-        head += [f"{c['name']} · المعدل بالنقاط", f"{c['name']} · التقدير", f"{c['name']} · النقاط المرجحة ({c['credits'] or '-'} و)"]
-    head += ["الفصلي · مجموع النقاط المرجحة", "الفصلي · مجموع الوحدات", "المعدل الفصلي", "السابق · مجموع النقاط", "السابق · مجموع الوحدات", "المعدل السابق",
-             "التراكمي · مجموع النقاط", "التراكمي · مجموع الوحدات", "المعدل التراكمي"]
-    body = []
-    for i, r in enumerate(d["rows"], 1):
-        line = [i, r["name"], r["reg_no"]]
-        for c in r["cells"]:
-            c = c or {}
-            line += [v(c.get("points")), c.get("letter") or "", v(c.get("weighted"))]
-        line += [v(r["sem"]["points"]), v(r["sem"]["units"]), r["sem"]["label"] or v(r["sem"]["gpa"]), v(r["prev"]["points"]), v(r["prev"]["units"]), v(r["prev"]["gpa"]),
-                 v(r["cum"]["points"]), v(r["cum"]["units"]), r["cum"]["label"] or v(r["cum"]["gpa"])]
-        body.append(line)
-    return _xlsx("كشف الدور الأول", head, body, "rc_level_first_round.xlsx")
+    db = get_db()
+    d = await _level_sheet(db, current_user, department_id, level, semester_id)
+    dep = await db.departments.find_one({"_id": ObjectId(department_id)}, {"name": 1, "faculty_id": 1}) if ObjectId.is_valid(department_id) else None
+    fac = await db.faculties.find_one({"_id": ObjectId(dep["faculty_id"])}, {"name": 1}) if dep and ObjectId.is_valid(str(dep.get("faculty_id") or "")) else None
+    sem = await db.semesters.find_one({"_id": ObjectId(semester_id)}, {"name": 1, "academic_year": 1}) if ObjectId.is_valid(semester_id) else None
+    title = X.title_of(level, ((dep or {}).get("name") or "").strip())
+    sub = " · ".join(str(x).strip() for x in [(fac or {}).get("name"), (sem or {}).get("name"), (sem or {}).get("academic_year")] if x)
+    if fmt == "pdf":
+        return StreamingResponse(X.to_pdf(d, title, sub), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=rc_level_first_round.pdf"})
+    return StreamingResponse(X.to_xlsx(d, title, sub), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=rc_level_first_round.xlsx"})
 
 
 @router.post("/rc/prev-totals/import")
