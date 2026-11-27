@@ -502,6 +502,17 @@ async def _deliver(db, request, sender_id: str, sender_name: str) -> dict:
         t = asyncio.create_task(_push_bg(db, hist.inserted_id, tokens, request.title, request.body))
         _BG.add(t)
         t.add_done_callback(_BG.discard)
+        # ننتظر حتى 25 ثانية داخل الطلب (Cloud Run قد يخنق المعالج بعد الرد)، ثم نكمل في الخلفية
+        try:
+            await asyncio.wait_for(asyncio.shield(t), timeout=25)
+        except asyncio.TimeoutError:
+            pass
+        h = await db.notification_history.find_one({"_id": hist.inserted_id}, {"success": 1, "failure": 1, "status": 1})
+        return {
+            "message": f"تم إرسال الإشعار إلى {target_desc}" + ("" if (h or {}).get("status") == "done" else " — يكتمل الإرسال للأجهزة في الخلفية"),
+            "devices": len(tokens), "users": len(target_user_ids),
+            "success": (h or {}).get("success", 0), "failure": (h or {}).get("failure", 0),
+        }
 
     return {
         "message": f"تم إرسال الإشعار إلى {target_desc}",

@@ -210,3 +210,4 @@
 - 2026-11: ResultsNav (src/components/results/ResultsNav.tsx): shared breadcrumb + tabs (النتائج/مركز النتائج/الدرجات) on student-results, results-center, grades; returns to existing stack instance (state kept). results-center course/level views are URL params (view, course) pushed to history; filters persisted in URL on both pages.
 - 2026-11: Level sheet excludes students from other levels/departments enrolled to repeat a course (listed in 'excluded'); publish unaffected.
 - 2026-11: Notifications: FCM sent in chunks of 100 (FCM multicast limit) via asyncio.to_thread; push delivery moved to background task (_push_bg) updating notification_history status; API returns immediately. Fixes failures for role/faculty/department/all audiences.
+- 2026-11: Notifications send waits up to 25s for push (3 parallel FCM chunks of 100), then continues in background (Cloud Run-safe). Prod backend is Cloud Run api.ahgaff.net (not Emergent deploy).

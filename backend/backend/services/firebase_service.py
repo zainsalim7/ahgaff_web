@@ -107,19 +107,22 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
 
     import asyncio
     ok, bad, failed_details, errors = 0, 0, [], []
-    all_tokens = tokens
-    for i in range(0, len(all_tokens), FCM_BATCH):
-        tokens = all_tokens[i:i + FCM_BATCH]
-        try:
-            r = await asyncio.to_thread(_send_fcm_chunk, tokens, title, body, data)
-        except Exception as e:
-            logger.error(f"Failed to send notifications chunk: {e}")
-            bad += len(tokens)
-            errors.append(str(e))
-            continue
+    sem = asyncio.Semaphore(FCM_PARALLEL)
+
+    async def one(chunk):
+        async with sem:
+            try:
+                return await asyncio.to_thread(_send_fcm_chunk, chunk, title, body, data)
+            except Exception as e:
+                logger.error(f"Failed to send notifications chunk: {e}")
+                return {"success": 0, "failure": len(chunk), "failed_details": [], "error": str(e)}
+
+    for r in await asyncio.gather(*(one(tokens[i:i + FCM_BATCH]) for i in range(0, len(tokens), FCM_BATCH))):
         ok += r["success"]
         bad += r["failure"]
         failed_details += r["failed_details"]
+        if r.get("error"):
+            errors.append(r["error"])
     out = {"success": ok + expo_result["success"], "failure": bad + expo_result["failure"],
            "failed_details": failed_details + expo_result.get("failed_details", [])}
     if errors:
@@ -127,6 +130,7 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
     return out
 
 
+FCM_PARALLEL = 3
 FCM_BATCH = 100  # دفعات صغيرة: FCM يفتح خيطاً لكل جهاز (حد أقصى 500)
 
 
