@@ -159,6 +159,8 @@ class Permission:
     ISSUE_LETTERS = "issue_letters"                    # إصدار الخطابات الرسمية (السجل حسب النطاق)
     MANAGE_LETTER_SETTINGS = "manage_letter_settings"  # كليشة وقوالب الخطابات
     MANAGE_STUDENT_EXCUSES = "manage_student_excuses"
+    MANAGE_STUDENT_REQUESTS = "manage_student_requests"
+    MANAGE_REQUEST_TYPES = "manage_request_types"
     MANAGE_LECTURE_SWAPS = "manage_lecture_swaps"      # 🔁 تبادل/إنابة المحاضرات بين الأساتذة
     USE_ASSISTANT = "use_assistant"  # 🤖 استخدام مرشد الأحقاف (المساعد الإرشادي)  # 📄 مراجعة أعذار غياب الطلاب والبت فيها (حسب مسار التوجيه)
 
@@ -419,6 +421,8 @@ ALL_PERMISSIONS = [
     {"key": Permission.MANAGE_LETTER_SETTINGS, "label": "إدارة كليشة الخطابات وقوالبها", "category": "الخطابات الرسمية"},
     {"key": Permission.USE_ASSISTANT, "label": "استخدام مرشد الأحقاف (المساعد الإرشادي الذكي)", "category": "عام"},
     {"key": Permission.MANAGE_STUDENT_EXCUSES, "label": "مراجعة أعذار غياب الطلاب والبت فيها (التسجيل/العميد/مجلس الكلية حسب التوجيه)", "category": "الحضور"},
+    {"key": Permission.MANAGE_STUDENT_REQUESTS, "label": "مراجعة طلبات/نماذج الطلاب والبت فيها ضمن نطاق كلياته وأقسامه", "category": "طلبات الطلاب"},
+    {"key": Permission.MANAGE_REQUEST_TYPES, "label": "إدارة أنواع نماذج طلبات الطلاب وحقولها", "category": "طلبات الطلاب"},
     {"key": Permission.MANAGE_LECTURE_SWAPS, "label": "تبادل/إنابة المحاضرات بين الأساتذة", "category": "الحضور"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},

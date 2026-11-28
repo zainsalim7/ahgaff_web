@@ -220,3 +220,4 @@
 - 2026-11: Dismiss default 50.9%. ResultsNav on results-center: hides /grades (إفادات) link, adds /report-absence-summary link.
 - 2026-11: Students with status 'repeat' excluded from results-center sheets (_build) and absence summary.
 - 2026-11: Absence summary KPIs now count students (counts) + course cells (cell_counts); clickable outcome filter (param outcome); summary export view=summary (PDF/Excel brief: student, worst outcome, course lists).
+- 2026-11: Student requests system: routes/student_requests.py (/api/student-requests: types CRUD [manage_request_types], student submit/my/cancel/reply, staff list/detail/decide [manage_student_requests], attachments via storage_service, scope via student_excuses._in_scope). Builtin type absence_excuse listed for students. Portal page /student-requests (tabs: الطلبات / النماذج وحقولها). Student app handoff: /app/memory/handoffs/STUDENT_APP_REQUESTS.md.

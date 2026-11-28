@@ -255,6 +255,7 @@ from routes.teacher_overtime import router as teacher_overtime_router
 from routes.overtime_letter import router as overtime_letter_router
 from routes.course_history import router as course_history_router
 from routes.student_excuses import router as student_excuses_router, excused_students_for_lecture as _excused_students_for_lecture
+from routes.student_requests import router as student_requests_router
 from routes.hr_letters import router as hr_letters_router, public_router as hr_letters_public_router
 from routes.hr_profile_requests import router as hr_profile_requests_router
 from routes.hr_locations import router as hr_locations_router
@@ -20013,6 +20014,7 @@ app.include_router(course_groups_tools_router, prefix="/api")
 app.include_router(assistant_router, prefix="/api")
 app.include_router(course_groups_router, prefix="/api")
 app.include_router(student_excuses_router, prefix="/api")
+app.include_router(student_requests_router, prefix="/api")
 app.include_router(absence_excuses_router, prefix="/api")
 from routes.lecture_swaps import router as lecture_swaps_router  # noqa: E402
 app.include_router(lecture_swaps_router, prefix="/api")
