@@ -38,7 +38,8 @@ export const ContractDetail = ({ id, settings, onEdit, onChanged, onOpenSession 
           {B(c.status === 'teacher_accepted', 'تأكيد التعميد (ملزم)', '#16a34a', () => act('issue'), 'vp-cd-issue')}
           {B(c.status === 'issued', 'إنهاء (مكتمل)', '#2563eb', () => act('complete'), 'vp-cd-complete')}
           {B(!['completed', 'terminated'].includes(c.status), 'إلغاء', '#b91c1c', () => act('terminate', 'سبب إلغاء العقد'), 'vp-cd-terminate')}
-          {B(['completed', 'terminated'].includes(c.status), 'إعادة فتح', '#64748b', () => act('reopen'), 'vp-cd-reopen')}
+          {B(c.status === 'completed', 'إعادة فتح', '#64748b', () => act('reopen'), 'vp-cd-reopen')}
+          {B(c.status === 'terminated', 'استعادة كمسودة', '#64748b', () => act('restore'), 'vp-cd-restore')}
         </>}
       </div>
       {FLOW_HINT[c.status] && <div style={{ ...card, background: '#fffbeb', borderColor: '#fde68a', fontSize: 12.5, fontWeight: 700 }} data-testid="vp-cd-hint">{FLOW_HINT[c.status]}{c.status === 'returned' && c.teacher_note ? ` — ملاحظة المدرس: «${c.teacher_note}»` : ''}</div>}

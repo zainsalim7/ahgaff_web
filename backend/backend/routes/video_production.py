@@ -163,7 +163,7 @@ def _progress(c: dict, sessions: List[dict], fl: Flow) -> dict:
         accrued += it["accrued"]
     pays = c.get("payments", [])
     paid = sum(p["amount"] for p in pays if p.get("status", "received") == "received")
-    pending = sum(p["amount"] for p in pays if p.get("status") == "pending")
+    pending = sum(p["amount"] for p in pays if p.get("status") in ("pending", "disputed"))
     end = c.get("end_date")
     days_left = (datetime.fromisoformat(end).date() - _now().date()).days if end else None
     stalled = [s for s in live if s.get("stalled")]
@@ -316,7 +316,10 @@ async def put_settings(body: SettingsIn, u: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="توجد تسجيلات داخل مراحل الإنتاج: لا يمكن تغيير مرحلة «التصوير» أو ترتيب المراحل القائمة (يمكن تعديل الأسماء وإضافة مراحل جديدة)")
     data["pipeline_steps"] = steps
     await get_db().vp_settings.update_one({"_id": "main"}, {"$set": data}, upsert=True)
-    return await _settings(get_db())
+    out = await _settings(get_db())
+    if not _fin(u):
+        out.pop("default_items", None)
+    return out
 
 
 # ---------------- العقود ----------------
@@ -449,8 +452,20 @@ async def update_contract(cid: str, body: ContractIn, u: dict = Depends(get_curr
     note = "ملحق تعديل على عقد ساري" if c["status"] == "issued" else "تعديل بيانات العقد"
     if c["status"] == "returned":
         d["status"] = "draft"
+    sig = lambda x: ([(i["key"], i["name"], float(i["amount"])) for i in x.get("items", [])], x.get("required_hours"), x.get("start_date"), x.get("end_date"), x.get("course_name"))
+    reapprove = c["status"] == "issued" and sig(d) != sig(c)
+    if reapprove:
+        fl = await _flow(db)
+        pr = _progress({**c, "items": [dict(i) for i in d["items"]]}, await _sessions(db, {"contract_id": cid}, fl), fl)
+        if pr["balance"] < -0.01:
+            raise HTTPException(status_code=400, detail="التعديل يجعل المستحق أقل من المصروف للمدرس")
+        d.update({"status": "sent", "teacher_accepted_at": None})
+        note += " — أُعيد للمدرس للموافقة ثم التعميد"
     await db.vp_contracts.update_one({"_id": c["_id"]}, {"$set": d, "$push": {"history": _hist(note, u)}})
-    return {"ok": True}
+    if reapprove:
+        await notify_users(db, await _teacher_user_ids(db, c["teacher_id"]), "🎬 ملحق تعديل على عقدك", f"عُدّل عقد {c['course_name']} ({c['ref_no']}) — راجعه ووافق عليه من التطبيق",
+                           "video_production", {"type": "video_contract", "id": cid, "route": "/video-production"})
+    return {"ok": True, "status": d.get("status", c["status"])}
 
 
 class ActIn(BaseModel):
@@ -465,7 +480,8 @@ async def contract_status(cid: str, body: ActIn, u: dict = Depends(get_current_u
     c = await _contract(db, cid, u, staff_only=True)
     flow = {"send": ({"draft", "returned"}, "sent", "إرسال العقد للمدرس للموافقة"), "recall": ({"sent", "teacher_accepted"}, "draft", "استرجاع العقد للتعديل"),
             "issue": ({"teacher_accepted"}, "issued", "تعميد العقد — أصبح ساري وملزم"), "complete": ({"issued"}, "completed", "إنهاء العقد (مكتمل)"),
-            "terminate": ({"draft", "sent", "returned", "teacher_accepted", "issued"}, "terminated", "إلغاء العقد"), "reopen": ({"completed", "terminated"}, "issued", "إعادة فتح العقد")}
+            "terminate": ({"draft", "sent", "returned", "teacher_accepted", "issued"}, "terminated", "إلغاء العقد"), "reopen": ({"completed"}, "issued", "إعادة فتح العقد"),
+            "restore": ({"terminated"}, "draft", "استعادة العقد الملغى كمسودة (يتطلب إرساله للمدرس وتعميده من جديد)")}
     if body.action not in flow:
         raise HTTPException(status_code=400, detail="إجراء غير معروف")
     frm, to, label = flow[body.action]
@@ -505,6 +521,10 @@ async def item_status(cid: str, key: str, body: ItemAct, u: dict = Depends(get_c
         raise HTTPException(status_code=400, detail="حالة غير صالحة")
     if body.status == "partial" and not (0 < (body.accepted_amount or 0) < it["amount"]):
         raise HTTPException(status_code=400, detail=f"أدخل المبلغ المقبول جزئياً (أقل من {it['amount']:,.0f})")
+    fl = await _flow(db)
+    new_items = [{**i, "status": body.status, "accepted_amount": body.accepted_amount} if i["key"] == key else dict(i) for i in c["items"]]
+    if _progress({**c, "items": new_items}, await _sessions(db, {"contract_id": cid}, fl), fl)["balance"] < -0.01:
+        raise HTTPException(status_code=400, detail="لا يمكن: سيصبح المستحق أقل مما صُرف للمدرس")
     now = _now().isoformat()
     upd = {"items.$.status": body.status, "items.$.note": body.note, "items.$.accepted_amount": body.accepted_amount if body.status == "partial" else None}
     if body.status == "delivered":
@@ -679,7 +699,7 @@ async def _free_studios(db, st: dict, date: str, start: str, end: str, skip: str
 async def availability(date: str, start: str, minutes: int = 30, u: dict = Depends(get_current_user)):
     db = get_db()
     st = await _settings(db)
-    if not (_staff(u) or await db.vp_contracts.find_one({"teacher_id": {"$in": await _my_tids(db, u)}, "status": "issued"}, {"_id": 1})):
+    if not (_staff(u) or await db.vp_contracts.find_one({"teacher_id": {"$in": await _visible_tids(db, u)}, "status": "issued"}, {"_id": 1})):
         raise HTTPException(status_code=403, detail="غير مصرح")
     end = _end(start, minutes)
     return {"studios": await _free_studios(db, st, date, start, end), "end": end}
@@ -1006,7 +1026,7 @@ class MyCancel(BaseModel):
 @router.post("/my/sessions/{sid}/cancel")
 async def my_cancel(sid: str, body: MyCancel, u: dict = Depends(get_current_user)):
     db = get_db()
-    s = await db.vp_sessions.find_one({"_id": _oid(sid), "teacher_id": {"$in": await _my_tids(db, u)}})
+    s = await db.vp_sessions.find_one({"_id": _oid(sid), "teacher_id": {"$in": await _visible_tids(db, u)}})
     if not s:
         raise HTTPException(status_code=404, detail="الحجز غير موجود")
     if s["status"] not in ("requested", "confirmed"):
@@ -1024,7 +1044,7 @@ class MyMaterials(BaseModel):
 @router.put("/my/sessions/{sid}")
 async def my_session_edit(sid: str, body: MyMaterials, u: dict = Depends(get_current_user)):
     db = get_db()
-    s = await db.vp_sessions.find_one({"_id": _oid(sid), "teacher_id": {"$in": await _my_tids(db, u)}})
+    s = await db.vp_sessions.find_one({"_id": _oid(sid), "teacher_id": {"$in": await _visible_tids(db, u)}})
     if not s:
         raise HTTPException(status_code=404, detail="الحجز غير موجود")
     sets = {"materials_note": body.materials_note, "updated_at": _now().isoformat()}

@@ -60,7 +60,7 @@ export const ContractForm = ({ initial, settings, onDone }: { initial?: any; set
         <button onClick={() => set('items', [...f.items, { name: '', amount: 0, kind: 'fixed' }])} style={btn('#f1f5f9', { color: '#0f2440' })} data-testid="vp-cf-item-add">+ بند</button>
       </div>
       {!!err && <div style={{ color: '#b91c1c', fontWeight: 700 }} data-testid="vp-cf-error">{err}</div>}
-      <button disabled={busy} onClick={save} style={btn('#0f2440')} data-testid="vp-cf-save">{busy ? 'جارٍ الحفظ…' : initial?.id ? 'حفظ التعديل' : 'حفظ كمسودة'}</button>
+      <button disabled={busy} onClick={save} style={btn('#0f2440')} data-testid="vp-cf-save">{busy ? 'جارٍ الحفظ…' : initial?.status === 'issued' ? 'حفظ الملحق (يُعاد للمدرس للموافقة ثم التعميد)' : initial?.id ? 'حفظ التعديل' : 'حفظ كمسودة'}</button>
     </div>
   );
 };

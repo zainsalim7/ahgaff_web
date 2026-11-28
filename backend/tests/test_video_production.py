@@ -39,8 +39,10 @@ def cleanup(H):
         body = {**S["orig_settings"], "pipeline_steps": _default_steps(S["orig_settings"])}
         r = requests.put(f"{VP}/settings", json=body, headers=a)
         print("restore settings:", r.status_code, r.text[:200])
-    with open("/tmp/vp_test_ids.txt", "w") as f:
-        f.write(" ".join(S.get("contracts", [])) + "\n" + " ".join(S.get("sessions", [])))
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+    from conftest_vp import cleanup_ids
+    cleanup_ids(S.get("contracts", []), S.get("sessions", []))
 
 
 def _slot():
@@ -103,7 +105,7 @@ class TestVideoProduction:
 
     # Contract creation + issue
     def test_02_contract(self, H):
-        body = {"teacher_id": TEACHER_RID, "course_name": "TEST_VP رياضيات", "lectures_required": 2, "start_date": datetime.now(TZ).date().isoformat()}
+        body = {"teacher_id": TEACHER_RID, "course_name": "TEST_VP رياضيات", "weekly_hours": 3, "semester_weeks": 16, "start_date": datetime.now(TZ).date().isoformat()}
         r = requests.post(f"{VP}/contracts", json=body, headers=H["admin"])
         assert r.status_code == 200, r.text
         S["cid"] = r.json()["id"]
@@ -112,7 +114,12 @@ class TestVideoProduction:
         assert c["status"] == "draft" and c["total_amount"] == 450000
         assert c["progress"]["production_percent"] == 0 and c["progress"]["percent"] == 0
         assert _sess(H, "admin", S["cid"], 1, 1).status_code == 400  # draft
-        assert requests.post(f"{VP}/contracts/{S['cid']}/status", json={"action": "issue"}, headers=H["admin"]).status_code == 200
+        assert c["course_hours"] == 48 and c["required_hours"] == 32
+        st = lambda a: requests.post(f"{VP}/contracts/{S['cid']}/status", json={"action": a}, headers=H["admin"])
+        assert st("issue").status_code == 400  # new flow: cannot issue from draft
+        assert st("send").status_code == 200
+        assert requests.post(f"{VP}/my/contracts/{S['cid']}/accept", headers=H["teacher"]).status_code == 200
+        assert st("issue").status_code == 200
         assert requests.put(f"{VP}/contracts/{S['cid']}/items/spec", json={"status": "accepted"}, headers=H["admin"]).status_code == 200
 
     # est_minutes up to max (60)
@@ -180,7 +187,7 @@ class TestVideoProduction:
         p = get()
         # lecture1: parts_count=2 -> (100 + 0)/2 = 50 ; production = 50/2 = 25
         L1 = next(L for L in p["lectures"] if L["lecture_no"] == 1)
-        assert L1["pct"] == 50.0 and p["production_percent"] == 25.0
+        assert L1["pct"] == 50.0 and p["production_percent"] == round(100 * 55 / 1920, 1)
         assert {x["id"]: x["pct"] for x in L1["parts"]}[S["s11"]] == 100.0
         assert p["lectures_completed"] == 0 and p["lectures_published"] == 0
         assert requests.put(f"{VP}/sessions/{S['s11']}", json={"materials_delivered": True}, headers=H["admin"]).status_code == 200
@@ -188,10 +195,12 @@ class TestVideoProduction:
         assert _act(H, S["s12"], "advance").status_code == 200  # filmed
         assert requests.put(f"{VP}/sessions/{S['s12']}", json={"materials_delivered": True}, headers=H["admin"]).status_code == 200
         p = get()
-        assert p["lectures_completed"] == 1 and p["percent"] == 50.0
-        assert p["production_percent"] == 30.0  # (100+20)/2=60 -> 60/2
+        # hours-based: recorded=(55 actual + 45 est)/60 ; required=32h=1920min
+        assert p["lectures_completed"] == 1 and p["recorded_hours"] == round(100 / 60, 2)
+        assert p["percent"] == round(100 * 100 / 1920, 1)
+        assert p["production_percent"] == round(100 * (55 + 45 * 0.2) / 1920, 1)
         assert p["lectures_published"] == 0
-        assert p["accrued"] == 50000 + 125000
+        assert p["accrued"] == 50000  # lump-sum: only accepted items accrue
         for _ in range(3):
             pass
         assert _act(H, S["s12"], "advance", link="https://r.example/T").status_code == 200
@@ -199,7 +208,7 @@ class TestVideoProduction:
         assert _act(H, S["s12"], "advance", link="https://c.example/T").status_code == 200
         assert _act(H, S["s12"], "advance", link="https://p.example/T").status_code == 200
         p = get()
-        assert p["lectures_published"] == 1 and p["production_percent"] == 50.0
+        assert p["lectures_published"] == 1 and p["production_percent"] == round(100 * 100 / 1920, 1)
 
     # removing a step in use blocked; reorder allowed
     def test_06_remove_in_use_and_reorder(self, H):
@@ -240,11 +249,12 @@ class TestVideoProduction:
     def test_08_payments_pdfs(self, H):
         cid = S["cid"]
         pay = lambda amt, h="admin": requests.post(f"{VP}/contracts/{cid}/payments", json={"amount": amt, "stage": "TEST"}, headers=H[h])
-        assert pay(175001).status_code == 400
+        assert pay(50001).status_code == 400
         assert pay(100, "reg").status_code == 403
-        r = pay(100000)
-        assert r.status_code == 200
-        assert requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()["progress"]["balance"] == 75000
+        r = pay(30000)
+        assert r.status_code == 200 and r.json()["status"] == "pending"
+        pr = requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()["progress"]
+        assert pr["balance"] == 20000 and pr["pending"] == 30000 and pr["paid"] == 0
         assert requests.delete(f"{VP}/contracts/{cid}/payments/{r.json()['id']}", headers=H["admin"]).status_code == 200
         for url, who in ((f"{VP}/contracts/{cid}/pdf", "admin"), (f"{VP}/sessions/{S['s11']}/pdf", "admin"), (f"{VP}/contracts/{cid}/pdf", "teacher")):
             r = requests.get(url, headers=H[who])

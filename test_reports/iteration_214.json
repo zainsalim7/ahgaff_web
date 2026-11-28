@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the new video production flow on the backend and in the UI. Covered: required hours = weekly_hours x semester_weeks x 2/3, the full admin/teacher approval cycle (send, return, edit, send, recall, accept, issue, complete, reopen, terminate, plus wrong-state actions that should give 400), lump-sum item accrual including partial, payments (pending, confirm with VR receipt, dispute, balance cap, delete rules), contract and statement PDFs, studio-only money hiding, the per-teacher app visibility flag, letterheads, and the semester_weeks setting. Backend: 19 of 20 pytest pass. The one failure is a real money leak: PUT /settings sends default_items back to a studio-only user. A manual script also found an overpayment bug in disputed payments. Frontend: every requested data-testid flow works for admin and for a studio-only user, except the same settings leak, which shows in the UI after the studio user clicks save.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/video-production/settings", "issue": "Money leak to studio-only users. The response is the full _settings(), including default_items with amounts, even when the caller has no finance permission (not _fin). Stored data is safe because default_items are preserved. But VpSettings.tsx calls setF(r.data) after saving, so a studio employee who clicks save then sees the section 'البنود الافتراضية للعقد الجديد' with all amounts. Fix: before returning, pop default_items when not _fin(u).", "priority": "HIGH"},
+      {"endpoint": "POST /api/video-production/my/contracts/{cid}/payments/{pid} + POST /contracts/{cid}/payments", "issue": "Overpayment through disputed payments. The cap uses balance = accrued - paid - pending, and disputed payments are left out. The teacher can still confirm a disputed payment later (allowed for status pending or disputed). Reproduced: accrued 50,000; payment P1 of 50,000 disputed; admin adds P2 of 50,000 (allowed); teacher confirms P2 and then P1, so paid = 100,000 and balance = -50,000. Fix: count disputed with pending in the cap (in _progress or add_payment), or stop confirming a disputed payment once it would exceed accrued.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /contracts/{cid}/items/{key}", "issue": "An accepted item can be set back to pending or delivered after payments were received, so the balance goes negative (accrued 0, paid 100,000). There is no guard or warning."},
+      {"endpoint": "/my/sessions/{sid}/cancel, PUT /my/sessions/{sid}, GET /availability", "issue": "These do not check app_visible. They use _my_tids, not _visible_tids, so a hidden teacher can still cancel or edit sessions and check availability. The brief says the teacher's my-endpoints should be denied when hidden."},
+      {"endpoint": "POST /contracts/{cid}/status action=reopen", "issue": "A terminated contract goes straight back to issued (binding) with no teacher re-approval. Confirm this is intended."},
+      {"endpoint": "PUT /contracts/{cid} on an issued contract", "issue": "'ملحق تعديل' changes item amounts or hours on a binding contract with no teacher re-approval and no change to the status flow. Confirm this is intended."},
+      {"endpoint": "POST /api/users with permissions=['vp_studio'] (app-wide, not VP-specific)", "issue": "The backend has_permission reads user.permissions, but /auth/me uses role defaults plus custom_permissions and ignores user.permissions. A user created with permissions=['vp_studio'] gets API access but the UI says 'ليس لديك صلاحية'. With custom_permissions=['vp_studio'] both work. This existed before this change."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "VpSettings (studio-only user)", "issue": "After clicking vp-set-save, the default items block with money amounts appears. This comes from the backend PUT /settings response.", "selector": "[data-testid^='vp-set-item-amount-']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_vp_contract_flow.py", "/app/backend/tests/test_video_production.py", "/app/backend/tests/conftest_vp.py", "/app/test_reports/pytest/pytest_vp_iter.xml"],
+  "action_items": [
+    "In put_settings, strip default_items from the response when not _fin(u).",
+    "Include disputed payments in the cap (or block confirming a disputed payment past accrued) so paid can never exceed accrued.",
+    "Optional: block or warn on downgrading an accepted or partial item when received payments would go above the new accrued.",
+    "Optional: use _visible_tids in my_cancel, my_session_edit and availability so app_visible=false fully denies the teacher's my-endpoints."
+  ],
+  "critical_code_review_comments": [
+    "put_settings returns money (default_items) to non-finance users. get_settings strips it, put_settings does not.",
+    "In _progress, disputed payments count as neither paid nor pending, which leaves the cap open to overpayment.",
+    "notify_users spreads extra at the top level, so extra.type overrides ntype ('video_production'). push_data reads extra['data'], which VP never sets, so FCM pushes carry no route data. This is a minor push deep-link issue.",
+    "Disputed payments show in the UI with the teacher note, but the admin can only delete them. There is no 'resend' or 'resolve' action."
+  ],
+  "updated_files": ["/app/backend/tests/test_video_production.py (moved to the new flow: send, accept, issue; hours-based progress; pending payments)", "/app/backend/tests/test_vp_contract_flow.py (new)", "/app/backend/tests/conftest_vp.py (new cleanup helper that deletes by id only)"],
+  "success_rate": {"backend": "95% (19/20 pytest; plus 1 overpay bug found by manual script)", "frontend": "95% (all requested flows OK; studio settings money leak after save)"},
+  "seed_data_creation": "None kept. During tests, contracts, sessions, payments, notifications, a studio-only TEST_ user and the vp_teacher_flags entry were created, then deleted by id. Settings were restored (semester_weeks 16, letterhead_id '', 2 studios, 4 default steps, default items unchanged). The vp_counters sequences for VC/VS/VR went up because of tests and were deliberately not reset. Teacher 698ad3da31ab437a06176e2a has no flag, so app_visible defaults to true.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest /app/backend/tests/test_video_production.py /app/backend/tests/test_vp_contract_flow.py. Both clean up after themselves through conftest_vp.cleanup_ids (contracts, sessions, notifications, users and flags, by id). test_10_studio_put_settings_leak fails until put_settings strips default_items. For a studio-only user that works in the UI, create the user with custom_permissions=['vp_studio'] (set it in the DB or via user update); permissions=['vp_studio'] only works for the API. Login form: input 0 is the username, input 1 the password, then the button 'تسجيل الدخول'. After saving an edit in ContractForm, the detail modal reopens by itself."
+}
