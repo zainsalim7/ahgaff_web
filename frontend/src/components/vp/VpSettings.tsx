@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import api from '../../services/api';
 import { btn, card, inp, lbl } from '../corr/CorrUI';
 import { errOf, vp } from './vpUi';
+import { StepsEditor } from './StepsEditor';
 
 export const VpSettings = ({ settings, onSaved }: { settings: any; onSaved: (s: any) => void }) => {
   const [f, setF] = useState<any>(() => JSON.parse(JSON.stringify(settings)));
   const [msg, setMsg] = useState('');
   const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }));
   const setRow = (k: string, i: number, kk: string, v: any) => set(k, f[k].map((r: any, j: number) => (j === i ? { ...r, [kk]: v } : r)));
-  const save = async () => { try { const r = await api.put(vp('/settings'), { ...f, default_items: f.default_items.map((i: any) => ({ ...i, amount: +i.amount || 0 })) }); onSaved(r.data); setMsg('تم الحفظ'); } catch (e) { setMsg(errOf(e)); } };
+  const save = async () => { setMsg(''); try { const r = await api.put(vp('/settings'), { ...f, default_items: f.default_items.map((i: any) => ({ ...i, amount: +i.amount || 0 })) }); onSaved(r.data); setF(JSON.parse(JSON.stringify(r.data))); setMsg('تم الحفظ'); } catch (e) { setMsg(errOf(e)); } };
   const num = (k: string, l: string) => <div style={{ minWidth: 150 }}><span style={lbl}>{l}</span><input type="number" style={inp} value={f[k]} onChange={(e) => set(k, +e.target.value)} data-testid={`vp-set-${k}`} /></div>;
   const txt = (k: string, l: string) => <div style={{ flex: 1, minWidth: 200 }}><span style={lbl}>{l}</span><input style={inp} value={f[k]} onChange={(e) => set(k, e.target.value)} data-testid={`vp-set-${k}`} /></div>;
   return (
@@ -23,6 +24,7 @@ export const VpSettings = ({ settings, onSaved }: { settings: any; onSaved: (s: 
           </div>))}
         <button onClick={() => set('studios', [...f.studios, { name: '', location: '', is_active: true }])} style={btn('#f1f5f9', { color: '#0f2440', marginTop: 8 })} data-testid="vp-set-studio-add">+ أستوديو</button>
       </div>
+      <StepsEditor steps={f.pipeline_steps || []} onChange={(v) => set('pipeline_steps', v)} />
       <div style={{ ...card, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {num('min_notice_hours', 'أقل مهلة لطلب الحجز (ساعة)')}{num('max_part_minutes', 'أقصى مدة للجزء (دقيقة)')}{num('stall_days', 'تنبيه التوقف بعد (يوم)')}{num('default_duration_days', 'مهلة العقد الافتراضية (يوم)')}
       </div>

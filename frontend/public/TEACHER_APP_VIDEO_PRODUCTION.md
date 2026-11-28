@@ -15,14 +15,17 @@
             {"key": "recording", "name": "التسجيل المرئي للمحاضرات", "amount": 250000, "kind": "recording", "accrued": 125000}],
   "payments": [{"amount": 100000, "date": "2026-12-10", "stage": "الدفعة 1", "note": "..."}],
   "progress": {"lectures_completed": 14, "lectures_required": 28, "lectures_published": 10, "percent": 50.0,
-               "accrued": 175000, "paid": 100000, "balance": 75000, "days_left": 30, "stalled": 1,
+               "production_percent": 42.5, "accrued": 175000, "paid": 100000, "balance": 75000, "days_left": 30, "stalled": 1,
                "lectures": [{"lecture_no": 1, "title": "مقدمة", "parts_count": 2, "completed": true, "published": false,
-                             "parts": [{"id": "...", "part_no": 1, "status": "editing", "status_ar": "قيد المونتاج", "materials_delivered": true, "stalled": null}]}]}
+                             "pct": 50.0, "parts": [{"id": "...", "part_no": 1, "status": "editing", "status_ar": "قيد المونتاج", "pct": 50.0, "materials_delivered": true, "stalled": null}]}]}
 }],
- "settings": {"min_notice_hours": 2, "max_part_minutes": 30, "currency": "ريال يمني", "studios": [{"id": "...", "name": "أستوديو 1", "location": ""}]}}
+ "settings": {"min_notice_hours": 2, "max_part_minutes": 60, "currency": "ريال يمني", "studios": [{"id": "...", "name": "أستوديو 1", "location": ""}],
+              "steps": [{"key": "filmed", "name": "تم التصوير", "is_filming": true}, {"key": "editing", "name": "قيد المونتاج"}, {"key": "cloud", "name": "مرفوع للسحابة"}, {"key": "published", "name": "منشور على المنصة"}]}}
 ```
 **الشاشة:**
-- بطاقة لكل عقد: المقرر، والمهلة (`days_left`، أحمر إذا كانت سالبة = متأخر)، وشريط الإنجاز (`percent`) و«14 / 28 محاضرة».
+- بطاقة لكل عقد: المقرر، والمهلة (`days_left`، أحمر إذا كانت سالبة = متأخر)، وشريطان:
+  - **المحاضرات المكتملة** (`percent`) و«14 / 28 محاضرة».
+  - **مؤشر الإنجاز في مراحل الإنتاج** (`production_percent`).
 - **ما عليّ:** البنود (`items`) بحالتها، والمحاضرات المتبقية = `lectures_required - lectures_completed`.
 - **ما لي:** المستحق `accrued` · المصروف `paid` · المتبقي `balance`، وقائمة الدفعات `payments`.
 - قائمة المحاضرات `progress.lectures` وأجزاؤها بألوان المراحل.
@@ -39,14 +42,17 @@
  "parts_count": 2, "part_no": 1, "est_minutes": 30, "summary": "ملخص ما سيتم شرحه", "attachment_note": "الشرائح/المصادر",
  "teacher_notes": "", "studio_id": "<اختياري>", "date": "2026-12-01", "start": "10:00"}
 ```
-- `est_minutes` لا يتجاوز `settings.max_part_minutes` (30).
+- `est_minutes` لا يتجاوز `settings.max_part_minutes` (افتراضياً 60 دقيقة، ويُعدَّل من البوابة).
 - **يجوز الطلب قبل الموعد بوقت قصير**، بشرط ألا يقل عن `settings.min_notice_hours` ساعة.
 - الأخطاء تعود HTTP 400 مع `detail` عربي (أستوديو محجوز، مهلة قصيرة، جزء مكرر...). اعرضه كما هو.
 - الطلب يصل لموظف الأستوديو الذي يؤكده، أو ينقله لأستوديو/وقت آخر، أو يعتذر مع اقتراح بديل.
 
 ## 3) حجوزاتي ومسيرة التسجيل
-`GET /video-production/my/sessions` → `items[]`: `id, ref_no, lecture_no, lecture_title, part_no, parts_count, date, start, end, studio_id, status, status_ar, stalled{reason,at}, materials_delivered, materials_note, cloud_url, platform_url, photographer_notes, history[]`.
-- المراحل بالترتيب ولونها المقترح: `requested` طلب حجز (برتقالي) → `confirmed` حجز مؤكد (فيروزي) → `filmed` تم التصوير (بنفسجي) → `editing` قيد المونتاج → `cloud` مرفوع للسحابة (أزرق) → `published` منشور على المنصة (أخضر). ويوجد أيضاً `rejected` مرفوض (أحمر) و`cancelled` ملغى (رمادي).
+`GET /video-production/my/sessions` → `items[]`: `id, ref_no, lecture_no, lecture_title, part_no, parts_count, date, start, end, studio_id, status, status_ar, pct, stalled{reason,at}, materials_delivered, materials_note, links{step_key: url}, photographer_notes, history[]`.
+- **المراحل ديناميكية** وتُعرَّف من البوابة. لا تثبّتها في التطبيق، بل خذها بالترتيب من `settings.steps`.
+  - الخط الزمني = `requested` طلب حجز ← `confirmed` حجز مؤكد ← ثم `settings.steps` بالترتيب. أضف `rejected` مرفوض و`cancelled` ملغى كحالتين جانبيتين.
+  - `pct` = مؤشر إنجاز الجزء (0–100). اعرضه كشريط بجانب المرحلة.
+  - `links` روابط بعض المراحل (السحابة/المنصة...) مفتاحها `key` المرحلة. اعرض اسم المرحلة من `settings.steps`.
 - اعرضها كخط زمني (stepper). إذا كان `stalled` غير فارغ اعرض **«متوقف: السبب»** بالأحمر.
 - `history[].note` تتضمن ملاحظة الأستوديو (سبب الاعتذار/الموعد البديل).
 - تفاصيل جزء: `GET /video-production/sessions/{id}` · PDF النموذج: `GET /video-production/sessions/{id}/pdf`.

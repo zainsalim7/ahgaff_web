@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { CorrPage, Badge, Empty, Modal, btn, card, inp, td, th } from '../src/components/corr/CorrUI';
-import { Bar, C_COLOR, PIPE, S_COLOR, errOf, money, vp } from '../src/components/vp/vpUi';
+import { Bar, C_COLOR, errOf, flowOf, money, sColor, vp } from '../src/components/vp/vpUi';
 import { ContractForm } from '../src/components/vp/ContractForm';
 import { ContractDetail } from '../src/components/vp/ContractDetail';
 import { SessionForm } from '../src/components/vp/SessionForm';
@@ -43,7 +43,7 @@ const ContractsTab = ({ settings, canManage, openSession }: any) => {
                 <td style={{ ...td, fontWeight: 800 }}>{c.ref_no}</td><td style={td}>{c.teacher_name}</td>
                 <td style={td}>{c.course_name}<div style={{ fontSize: 10.5, color: '#64748b' }}>{c.department_name}</div></td>
                 <td style={td}>{c.end_date}<div style={{ fontSize: 10.5, color: late ? '#b91c1c' : '#64748b', fontWeight: late ? 800 : 400 }}>{p.days_left == null ? '' : late ? `متأخر ${-p.days_left} يوم` : `متبقٍ ${p.days_left} يوم`}</div></td>
-                <td style={{ ...td, minWidth: 150 }}><Bar pct={p.percent} color={late ? '#b91c1c' : '#16a34a'} /><div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3 }}>{p.lectures_completed}/{p.lectures_required} محاضرة · {p.items_accepted} بند مقبول{p.stalled ? ` · ⛔ ${p.stalled}` : ''}</div></td>
+                <td style={{ ...td, minWidth: 150 }}><Bar pct={p.percent} color={late ? '#b91c1c' : '#16a34a'} /><div style={{ marginTop: 3 }}><Bar pct={p.production_percent} color="#7c3aed" /></div><div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3 }}>{p.lectures_completed}/{p.lectures_required} محاضرة · إنتاج {p.production_percent}% · {p.items_accepted} بند مقبول{p.stalled ? ` · ⛔ ${p.stalled}` : ''}</div></td>
                 <td style={td}>{money(p.accrued)}<div style={{ fontSize: 10.5, color: '#16a34a' }}>صُرف {money(p.paid)}</div></td>
                 <td style={td}><Badge text={c.status_ar} color={C_COLOR[c.status]} /></td>
               </tr>); })}</tbody>
@@ -52,7 +52,7 @@ const ContractsTab = ({ settings, canManage, openSession }: any) => {
       {edit && <Modal title={edit.id ? `تعديل العقد ${edit.ref_no}` : 'عقد إنتاج مرئي جديد'} onClose={() => setEdit(null)} width={900} testID="vp-c-form-modal" closeOnOverlay={false}>
         <ContractForm initial={edit.id ? edit : undefined} settings={settings} onDone={() => { setEdit(null); load(); }} /></Modal>}
       {open && !edit && <Modal title="تفاصيل العقد ومتابعة التنفيذ" onClose={() => setOpen('')} width={980} testID="vp-c-detail-modal">
-        <ContractDetail id={open} onEdit={(c) => setEdit(c)} onChanged={load} onOpenSession={openSession} /></Modal>}
+        <ContractDetail id={open} settings={settings} onEdit={(c) => setEdit(c)} onChanged={load} onOpenSession={openSession} /></Modal>}
     </div>
   );
 };
@@ -67,7 +67,7 @@ const StudioTab = ({ settings, canStudio, openSession, reloadKey }: any) => {
   return (
     <div data-testid="vp-studio-tab">
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-        {[...PIPE, ['stalled', 'متوقف']].map(([k, l]) => <Kpi key={k} l={l} v={c[k] || 0} c={S_COLOR[k] || '#b91c1c'} active={f.status === k} on={() => setF({ ...f, status: f.status === k ? '' : k })} testID={`vp-s-kpi-${k}`} />)}
+        {[...flowOf(settings), ['stalled', 'متوقف']].map(([k, l]) => <Kpi key={k} l={l} v={c[k] || 0} c={sColor(settings, k)} active={f.status === k} on={() => setF({ ...f, status: f.status === k ? '' : k })} testID={`vp-s-kpi-${k}`} />)}
       </div>
       <div style={card}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
@@ -87,7 +87,7 @@ const StudioTab = ({ settings, canStudio, openSession, reloadKey }: any) => {
                 <td style={{ ...td, fontWeight: 800 }}>{s.date}<div style={{ fontSize: 10.5, color: '#64748b' }} dir="ltr">{s.start} – {s.end}</div></td><td style={td}>{sName(s.studio_id)}</td>
                 <td style={td}>{s.teacher_name}</td><td style={td}>{s.course_name}</td><td style={td}>م{s.lecture_no}: {s.lecture_title}<div style={{ fontSize: 10.5, color: '#64748b' }}>الجزء {s.part_no}/{s.parts_count}</div></td>
                 <td style={td}>{s.materials_delivered ? '📎 مستلمة' : '—'}</td>
-                <td style={td}><Badge text={s.status_ar} color={S_COLOR[s.status]} />{s.stalled && <div style={{ fontSize: 10.5, color: '#b91c1c', fontWeight: 800 }}>⛔ {s.stalled.reason}</div>}</td>
+                <td style={{ ...td, minWidth: 140 }}><Badge text={s.status_ar} color={sColor(settings, s.status)} /><div style={{ marginTop: 4 }}><Bar pct={s.pct} color={sColor(settings, s.status)} /></div>{s.stalled && <div style={{ fontSize: 10.5, color: '#b91c1c', fontWeight: 800 }}>⛔ {s.stalled.reason}</div>}</td>
               </tr>))}</tbody>
           </table></div>)}
       </div>

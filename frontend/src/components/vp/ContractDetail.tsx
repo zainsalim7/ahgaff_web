@@ -2,11 +2,11 @@ import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { Badge, btn, card, inp, td, th } from '../corr/CorrUI';
-import { Bar, C_COLOR, ITEM_COLOR, S_COLOR, errOf, money, pdf, vp } from './vpUi';
+import { Bar, C_COLOR, ITEM_COLOR, errOf, money, pdf, sColor, vp } from './vpUi';
 
 const Kv = ({ k, v }: { k: string; v: any }) => <div style={{ fontSize: 12.5 }}><span style={{ color: '#64748b' }}>{k}: </span><strong>{v || '—'}</strong></div>;
 
-export const ContractDetail = ({ id, onEdit, onChanged, onOpenSession }: { id: string; onEdit: (c: any) => void; onChanged: () => void; onOpenSession: (sid: string) => void }) => {
+export const ContractDetail = ({ id, settings, onEdit, onChanged, onOpenSession }: { id: string; settings: any; onEdit: (c: any) => void; onChanged: () => void; onOpenSession: (sid: string) => void }) => {
   const { hasPermission } = useAuth();
   const canManage = hasPermission('vp_manage_contracts'); const canPay = hasPermission('vp_payments');
   const [c, setC] = useState<any>(null); const [err, setErr] = useState(''); const [pay, setPay] = useState({ amount: '', stage: '', note: '' });
@@ -38,15 +38,17 @@ export const ContractDetail = ({ id, onEdit, onChanged, onOpenSession }: { id: s
       </div>
       <div style={card} data-testid="vp-cd-progress">
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}><strong>المحاضرات المرئية: {p.lectures_completed} / {p.lectures_required} مكتملة · {p.lectures_published} منشورة</strong><strong>{p.percent}%</strong></div>
-        <Bar pct={p.percent} />
+        <Bar pct={p.percent} testID="vp-cd-bar-complete" />
+        <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 6px', fontSize: 12.5 }}><strong>مؤشر الإنجاز في مراحل الإنتاج</strong><strong data-testid="vp-cd-production-pct">{p.production_percent}%</strong></div>
+        <Bar pct={p.production_percent} color="#7c3aed" testID="vp-cd-bar-production" />
         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {p.lectures.length === 0 && <div style={{ color: '#94a3b8', fontSize: 12.5 }}>لم يُحجز أي تسجيل بعد</div>}
           {p.lectures.map((L: any) => (
             <div key={L.lecture_no} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 12.5 }} data-testid={`vp-cd-lecture-${L.lecture_no}`}>
-              <strong style={{ minWidth: 200 }}>{L.completed ? '✅' : '⏳'} م{L.lecture_no}: {L.title}</strong>
+              <strong style={{ minWidth: 200 }}>{L.completed ? '✅' : '⏳'} م{L.lecture_no}: {L.title}</strong><span style={{ width: 90 }}><Bar pct={L.pct} color="#7c3aed" /></span><span style={{ fontSize: 11, color: '#64748b', minWidth: 34 }}>{Math.round(L.pct)}%</span>
               {Array.from({ length: L.parts_count }, (_, i) => i + 1).map((n) => { const pt = L.parts.find((x: any) => x.part_no === n); return pt ? (
-                <span key={n} onClick={() => onOpenSession(pt.id)} style={{ cursor: 'pointer', padding: '3px 8px', borderRadius: 99, color: '#fff', fontSize: 11, background: S_COLOR[pt.status] }} data-testid={`vp-cd-part-${L.lecture_no}-${n}`}>
-                  ج{n}: {pt.status_ar}{pt.materials_delivered ? ' · 📎' : ''}{pt.stalled ? ' · ⛔' : ''}</span>) : <span key={n} style={{ padding: '3px 8px', borderRadius: 99, fontSize: 11, background: '#f1f5f9', color: '#64748b' }}>ج{n}: لم يُحجز</span>; })}
+                <span key={n} onClick={() => onOpenSession(pt.id)} style={{ cursor: 'pointer', padding: '3px 8px', borderRadius: 99, color: '#fff', fontSize: 11, background: sColor(settings, pt.status) }} data-testid={`vp-cd-part-${L.lecture_no}-${n}`}>
+                  ج{n}: {pt.status_ar} {Math.round(pt.pct)}%{pt.materials_delivered ? ' · 📎' : ''}{pt.stalled ? ' · ⛔' : ''}</span>) : <span key={n} style={{ padding: '3px 8px', borderRadius: 99, fontSize: 11, background: '#f1f5f9', color: '#64748b' }}>ج{n}: لم يُحجز</span>; })}
             </div>
           ))}
         </div>

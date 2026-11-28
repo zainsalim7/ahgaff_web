@@ -18,11 +18,32 @@ from models.permissions import Permission, UserRole
 router = APIRouter(prefix="/video-production", tags=["video-production"])
 TZ = timezone(timedelta(hours=3))
 C_STATUS = {"draft": "مسودة", "issued": "معتمد / ساري", "completed": "منتهٍ", "terminated": "ملغى"}
-S_STATUS = {"requested": "طلب حجز", "confirmed": "حجز مؤكد", "filmed": "تم التصوير", "editing": "قيد المونتاج",
-            "cloud": "مرفوع للسحابة", "published": "منشور على المنصة", "rejected": "مرفوض", "cancelled": "ملغى"}
-PIPE = ["requested", "confirmed", "filmed", "editing", "cloud", "published"]
-DONE = {"filmed", "editing", "cloud", "published"}
-BUSY = {"confirmed", "filmed", "editing", "cloud", "published"}
+BASE_STATUS = {"requested": "طلب حجز", "confirmed": "حجز مؤكد", "rejected": "مرفوض", "cancelled": "ملغى"}
+DEFAULT_STEPS = [
+    {"key": "filmed", "name": "تم التصوير", "is_filming": True, "requires_link": False, "link_label": "", "notify": True},
+    {"key": "editing", "name": "قيد المونتاج", "is_filming": False, "requires_link": False, "link_label": "", "notify": False},
+    {"key": "cloud", "name": "مرفوع للسحابة", "is_filming": False, "requires_link": True, "link_label": "رابط الملف على السحابة", "notify": False},
+    {"key": "published", "name": "منشور على المنصة", "is_filming": False, "requires_link": True, "link_label": "رابط المحاضرة على منصة التعليم", "notify": True},
+]
+
+
+class Flow:
+    """مراحل الإنتاج الديناميكية (من الإعدادات) بعد «حجز مؤكد» — مرحلة التصوير تحدد بداية الاحتساب للمعلم"""
+    def __init__(self, steps: List[dict]):
+        self.steps = steps
+        self.keys = [x["key"] for x in steps]
+        fi = next((i for i, x in enumerate(steps) if x.get("is_filming")), 0)
+        self.done = set(self.keys[fi:])
+        self.last = self.keys[-1]
+        self.seq = ["confirmed"] + self.keys
+        self.names = {**BASE_STATUS, **{x["key"]: x["name"] for x in steps}}
+        self.busy = {"confirmed", *self.keys}
+
+    def pct(self, status: str) -> float:
+        return round(100 * (self.keys.index(status) + 1) / len(self.keys), 1) if status in self.keys else 0.0
+
+    def step(self, key: str) -> dict:
+        return next((x for x in self.steps if x["key"] == key), {})
 ITEM_STATUS = {"pending": "لم يُسلَّم", "delivered": "مُسلَّم — بانتظار القبول", "accepted": "مقبول"}
 DEFAULT_ITEMS = [
     {"key": "spec", "name": "توصيف المادة العلمية", "amount": 50000, "kind": "fixed"},
@@ -30,7 +51,7 @@ DEFAULT_ITEMS = [
     {"key": "recording", "name": "التسجيل المرئي للمحاضرات", "amount": 250000, "kind": "recording"},
     {"key": "qbank", "name": "إعداد بنك الأسئلة (250 سؤالاً على الأقل)", "amount": 50000, "kind": "fixed"},
 ]
-DEFAULT_SETTINGS = {"studios": [], "min_notice_hours": 2, "max_part_minutes": 30, "stall_days": 3,
+DEFAULT_SETTINGS = {"studios": [], "min_notice_hours": 2, "max_part_minutes": 60, "stall_days": 3, "pipeline_steps": DEFAULT_STEPS,
                     "first_party_org": "كلية التعليم عن بعد جامعة الأحقاف", "first_party_name": "", "first_party_title": "القائم بأعمال العميد",
                     "default_duration_days": 60, "currency": "ريال يمني", "default_items": DEFAULT_ITEMS}
 
@@ -71,7 +92,12 @@ async def _settings(db) -> dict:
     s = await db.vp_settings.find_one({"_id": "main"}) or {}
     out = {**DEFAULT_SETTINGS, **{k: v for k, v in s.items() if k != "_id"}}
     out["default_items"] = out.get("default_items") or DEFAULT_ITEMS
+    out["pipeline_steps"] = out.get("pipeline_steps") or DEFAULT_STEPS
     return out
+
+
+async def _flow(db) -> Flow:
+    return Flow((await _settings(db))["pipeline_steps"])
 
 
 async def _my_tids(db, u) -> List[str]:
@@ -94,7 +120,8 @@ def _hist(action: str, u: dict, note: str = "", **extra) -> dict:
     return {"action": action, "by": u.get("full_name") or u.get("username"), "by_id": u["id"], "at": _now().isoformat(), "note": note, **extra}
 
 
-def _progress(c: dict, sessions: List[dict]) -> dict:
+def _progress(c: dict, sessions: List[dict], fl: Flow) -> dict:
+    DONE = fl.done
     done_parts = [s for s in sessions if s["status"] in DONE and s.get("materials_delivered")]
     by_lec = {}
     for s in sessions:
@@ -102,13 +129,14 @@ def _progress(c: dict, sessions: List[dict]) -> dict:
             continue
         L = by_lec.setdefault(s["lecture_no"], {"lecture_no": s["lecture_no"], "title": s["lecture_title"], "parts_count": s["parts_count"], "parts": []})
         L["parts_count"] = max(L["parts_count"], s["parts_count"])
-        L["parts"].append({"id": s["id"], "part_no": s["part_no"], "status": s["status"], "status_ar": S_STATUS[s["status"]],
+        L["parts"].append({"id": s["id"], "part_no": s["part_no"], "status": s["status"], "status_ar": fl.names.get(s["status"], s["status"]), "pct": fl.pct(s["status"]),
                            "materials_delivered": bool(s.get("materials_delivered")), "stalled": s.get("stalled")})
     completed = 0
     for L in by_lec.values():
         ok = {p["part_no"] for p in L["parts"] if p["status"] in DONE and p["materials_delivered"]}
         L["completed"] = len(ok) >= L["parts_count"]
-        L["published"] = all(p["status"] == "published" for p in L["parts"]) and len(L["parts"]) >= L["parts_count"]
+        L["published"] = all(p["status"] == fl.last for p in L["parts"]) and len(L["parts"]) >= L["parts_count"]
+        L["pct"] = round(sum(p["pct"] for p in L["parts"]) / max(L["parts_count"], 1), 1)
         completed += L["completed"]
     req = max(int(c.get("lectures_required") or 0), 1)
     accrued, total = 0.0, 0.0
@@ -125,29 +153,32 @@ def _progress(c: dict, sessions: List[dict]) -> dict:
     stalled = [s for s in sessions if s.get("stalled") and s["status"] not in ("rejected", "cancelled")]
     return {"lectures_required": c.get("lectures_required") or 0, "lectures_completed": completed,
             "lectures_published": sum(1 for L in by_lec.values() if L["published"]), "parts_done": len(done_parts),
-            "percent": round(100 * min(completed, req) / req, 1), "lectures": sorted(by_lec.values(), key=lambda x: x["lecture_no"]),
+            "percent": round(100 * min(completed, req) / req, 1),
+            "production_percent": round(sum(L["pct"] for L in by_lec.values()) / req, 1), "lectures": sorted(by_lec.values(), key=lambda x: x["lecture_no"]),
             "total": total, "accrued": round(accrued, 2), "paid": paid, "balance": round(accrued - paid, 2),
             "days_left": days_left, "stalled": len(stalled), "items_accepted": sum(1 for i in c.get("items", []) if i.get("status") == "accepted")}
 
 
-def _sess_out(s: dict) -> dict:
+def _sess_out(s: dict, fl: Flow) -> dict:
     if "_id" in s:
         s = {**{k: v for k, v in s.items() if k != "_id"}, "id": str(s["_id"])}
-    s["status_ar"] = S_STATUS.get(s["status"], s["status"])
+    s["status_ar"] = fl.names.get(s["status"], s["status"])
+    s["pct"] = fl.pct(s["status"])
     return s
 
 
-async def _sessions(db, q: dict) -> List[dict]:
-    return [_sess_out(s) for s in await db.vp_sessions.find(q).sort([("date", -1), ("start", -1)]).to_list(3000)]
+async def _sessions(db, q: dict, fl: Optional[Flow] = None) -> List[dict]:
+    fl = fl or await _flow(db)
+    return [_sess_out(s, fl) for s in await db.vp_sessions.find(q).sort([("date", -1), ("start", -1)]).to_list(3000)]
 
 
-def _c_out(c: dict, sessions: List[dict], full=False) -> dict:
+def _c_out(c: dict, sessions: List[dict], fl: Flow, full=False) -> dict:
     out = {k: v for k, v in c.items() if k != "_id"}
     out["id"] = str(c["_id"])
     out["status_ar"] = C_STATUS.get(c["status"], c["status"])
     for it in out.get("items", []):
         it["status_ar"] = ITEM_STATUS.get(it.get("status", "pending"))
-    out["progress"] = _progress(out, sessions)
+    out["progress"] = _progress(out, sessions, fl)
     if not full:
         out.pop("history", None)
         out["progress"].pop("lectures", None)
@@ -169,10 +200,20 @@ class ItemIn(BaseModel):
     kind: str = "fixed"
 
 
+class StepIn(BaseModel):
+    key: Optional[str] = None
+    name: str
+    is_filming: bool = False
+    requires_link: bool = False
+    link_label: str = ""
+    notify: bool = False
+
+
 class SettingsIn(BaseModel):
     studios: List[StudioIn] = []
     min_notice_hours: float = 2
-    max_part_minutes: int = 30
+    max_part_minutes: int = 60
+    pipeline_steps: List[StepIn] = []
     stall_days: int = 3
     first_party_org: str = ""
     first_party_name: str = ""
@@ -202,6 +243,25 @@ async def put_settings(body: SettingsIn, u: dict = Depends(get_current_user)):
     if sum(1 for it in data["default_items"] if it["kind"] == "recording") > 1:
         raise HTTPException(status_code=400, detail="يُسمح ببند تسجيل مرئي واحد فقط")
     data["max_part_minutes"] = max(5, min(int(data["max_part_minutes"]), 240))
+    steps = data["pipeline_steps"] or (await _settings(get_db()))["pipeline_steps"]
+    seen = set()
+    for x in steps:
+        x["name"] = x["name"].strip()
+        if not x["name"]:
+            raise HTTPException(status_code=400, detail="اسم المرحلة مطلوب")
+        x["key"] = x.get("key") or f"st_{ObjectId()}"[-12:]
+        if x["key"] in BASE_STATUS or x["key"] in seen:
+            raise HTTPException(status_code=400, detail="مفتاح مرحلة مكرر")
+        seen.add(x["key"])
+        if x["requires_link"] and not x["link_label"].strip():
+            x["link_label"] = f"رابط {x['name']}"
+    if sum(1 for x in steps if x["is_filming"]) != 1:
+        raise HTTPException(status_code=400, detail="حدّد مرحلة واحدة هي «التصوير» (منها تُحتسب المحاضرة للمعلم)")
+    in_use = await get_db().vp_sessions.distinct("status", {"status": {"$nin": list(BASE_STATUS) + list(seen)}})
+    if in_use:
+        old = {x["key"]: x["name"] for x in (await _settings(get_db()))["pipeline_steps"]}
+        raise HTTPException(status_code=400, detail="لا يمكن حذف مرحلة عليها تسجيلات حالياً: " + "، ".join(old.get(k, k) for k in in_use))
+    data["pipeline_steps"] = steps
     await get_db().vp_settings.update_one({"_id": "main"}, {"$set": data}, upsert=True)
     return await _settings(get_db())
 
@@ -275,13 +335,14 @@ async def list_contracts(status: str = "", faculty_id: str = "", department_id: 
         query["$or"] = [{"teacher_name": {"$regex": rx, "$options": "i"}}, {"course_name": {"$regex": rx, "$options": "i"}}, {"ref_no": {"$regex": rx}}]
     cs = await db.vp_contracts.find(query).sort("created_at", -1).to_list(1000)
     ids = [str(c["_id"]) for c in cs]
-    allS = await _sessions(db, {"contract_id": {"$in": ids}})
-    items = [_c_out(c, [s for s in allS if s["contract_id"] == str(c["_id"])]) for c in cs]
+    fl = await _flow(db)
+    allS = await _sessions(db, {"contract_id": {"$in": ids}}, fl)
+    items = [_c_out(c, [s for s in allS if s["contract_id"] == str(c["_id"])], fl) for c in cs]
     st = await _settings(db)
     lim = (_now() - timedelta(days=st["stall_days"])).isoformat()
     live = [c for c in items if c["status"] in ("issued", "completed")]
     kpis = {"active": sum(1 for c in items if c["status"] == "issued"), "late": sum(1 for c in items if c["status"] == "issued" and (c["progress"]["days_left"] or 0) < 0),
-            "stalled": sum(1 for s in allS if (s.get("stalled") and s["status"] not in ("rejected", "cancelled")) or (s["status"] in ("filmed", "editing", "cloud") and s.get("updated_at", "") < lim)),
+            "stalled": sum(1 for s in allS if (s.get("stalled") and s["status"] not in ("rejected", "cancelled")) or (s["status"] in fl.busy and s["status"] != fl.last and s.get("updated_at", "") < lim)),
             "accrued": sum(c["progress"]["accrued"] for c in live), "paid": sum(c["progress"]["paid"] for c in live)}
     return {"items": items, "kpis": kpis}
 
@@ -303,7 +364,8 @@ async def create_contract(body: ContractIn, u: dict = Depends(get_current_user))
 async def get_contract(cid: str, u: dict = Depends(get_current_user)):
     db = get_db()
     c = await _contract(db, cid, u)
-    return _c_out(c, await _sessions(db, {"contract_id": cid}), full=True)
+    fl = await _flow(db)
+    return _c_out(c, await _sessions(db, {"contract_id": cid}, fl), fl, full=True)
 
 
 @router.put("/contracts/{cid}")
@@ -397,7 +459,8 @@ async def add_payment(cid: str, body: PayIn, u: dict = Depends(get_current_user)
         raise HTTPException(status_code=400, detail="لا يُصرف على عقد غير معتمد")
     if c["status"] == "terminated" and not body.note.strip():
         raise HTTPException(status_code=400, detail="العقد ملغى — الصرف للتسوية فقط مع ذكر ملاحظة التسوية")
-    pr = _progress({k: v for k, v in c.items()}, await _sessions(db, {"contract_id": cid}))
+    fl = await _flow(db)
+    pr = _progress({k: v for k, v in c.items()}, await _sessions(db, {"contract_id": cid}, fl), fl)
     if body.amount <= 0:
         raise HTTPException(status_code=400, detail="المبلغ غير صالح")
     if body.amount > pr["balance"] + 0.01:
@@ -479,7 +542,7 @@ def _hhmm(m: int) -> str:
 
 
 async def _conflict(db, studio_id: str, date: str, start: str, end: str, skip: str = "") -> Optional[dict]:
-    q = {"studio_id": studio_id, "date": date, "status": {"$in": list(BUSY)}, "start": {"$lt": end}, "end": {"$gt": start}}
+    q = {"studio_id": studio_id, "date": date, "status": {"$in": list((await _flow(db)).busy)}, "start": {"$lt": end}, "end": {"$gt": start}}
     if skip:
         q["_id"] = {"$ne": ObjectId(skip)}
     return await db.vp_sessions.find_one(q)
@@ -534,7 +597,7 @@ async def _create_session(db, body: SessionIn, u: dict, c: dict, by_teacher: boo
     d = {**body.dict(), "start": start, "end": end, "ref_no": await _next_ref(db, "VS", 5), "teacher_id": c["teacher_id"], "teacher_name": c["teacher_name"],
          "course_name": c["course_name"], "faculty_id": c.get("faculty_id", ""), "department_id": c.get("department_id", ""),
          "department_name": c.get("department_name", ""), "status": "requested", "materials_delivered": False, "materials_note": "",
-         "photographer_notes": "", "cloud_url": "", "platform_url": "", "stalled": None, "created_at": _now().isoformat(),
+         "photographer_notes": "", "links": {}, "stalled": None, "created_at": _now().isoformat(),
          "updated_at": _now().isoformat(), "history": [_hist("طلب حجز من المعلم" if by_teacher else "إنشاء حجز من الأستوديو", u)]}
     r = await db.vp_sessions.insert_one(d)
     return {"id": str(r.inserted_id), "ref_no": d["ref_no"], "message": "تم إرسال طلب الحجز إلى الأستوديو"}
@@ -589,7 +652,8 @@ async def _session(db, sid: str, u: dict, staff_only=True) -> dict:
 
 @router.get("/sessions/{sid}")
 async def get_session(sid: str, u: dict = Depends(get_current_user)):
-    return _sess_out(await _session(get_db(), sid, u, staff_only=False))
+    db = get_db()
+    return _sess_out(await _session(db, sid, u, staff_only=False), await _flow(db))
 
 
 class SessAct(BaseModel):
@@ -598,8 +662,7 @@ class SessAct(BaseModel):
     studio_id: str = ""
     date: str = ""
     start: str = ""
-    cloud_url: str = ""
-    platform_url: str = ""
+    link: str = ""
     actual_minutes: Optional[int] = None
 
 
@@ -609,10 +672,11 @@ async def session_action(sid: str, body: SessAct, u: dict = Depends(get_current_
     db = get_db()
     s = await _session(db, sid, u)
     a, st = body.action, s["status"]
-    sets, label = {}, ""
+    fl = await _flow(db)
+    sets, label, notify = {}, "", a in ("confirm", "reschedule", "reject", "cancel", "stall")
     if a in ("confirm", "reschedule"):
         if st not in ("requested", "confirmed"):
-            raise HTTPException(status_code=400, detail="لا يمكن تأكيد/نقل حجز بعد التصوير")
+            raise HTTPException(status_code=400, detail="لا يمكن تأكيد/نقل الحجز بعد بدء مراحل الإنتاج")
         studio, date = body.studio_id or s.get("studio_id"), body.date or s["date"]
         start = _hhmm(_mins(body.start or s["start"]))
         if not studio:
@@ -629,28 +693,27 @@ async def session_action(sid: str, body: SessAct, u: dict = Depends(get_current_
         sets, label = {"status": "rejected"}, "اعتذار عن الحجز"
     elif a == "cancel":
         if st not in ("requested", "confirmed"):
-            raise HTTPException(status_code=400, detail="لا يمكن الإلغاء بعد التصوير")
+            raise HTTPException(status_code=400, detail="لا يمكن الإلغاء بعد بدء مراحل الإنتاج")
         sets, label = {"status": "cancelled"}, "إلغاء الحجز"
-    elif a in ("filmed", "editing", "cloud", "published"):
-        if PIPE.index(a) != PIPE.index(st) + 1 if st in PIPE else True:
-            raise HTTPException(status_code=400, detail=f"الانتقال إلى «{S_STATUS[a]}» يلي «{S_STATUS[PIPE[PIPE.index(a) - 1]]}»")
-        if a == "cloud" and not body.cloud_url.strip():
-            raise HTTPException(status_code=400, detail="أدخل رابط الملف على السحابة")
-        if a == "published" and not body.platform_url.strip():
-            raise HTTPException(status_code=400, detail="أدخل رابط المحاضرة على منصة التعليم")
-        sets, label = {"status": a, "stalled": None}, S_STATUS[a]
-        if a == "filmed" and body.actual_minutes:
+    elif a == "advance":
+        if st not in fl.seq or st == fl.last:
+            raise HTTPException(status_code=400, detail="لا توجد مرحلة تالية" if st == fl.last else "أكّد الحجز أولاً")
+        nxt = fl.seq[fl.seq.index(st) + 1]
+        step = fl.step(nxt)
+        if step.get("requires_link") and not body.link.strip():
+            raise HTTPException(status_code=400, detail=f"أدخل {step.get('link_label') or 'الرابط'}")
+        sets, label, notify = {"status": nxt, "stalled": None}, step["name"], bool(step.get("notify"))
+        if body.link.strip():
+            sets[f"links.{nxt}"] = body.link.strip()
+        if step.get("is_filming") and body.actual_minutes:
             sets["actual_minutes"] = body.actual_minutes
-        if body.cloud_url:
-            sets["cloud_url"] = body.cloud_url.strip()
-        if body.platform_url:
-            sets["platform_url"] = body.platform_url.strip()
     elif a == "back":
-        if st not in PIPE or PIPE.index(st) < 3:
+        if st not in fl.keys:
             raise HTTPException(status_code=400, detail="لا يمكن الرجوع من هذه المرحلة")
-        sets, label = {"status": PIPE[PIPE.index(st) - 1]}, f"إرجاع إلى «{S_STATUS[PIPE[PIPE.index(st) - 1]]}»"
+        prev = fl.seq[fl.seq.index(st) - 1]
+        sets, label = {"status": prev}, f"إرجاع إلى «{fl.names[prev]}»"
     elif a == "stall":
-        if st in ("rejected", "cancelled", "published"):
+        if st in ("requested", "rejected", "cancelled", fl.last):
             raise HTTPException(status_code=400, detail="لا يمكن تسجيل توقف لهذه الحالة")
         if not body.note.strip():
             raise HTTPException(status_code=400, detail="اكتب سبب التوقف")
@@ -661,7 +724,7 @@ async def session_action(sid: str, body: SessAct, u: dict = Depends(get_current_
         raise HTTPException(status_code=400, detail="إجراء غير معروف")
     sets["updated_at"] = _now().isoformat()
     await db.vp_sessions.update_one({"_id": s["_id"]}, {"$set": sets, "$push": {"history": _hist(label, u, body.note)}})
-    if a in ("confirm", "reschedule", "reject", "cancel", "filmed", "published", "stall"):
+    if notify:
         st_name = next((x["name"] for x in (await _settings(db))["studios"] if x["id"] == sets.get("studio_id", s.get("studio_id"))), "")
         msg = f"{label}: {s['lecture_title']} (ج{s['part_no']})"
         if a in ("confirm", "reschedule"):
@@ -701,7 +764,7 @@ async def session_pdf(sid: str, u: dict = Depends(get_current_user)):
     db = get_db()
     s = await _session(db, sid, u, staff_only=False)
     st = await _settings(db)
-    pdf = build(s, next((x["name"] for x in st["studios"] if x["id"] == s.get("studio_id")), ""))
+    pdf = build(s, next((x["name"] for x in st["studios"] if x["id"] == s.get("studio_id")), ""), st["max_part_minutes"])
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{s["ref_no"]}.pdf"'})
 
 
@@ -713,11 +776,13 @@ async def my_contracts(u: dict = Depends(get_current_user)):
     cs = await db.vp_contracts.find({"teacher_id": {"$in": tids}, "status": {"$ne": "draft"}}).sort("created_at", -1).to_list(100)
     out = []
     for c in cs:
-        o = _c_out(c, await _sessions(db, {"contract_id": str(c["_id"])}), full=True)
+        fl = await _flow(db)
+        o = _c_out(c, await _sessions(db, {"contract_id": str(c["_id"])}, fl), fl, full=True)
         o.pop("history", None)
         out.append(o)
     st = await _settings(db)
     return {"items": out, "settings": {"min_notice_hours": st["min_notice_hours"], "max_part_minutes": st["max_part_minutes"],
+                                        "steps": [{k: x[k] for k in ("key", "name", "is_filming")} for x in st["pipeline_steps"]],
                                         "studios": [s for s in st["studios"] if s.get("is_active", True)], "currency": st["currency"]}}
 
 

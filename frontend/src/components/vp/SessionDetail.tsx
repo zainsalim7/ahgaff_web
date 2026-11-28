@@ -2,27 +2,28 @@ import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { Badge, btn, card, inp, lbl } from '../corr/CorrUI';
-import { PIPE, S_COLOR, errOf, pdf, vp } from './vpUi';
-
-const NEXT: Record<string, [string, string]> = { confirmed: ['filmed', 'تم التصوير'], filmed: ['editing', 'بدء المونتاج'], editing: ['cloud', 'رُفع للسحابة'], cloud: ['published', 'نُشر على المنصة'] };
+import { Bar, errOf, flowOf, pdf, sColor, stepsOf, vp } from './vpUi';
 
 export const SessionDetail = ({ id, settings, onChanged }: { id: string; settings: any; onChanged: () => void }) => {
   const { hasPermission } = useAuth(); const can = hasPermission('vp_studio');
   const [s, setS] = useState<any>(null); const [err, setErr] = useState('');
-  const [x, setX] = useState({ note: '', studio_id: '', date: '', start: '', cloud_url: '', platform_url: '', actual_minutes: '', photographer_notes: '', materials_note: '' });
-  const load = () => api.get(vp(`/sessions/${id}`)).then((r) => { setS(r.data); setX((p) => ({ ...p, studio_id: r.data.studio_id || '', date: r.data.date, start: r.data.start, cloud_url: r.data.cloud_url || '', platform_url: r.data.platform_url || '', photographer_notes: r.data.photographer_notes || '', materials_note: r.data.materials_note || '' })); }).catch((e) => setErr(errOf(e)));
+  const [x, setX] = useState({ note: '', studio_id: '', date: '', start: '', link: '', actual_minutes: '', photographer_notes: '', materials_note: '' });
+  const load = () => api.get(vp(`/sessions/${id}`)).then((r) => { setS(r.data); setX((p) => ({ ...p, studio_id: r.data.studio_id || '', date: r.data.date, start: r.data.start, photographer_notes: r.data.photographer_notes || '', materials_note: r.data.materials_note || '' })); }).catch((e) => setErr(errOf(e)));
   useEffect(() => { load(); }, [id]); // eslint-disable-line
-  const run = async (fn: () => Promise<any>) => { setErr(''); try { await fn(); await load(); onChanged(); setX((p) => ({ ...p, note: '' })); } catch (e) { setErr(errOf(e)); } };
+  const run = async (fn: () => Promise<any>) => { setErr(''); try { await fn(); await load(); onChanged(); setX((p) => ({ ...p, note: '', link: '' })); } catch (e) { setErr(errOf(e)); } };
   const act = (action: string, extra: any = {}) => run(() => api.post(vp(`/sessions/${id}/action`), { action, note: x.note, ...extra }));
   if (!s) return <div style={{ color: '#94a3b8' }}>{err || 'جاري التحميل…'}</div>;
   const studioName = (settings?.studios || []).find((z: any) => z.id === s.studio_id)?.name || 'لم يُحدد';
-  const idx = PIPE.findIndex((p) => p[0] === s.status); const next = NEXT[s.status];
+  const flow = flowOf(settings); const steps = stepsOf(settings);
+  const idx = flow.findIndex((p) => p[0] === s.status); const nextKey = idx >= 1 && idx < flow.length - 1 ? flow[idx + 1][0] : '';
+  const next = steps.find((z) => z.key === nextKey); const inSteps = steps.some((z) => z.key === s.status); const isLast = s.status === flow[flow.length - 1][0];
   return (
     <div data-testid="vp-session-detail">
       <div style={{ display: 'flex', gap: 4, marginBottom: 12, flexWrap: 'wrap' }} data-testid="vp-sd-pipeline">
-        {PIPE.map(([k, l], i) => <div key={k} style={{ flex: 1, minWidth: 90, textAlign: 'center', padding: '6px 4px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, color: i <= idx ? '#fff' : '#64748b', background: i <= idx ? S_COLOR[k] : '#f1f5f9' }}>{l}</div>)}
+        {flow.map(([k, l], i) => <div key={k} style={{ flex: 1, minWidth: 90, textAlign: 'center', padding: '6px 4px', borderRadius: 8, fontSize: 11.5, fontWeight: 800, color: i <= idx ? '#fff' : '#64748b', background: i <= idx ? sColor(settings, k) : '#f1f5f9' }} data-testid={`vp-sd-step-${k}`}>{l}</div>)}
       </div>
-      {['rejected', 'cancelled'].includes(s.status) && <Badge text={s.status_ar} color={S_COLOR[s.status]} />}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }} data-testid="vp-sd-pct"><strong style={{ fontSize: 12.5 }}>مؤشر الإنجاز</strong><div style={{ flex: 1 }}><Bar pct={s.pct} color={sColor(settings, s.status)} /></div><strong>{Math.round(s.pct)}%</strong></div>
+      {['rejected', 'cancelled'].includes(s.status) && <Badge text={s.status_ar} color={sColor(settings, s.status)} />}
       {s.stalled && <div style={{ ...card, background: '#fef2f2', borderColor: '#fecaca', color: '#991b1b', fontWeight: 700 }} data-testid="vp-sd-stalled">⛔ متوقف منذ {s.stalled.at?.slice(0, 10)}: {s.stalled.reason}</div>}
       {!!err && <div style={{ color: '#b91c1c', fontWeight: 700, marginBottom: 8 }} data-testid="vp-sd-error">{err}</div>}
       <div style={{ ...card, fontSize: 12.5, display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 6 }}>
@@ -30,8 +31,7 @@ export const SessionDetail = ({ id, settings, onChanged }: { id: string; setting
         <div>المحاضرة {s.lecture_no}: <strong>{s.lecture_title}</strong></div><div>الجزء <strong>{s.part_no} / {s.parts_count}</strong> · {s.est_minutes} د{s.actual_minutes ? ` (فعلي ${s.actual_minutes} د)` : ''}</div>
         <div>الموعد: <strong>{studioName} · {s.date} <span dir="ltr">{s.start} – {s.end}</span></strong></div><div>الموضوع: {s.topic || '—'}</div>
         <div style={{ gridColumn: '1/-1' }}>الملخص: {s.summary || '—'}</div><div>المرفق: {s.attachment_note || '—'}</div><div>ملاحظات الأستاذ: {s.teacher_notes || '—'}</div>
-        {s.cloud_url && <div>السحابة: <a href={s.cloud_url} target="_blank" rel="noreferrer" data-testid="vp-sd-cloud-link">فتح</a></div>}
-        {s.platform_url && <div>المنصة: <a href={s.platform_url} target="_blank" rel="noreferrer" data-testid="vp-sd-platform-link">فتح</a></div>}
+        {Object.entries(s.links || {}).map(([k, url]: any) => <div key={k}>{steps.find((z) => z.key === k)?.name || k}: <a href={url} target="_blank" rel="noreferrer" data-testid={`vp-sd-link-${k}`}>فتح الرابط</a></div>)}
       </div>
       <button onClick={() => pdf(`/sessions/${id}/pdf`, `${s.ref_no}.pdf`)} style={btn('#475569', { marginBottom: 10 })} data-testid="vp-sd-pdf">طباعة نموذج التسجيل PDF</button>
       {can && !['rejected', 'cancelled'].includes(s.status) && (
@@ -48,13 +48,12 @@ export const SessionDetail = ({ id, settings, onChanged }: { id: string; setting
             </div>)}
           {next && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              {next[0] === 'filmed' && <input type="number" style={{ ...inp, width: 150 }} placeholder="المدة الفعلية (د)" value={x.actual_minutes} onChange={(e) => setX({ ...x, actual_minutes: e.target.value })} data-testid="vp-sd-actual" />}
-              {next[0] === 'cloud' && <input style={{ ...inp, flex: 1 }} placeholder="رابط الملف على السحابة" value={x.cloud_url} onChange={(e) => setX({ ...x, cloud_url: e.target.value })} data-testid="vp-sd-cloud" />}
-              {next[0] === 'published' && <input style={{ ...inp, flex: 1 }} placeholder="رابط المحاضرة على منصة التعليم" value={x.platform_url} onChange={(e) => setX({ ...x, platform_url: e.target.value })} data-testid="vp-sd-platform" />}
-              <button onClick={() => act(next[0], { cloud_url: x.cloud_url, platform_url: x.platform_url, actual_minutes: x.actual_minutes ? +x.actual_minutes : null })} style={btn(S_COLOR[next[0]])} data-testid="vp-sd-next">← {next[1]}</button>
+              {next.is_filming && <input type="number" style={{ ...inp, width: 150 }} placeholder="المدة الفعلية (د)" value={x.actual_minutes} onChange={(e) => setX({ ...x, actual_minutes: e.target.value })} data-testid="vp-sd-actual" />}
+              {next.requires_link && <input style={{ ...inp, flex: 1 }} placeholder={next.link_label || 'الرابط'} value={x.link} onChange={(e) => setX({ ...x, link: e.target.value })} data-testid="vp-sd-link" />}
+              <button onClick={() => act('advance', { link: x.link, actual_minutes: x.actual_minutes ? +x.actual_minutes : null })} style={btn(sColor(settings, next.key))} data-testid="vp-sd-next">← {next.name}</button>
             </div>)}
-          {idx >= 3 && <button onClick={() => act('back')} style={btn('#f1f5f9', { color: '#0f2440', alignSelf: 'flex-start' })} data-testid="vp-sd-back">إرجاع مرحلة</button>}
-          {idx >= 1 && s.status !== 'published' && (s.stalled ? <button onClick={() => act('unstall')} style={btn('#16a34a', { alignSelf: 'flex-start' })} data-testid="vp-sd-unstall">استئناف</button>
+          {inSteps && <button onClick={() => act('back')} style={btn('#f1f5f9', { color: '#0f2440', alignSelf: 'flex-start' })} data-testid="vp-sd-back">إرجاع مرحلة</button>}
+          {idx >= 1 && !isLast && (s.stalled ? <button onClick={() => act('unstall')} style={btn('#16a34a', { alignSelf: 'flex-start' })} data-testid="vp-sd-unstall">استئناف</button>
             : <button onClick={() => act('stall')} style={btn('#fee2e2', { color: '#b91c1c', alignSelf: 'flex-start' })} data-testid="vp-sd-stall">تسجيل توقف (اكتب السبب)</button>)}
           <div style={{ borderTop: '1px solid #eef0f3', paddingTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 800, fontSize: 12.5 }}><input type="checkbox" checked={!!s.materials_delivered} onChange={(e) => run(() => api.put(vp(`/sessions/${id}`), { materials_delivered: e.target.checked, materials_note: x.materials_note }))} data-testid="vp-sd-materials" />استُلمت الملحقات (النص والمصادر التعليمية)</label>

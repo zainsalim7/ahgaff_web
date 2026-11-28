@@ -119,7 +119,7 @@ def contract_pdf(c: dict, st: dict) -> bytes:
     return _doc(story, c["ref_no"])
 
 
-def session_pdf(s: dict, studio_name: str) -> bytes:
+def session_pdf(s: dict, studio_name: str, max_minutes: int = 60) -> bytes:
     from reportlab.platypus import Spacer, Table, TableStyle
     from reportlab.lib import colors
     from .pdf_pages import _ar
@@ -137,7 +137,7 @@ def session_pdf(s: dict, studio_name: str) -> bytes:
         rows = [[_ar(f"{s.get('course_name', '')}"), _ar("اسم المقرر")], [_ar(s.get("lecture_title", "")), _ar("عنوان المحاضرة")],
                 [_ar(s.get("topic", "")), _ar("الموضوع (حسب التوصيف)")], [f"{s.get('lecture_no')}", _ar("رقم المحاضرة")],
                 [f"{s.get('parts_count')}", _ar("عدد أجزاء المحاضرة")], [f"{s.get('part_no')}", _ar("الجزء")],
-                [_ar(f"{s.get('est_minutes')} دقيقة"), _ar("المدة التقديرية للجزء (لا تتعدى 30 دقيقة)")],
+                [_ar(f"{s.get('est_minutes')} دقيقة"), _ar(f"المدة التقديرية للجزء (لا تتعدى {max_minutes} دقيقة)")],
                 [_ar(f"{studio_name or '—'} — {s.get('date')} من {s.get('start')} إلى {s.get('end')}"), _ar("الأستوديو والموعد")]]
         t = Table(rows, colWidths=[W * 0.62, W * 0.38])
         t.setStyle(TableStyle([("FONTNAME", (0, 0), (-1, -1), "Amiri"), ("FONTNAME", (1, 0), (1, -1), "Amiri-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 10.5),
