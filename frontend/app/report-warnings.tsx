@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { reportsAPI, departmentsAPI, facultiesAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
+import { facultyMeta, Fac } from '../src/components/results/resultsUi';
 import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
 export default function WarningsReport() {
@@ -35,13 +36,14 @@ export default function WarningsReport() {
     if (selectedDept) params.department_id = selectedDept;
     else if (selectedFaculty) params.faculty_id = selectedFaculty;
     if (level) params.level = Number(level);
+    if (section) params.section = section;
     return params;
   };
   const handleExport = async (fmt: 'pdf' | 'excel', onlyPicked = picked.size > 0) => {
     setExporting(fmt);
     const params: any = scopeParams();
     if (onlyPicked) params.student_ids = [...picked].join(',');
-    else { if (section) params.section = section; if (q.trim()) params.q = q.trim(); }
+    else if (q.trim()) params.q = q.trim();
     await downloadReport(fmt === 'pdf' ? '/reports/warnings/export-pdf' : '/export/report/warnings/excel', params, ['تقرير الإنذارات والحرمان', deptName], fmt === 'pdf' ? 'pdf' : 'xlsx');
     setExporting('');
   };
@@ -74,7 +76,7 @@ export default function WarningsReport() {
       setExecuting(false);
       setRefreshing(false);
     }
-  }, [selectedDept, selectedFaculty, level]);
+  }, [selectedDept, selectedFaculty, level, section]);
 
   const onRefresh = () => {
     if (!hasRun) return;
@@ -96,7 +98,9 @@ export default function WarningsReport() {
   const fw = warnings.filter(match), fd = deprivations.filter(match);
   const currentList = activeTab === 'warnings' ? fw : fd;
   const total = fw.length + fd.length;
-  const sections = [...new Set([...warnings, ...deprivations].map((x) => x.student_section || x.section).filter(Boolean))].sort();
+  const metaFac = selectedFaculty || departments.find((d) => d.id === selectedDept)?.faculty_id || '';
+  const meta = facultyMeta(faculties as Fac[], metaFac);
+  const sections = [...new Set([...meta.sections.map((x) => x.id), ...[...warnings, ...deprivations].map((x) => x.student_section || x.section).filter(Boolean)])].sort();
   const toggle = (id: string) => { const n = new Set(picked); n.has(id) ? n.delete(id) : n.add(id); setPicked(n); };
   const listIds = [...new Set(currentList.map((x) => x.student_db_id))];
   const allOn = listIds.length > 0 && listIds.every((id) => picked.has(id));
@@ -122,7 +126,7 @@ export default function WarningsReport() {
           <View style={{ flex: 1, minWidth: 170 }}>
             <Text style={reportPage.label}>الكلية</Text>
             <View style={reportPage.pickerBox}>
-              <Picker selectedValue={selectedFaculty} onValueChange={(v) => { setSelectedFaculty(v); setSelectedDept(''); }} style={reportPage.picker} testID="warnings-faculty-filter">
+              <Picker selectedValue={selectedFaculty} onValueChange={(v) => { setSelectedFaculty(v); setSelectedDept(''); setLevel(''); setSection(''); }} style={reportPage.picker} testID="warnings-faculty-filter">
                 <Picker.Item label="جميع الكليات" value="" />
                 {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
               </Picker>
@@ -142,7 +146,7 @@ export default function WarningsReport() {
             <View style={reportPage.pickerBox}>
               <Picker selectedValue={level} onValueChange={setLevel} style={reportPage.picker} testID="warnings-level-filter">
                 <Picker.Item label="الكل" value="" />
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((l) => <Picker.Item key={l} label={`المستوى ${l}`} value={String(l)} />)}
+                {meta.levels.map((l) => <Picker.Item key={l.id} label={l.name} value={l.id} />)}
               </Picker>
             </View>
           </View>
@@ -150,8 +154,8 @@ export default function WarningsReport() {
             <Text style={reportPage.label}>الشعبة</Text>
             <View style={[reportPage.pickerBox, !sections.length && { opacity: 0.6 }]}>
               <Picker selectedValue={section} onValueChange={setSection} style={reportPage.picker} enabled={sections.length > 0} testID="warnings-section-filter">
-                <Picker.Item label={sections.length ? 'الكل' : 'نفّذ أولاً'} value="" />
-                {sections.map((x) => <Picker.Item key={x} label={x} value={x} />)}
+                <Picker.Item label={sections.length ? 'الكل' : 'لا توجد شعب'} value="" />
+                {sections.map((x) => <Picker.Item key={x} label={`شعبة ${x}`} value={x} />)}
               </Picker>
             </View>
           </View>
