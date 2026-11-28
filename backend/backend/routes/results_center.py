@@ -165,7 +165,8 @@ async def _build(db, course: dict) -> dict:
     fid = await _course_faculty(db, course)
     cfg = await _settings(db, fid)
     sids = [e["student_id"] async for e in db.enrollments.find({"course_id": cid}, {"student_id": 1}) if e.get("student_id")]
-    studs = {str(s["_id"]): s async for s in db.students.find({"_id": {"$in": [ObjectId(x) for x in sids if ObjectId.is_valid(x)]}},
+    # الطلاب المسجلون «إعادة» في النظام لا يدخلون كشوف المركز (السعي/الأدوار/المستوى/الاعتماد)
+    studs = {str(s["_id"]): s async for s in db.students.find({"_id": {"$in": [ObjectId(x) for x in sids if ObjectId.is_valid(x)]}, "status": {"$ne": "repeat"}},
                                                                 {"full_name": 1, "student_id": 1, "section": 1, "user_id": 1, "department_id": 1, "level": 1})}
     profiles = await course_profiles(db, course, list(studs)) if studs else {}
     marks = {m["student_db_id"]: m async for m in db.rc_marks.find({"course_id": cid})}

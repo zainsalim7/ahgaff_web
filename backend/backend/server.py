@@ -13284,7 +13284,7 @@ async def absence_summary_report(
         limits = await course_limits(db, c)
         lim = lim or limits
         sids = [e["student_id"] async for e in db.enrollments.find({"course_id": cid}, {"student_id": 1}) if ObjectId.is_valid(e.get("student_id") or "")]
-        for st in await db.students.find({"_id": {"$in": [ObjectId(x) for x in sids if x not in studs]}}, {"full_name": 1, "student_id": 1, "section": 1, "level": 1, "department_id": 1}).to_list(None):
+        for st in await db.students.find({"_id": {"$in": [ObjectId(x) for x in sids if x not in studs]}, "status": {"$ne": "repeat"}}, {"full_name": 1, "student_id": 1, "section": 1, "level": 1, "department_id": 1}).to_list(None):
             studs[str(st["_id"])] = st
         mine = [x for x in sids if x in studs and str(studs[x].get("level") or "") == str(level)
                 and (not studs[x].get("department_id") or str(studs[x]["department_id"]) == department_id)
