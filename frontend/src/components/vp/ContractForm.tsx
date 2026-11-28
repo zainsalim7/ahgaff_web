@@ -7,7 +7,7 @@ const F = ({ l, children, w = 220 }: { l: string; children: React.ReactNode; w?:
 
 export const ContractForm = ({ initial, settings, onDone }: { initial?: any; settings: any; onDone: () => void }) => {
   const [teachers, setTeachers] = useState<any[]>([]); const [depts, setDepts] = useState<any[]>([]); const [tq, setTq] = useState('');
-  const [f, setF] = useState<any>(() => initial ? { ...initial } : { teacher_id: '', teacher_name: '', qualification: '', specialization: '', academic_degree: '', phone: '', department_id: '', department_name: '', course_name: '', weekly_hours: 3, lectures_required: 28, contract_date: today(), start_date: today(), duration_days: settings?.default_duration_days || 60, first_party_name: settings?.first_party_name || '', first_party_title: settings?.first_party_title || '', items: (settings?.default_items || []).map((i: any) => ({ ...i })), notes: '' });
+  const [f, setF] = useState<any>(() => initial ? { ...initial } : { teacher_id: '', teacher_name: '', qualification: '', specialization: '', academic_degree: '', phone: '', department_id: '', department_name: '', course_name: '', weekly_hours: 3, semester_weeks: settings?.semester_weeks || 16, contract_date: today(), start_date: today(), duration_days: settings?.default_duration_days || 60, first_party_name: settings?.first_party_name || '', first_party_title: settings?.first_party_title || '', items: (settings?.default_items || []).map((i: any) => ({ ...i })), notes: '' });
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
   useEffect(() => { teachersAPI.getAll().then((r) => setTeachers(r.data || [])).catch(() => {}); departmentsAPI.getAll().then((r) => setDepts(r.data || [])).catch(() => {}); }, []);
   const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }));
@@ -17,7 +17,7 @@ export const ContractForm = ({ initial, settings, onDone }: { initial?: any; set
   const shownT = teachers.filter((t) => !tq || (t.full_name || '').includes(tq));
   const save = async () => {
     setBusy(true); setErr('');
-    try { const body = { ...f, items: f.items.map((i: any) => ({ key: i.key, name: i.name, amount: +i.amount || 0, kind: i.kind })), lectures_required: +f.lectures_required, weekly_hours: +f.weekly_hours, duration_days: +f.duration_days };
+    try { const body = { ...f, items: f.items.map((i: any) => ({ key: i.key, name: i.name, amount: +i.amount || 0, kind: i.kind })), semester_weeks: +f.semester_weeks || null, weekly_hours: +f.weekly_hours, duration_days: +f.duration_days };
       if (initial?.id) await api.put(vp(`/contracts/${initial.id}`), body); else await api.post(vp('/contracts'), body); onDone();
     } catch (e) { setErr(errOf(e)); } finally { setBusy(false); }
   };
@@ -37,7 +37,8 @@ export const ContractForm = ({ initial, settings, onDone }: { initial?: any; set
         <F l="القسم"><select style={inp} value={f.department_id} onChange={(e) => { const d = depts.find((x) => x.id === e.target.value); setF((p: any) => ({ ...p, department_id: e.target.value, department_name: d?.name || '', faculty_id: d?.faculty_id || p.faculty_id })); }} data-testid="vp-cf-department"><option value="">— اختر —</option>{depts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></F>
         <F l="المقرر (المادة) *"><input style={inp} value={f.course_name} onChange={(e) => set('course_name', e.target.value)} data-testid="vp-cf-course" /></F>
         <F l="ساعات أسبوعية" w={100}><input type="number" style={inp} value={f.weekly_hours} onChange={(e) => set('weekly_hours', e.target.value)} data-testid="vp-cf-hours" /></F>
-        <F l="عدد المحاضرات المرئية *" w={140}><input type="number" style={inp} value={f.lectures_required} onChange={(e) => set('lectures_required', e.target.value)} data-testid="vp-cf-lectures" /></F>
+        <F l="أسابيع الفصل" w={100}><input type="number" style={inp} value={f.semester_weeks} onChange={(e) => set('semester_weeks', e.target.value)} data-testid="vp-cf-weeks" /></F>
+        <F l="المطلوب تسجيله (ثلثا الساعات)" w={170}><div style={{ ...inp, background: '#f1f5f9', fontWeight: 800 }} data-testid="vp-cf-required-hours">{Math.round((+f.weekly_hours || 0) * (+f.semester_weeks || 0) * 2 / 3 * 100) / 100} ساعة من {(+f.weekly_hours || 0) * (+f.semester_weeks || 0)}</div></F>
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <F l="تاريخ العقد" w={140}><input type="date" style={inp} value={f.contract_date} onChange={(e) => set('contract_date', e.target.value)} data-testid="vp-cf-contract-date" /></F>
@@ -52,8 +53,8 @@ export const ContractForm = ({ initial, settings, onDone }: { initial?: any; set
           <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
             <input style={{ ...inp, flex: 3 }} value={it.name} onChange={(e) => setItem(i, 'name', e.target.value)} data-testid={`vp-cf-item-name-${i}`} />
             <input type="number" style={{ ...inp, flex: 1 }} value={it.amount} onChange={(e) => setItem(i, 'amount', e.target.value)} data-testid={`vp-cf-item-amount-${i}`} />
-            <span style={{ fontSize: 11, color: it.kind === 'recording' ? '#7c3aed' : '#64748b', minWidth: 110 }}>{it.kind === 'recording' ? 'بالتناسب مع المحاضرات' : 'عند قبول البند'}</span>
-            {it.kind !== 'recording' && <button onClick={() => set('items', f.items.filter((_: any, j: number) => j !== i))} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 9px' })} data-testid={`vp-cf-item-del-${i}`}>✕</button>}
+            <span style={{ fontSize: 11, color: '#64748b', minWidth: 90 }}>عند قبول البند</span>
+            {f.items.length > 1 && <button onClick={() => set('items', f.items.filter((_: any, j: number) => j !== i))} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 9px' })} data-testid={`vp-cf-item-del-${i}`}>✕</button>}
           </div>
         ))}
         <button onClick={() => set('items', [...f.items, { name: '', amount: 0, kind: 'fixed' }])} style={btn('#f1f5f9', { color: '#0f2440' })} data-testid="vp-cf-item-add">+ بند</button>

@@ -25,26 +25,27 @@ const ContractsTab = ({ settings, canManage, openSession }: any) => {
     <div data-testid="vp-contracts-tab">
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         <Kpi l="عقود سارية" v={k.active || 0} c="#16a34a" testID="vp-kpi-active" /><Kpi l="متأخرة عن المهلة" v={k.late || 0} c="#b91c1c" testID="vp-kpi-late" />
-        <Kpi l="تسجيلات متوقفة" v={k.stalled || 0} c="#d97706" testID="vp-kpi-stalled" /><Kpi l="المستحق" v={money(k.accrued)} c="#0f2440" testID="vp-kpi-accrued" /><Kpi l="المصروف" v={money(k.paid)} c="#2563eb" testID="vp-kpi-paid" />
+        <Kpi l="بانتظار المدرس/التعميد" v={k.pending_teacher || 0} c="#d97706" testID="vp-kpi-pending" /><Kpi l="تسجيلات متوقفة" v={k.stalled || 0} c="#b45309" testID="vp-kpi-stalled" />
+        {data.can_finance && <><Kpi l="المستحق" v={money(k.accrued)} c="#0f2440" testID="vp-kpi-accrued" /><Kpi l="المستلم" v={money(k.paid)} c="#2563eb" testID="vp-kpi-paid" /></>}
       </div>
       <div style={card}>
         <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
           <input style={{ ...inp, width: 260 }} placeholder="بحث بالمعلم / المقرر / رقم العقد" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} data-testid="vp-c-search" />
-          <select style={{ ...inp, width: 170 }} value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} data-testid="vp-c-status"><option value="">كل الحالات</option><option value="draft">مسودة</option><option value="issued">معتمد / ساري</option><option value="completed">منتهٍ</option><option value="terminated">ملغى</option></select>
+          <select style={{ ...inp, width: 170 }} value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })} data-testid="vp-c-status"><option value="">كل الحالات</option><option value="draft">مسودة</option><option value="sent">بانتظار موافقة المدرس</option><option value="returned">أعاده المدرس</option><option value="teacher_accepted">بانتظار التعميد</option><option value="issued">معمّد / ساري</option><option value="completed">منتهٍ</option><option value="terminated">ملغى</option></select>
           <span style={{ flex: 1 }} />
           {canManage && <button onClick={() => setEdit({})} style={btn('#16a34a')} data-testid="vp-c-new">+ عقد جديد</button>}
         </div>
         {!!err && <div style={{ color: '#b91c1c' }} data-testid="vp-c-error">{err}</div>}
         {data.items.length === 0 ? <Empty text="لا توجد عقود" /> : (
           <div style={{ overflowX: 'auto' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr>{['رقم العقد', 'المعلم', 'المقرر / القسم', 'المهلة', 'الإنجاز', 'المستحق / المصروف', 'الحالة'].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr>{['رقم العقد', 'المدرس', 'المقرر / القسم', 'المهلة', 'الإنجاز', ...(data.can_finance ? ['المستحق / المستلم'] : []), 'الحالة'].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{data.items.map((c: any) => { const p = c.progress; const late = c.status === 'issued' && p.days_left < 0; return (
               <tr key={c.id} onClick={() => setOpen(c.id)} style={{ cursor: 'pointer' }} data-testid={`vp-c-row-${c.id}`}>
                 <td style={{ ...td, fontWeight: 800 }}>{c.ref_no}</td><td style={td}>{c.teacher_name}</td>
                 <td style={td}>{c.course_name}<div style={{ fontSize: 10.5, color: '#64748b' }}>{c.department_name}</div></td>
                 <td style={td}>{c.end_date}<div style={{ fontSize: 10.5, color: late ? '#b91c1c' : '#64748b', fontWeight: late ? 800 : 400 }}>{p.days_left == null ? '' : late ? `متأخر ${-p.days_left} يوم` : `متبقٍ ${p.days_left} يوم`}</div></td>
-                <td style={{ ...td, minWidth: 150 }}><Bar pct={p.percent} color={late ? '#b91c1c' : '#16a34a'} /><div style={{ marginTop: 3 }}><Bar pct={p.production_percent} color="#7c3aed" /></div><div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3 }}>{p.lectures_completed}/{p.lectures_required} محاضرة · إنتاج {p.production_percent}% · {p.items_accepted} بند مقبول{p.stalled ? ` · ⛔ ${p.stalled}` : ''}</div></td>
-                <td style={td}>{money(p.accrued)}<div style={{ fontSize: 10.5, color: '#16a34a' }}>صُرف {money(p.paid)}</div></td>
+                <td style={{ ...td, minWidth: 150 }}><Bar pct={p.percent} color={late ? '#b91c1c' : '#16a34a'} /><div style={{ marginTop: 3 }}><Bar pct={p.production_percent} color="#7c3aed" /></div><div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3 }}>{p.recorded_hours}/{p.required_hours} ساعة · إنتاج {p.production_percent}% · {p.items_accepted} بند مقبول{p.stalled ? ` · ⛔ ${p.stalled}` : ''}</div></td>
+                {data.can_finance && <td style={td}>{money(p.accrued)}<div style={{ fontSize: 10.5, color: '#16a34a' }}>استلم {money(p.paid)}{p.pending ? ` · معلّق ${money(p.pending)}` : ''}</div></td>}
                 <td style={td}><Badge text={c.status_ar} color={C_COLOR[c.status]} /></td>
               </tr>); })}</tbody>
           </table></div>)}

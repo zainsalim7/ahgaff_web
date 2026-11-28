@@ -2,7 +2,9 @@
 
 > نفس الـ API (`https://api.ahgaff.net/api`) وبترويسة `Authorization: Bearer <token>` لحساب المدرس.
 > هذا التبويب **مستقل تماماً** عن المحاضرات والحضور والنصاب — لا تربطه بأي منها.
-> **اعرض التبويب فقط إذا أعاد `GET /video-production/my/contracts` عنصراً واحداً على الأقل** (أي أن للمدرس عقداً معتمداً).
+> **اعرض التبويب فقط إذا أعاد `GET /video-production/my/contracts` عنصراً واحداً على الأقل.**
+> الإدارة تتحكم بإظهار التبويب لكل مدرس، فإذا أخفته يعود `items` فارغاً وتُرفض بقية الطلبات. لا تخزّن العقود محلياً.
+> **لا تغيّر أي شيء آخر في التطبيق** (التحضير، الدوام، المحاضرات): هذا تبويب إضافي فقط.
 
 ## 1) عقودي
 `GET /video-production/my/contracts` →
@@ -10,29 +12,44 @@
 {"items": [{
   "id": "...", "ref_no": "VC-2026-0001", "status": "issued", "status_ar": "معتمد / ساري",
   "course_name": "رياضيات 1", "department_name": "...", "start_date": "2026-11-28", "end_date": "2027-01-27", "duration_days": 60,
-  "lectures_required": 28, "teacher_accepted_at": null, "total_amount": 450000,
+  "weekly_hours": 3, "semester_weeks": 16, "course_hours": 48, "required_hours": 32, "teacher_accepted_at": null, "total_amount": 450000,
   "items": [{"key": "spec", "name": "توصيف المادة العلمية", "amount": 50000, "kind": "fixed", "status": "accepted", "status_ar": "مقبول", "accrued": 50000},
-            {"key": "recording", "name": "التسجيل المرئي للمحاضرات", "amount": 250000, "kind": "recording", "accrued": 125000}],
-  "payments": [{"amount": 100000, "date": "2026-12-10", "stage": "الدفعة 1", "note": "..."}],
-  "progress": {"lectures_completed": 14, "lectures_required": 28, "lectures_published": 10, "percent": 50.0,
-               "production_percent": 42.5, "accrued": 175000, "paid": 100000, "balance": 75000, "days_left": 30, "stalled": 1,
+            {"key": "recording", "name": "التسجيل المرئي للمحاضرات", "amount": 250000, "kind": "recording", "accrued": 0}],
+  "payments": [{"id": "...", "amount": 50000, "date": "2026-12-10", "stage": "الدفعة 1", "status": "pending", "status_ar": "بانتظار تأكيد المدرس", "receipt_no": null}],
+  "progress": {"required_hours": 32, "recorded_hours": 16, "percent": 50.0, "lectures_count": 15, "lectures_completed": 14, "lectures_published": 10,
+               "production_percent": 42.5, "accrued": 50000, "paid": 0, "pending": 50000, "balance": 0, "days_left": 30, "stalled": 1,
                "lectures": [{"lecture_no": 1, "title": "مقدمة", "parts_count": 2, "completed": true, "published": false,
                              "pct": 50.0, "parts": [{"id": "...", "part_no": 1, "status": "editing", "status_ar": "قيد المونتاج", "pct": 50.0, "materials_delivered": true, "stalled": null}]}]}
 }],
  "settings": {"min_notice_hours": 2, "max_part_minutes": 60, "currency": "ريال يمني", "studios": [{"id": "...", "name": "أستوديو 1", "location": ""}],
               "steps": [{"key": "filmed", "name": "تم التصوير", "is_filming": true}, {"key": "editing", "name": "قيد المونتاج"}, {"key": "cloud", "name": "مرفوع للسحابة"}, {"key": "published", "name": "منشور على المنصة"}]}}
 ```
-**الشاشة:**
-- بطاقة لكل عقد: المقرر، والمهلة (`days_left`، أحمر إذا كانت سالبة = متأخر)، وشريطان:
-  - **المحاضرات المكتملة** (`percent`) و«14 / 28 محاضرة».
-  - **مؤشر الإنجاز في مراحل الإنتاج** (`production_percent`).
-- **ما عليّ:** البنود (`items`) بحالتها، والمحاضرات المتبقية = `lectures_required - lectures_completed`.
-- **ما لي:** المستحق `accrued` · المصروف `paid` · المتبقي `balance`، وقائمة الدفعات `payments`.
-- قائمة المحاضرات `progress.lectures` وأجزاؤها بألوان المراحل.
-- PDF العقد: `GET /video-production/contracts/{id}/pdf`.
-- إذا كان `teacher_accepted_at = null` اعرض زر **«أوافق على بنود العقد»** ← `POST /video-production/my/contracts/{id}/accept`.
+**مراحل العقد** (`status`):
+| الحالة | الاسم الظاهر | ماذا يفعل المدرس |
+|---|---|---|
+| `sent` | بانتظار موافقة المدرس | يقرأ العقد (PDF) ثم إما: **«أوافق على العقد وبنوده»** ← `POST /video-production/my/contracts/{id}/accept`، أو **«إعادة بملاحظة»** ← `POST /video-production/my/contracts/{id}/return` بجسم `{"note": "..."}` (الملاحظة إلزامية). |
+| `teacher_accepted` | وافق المدرس — بانتظار التعميد | لا إجراء. يظهر «بانتظار تعميد الإدارة». |
+| `issued` | معمّد / ساري وملزم | **الآن فقط** يُتاح حجز التسجيل. |
+| `completed` / `terminated` | منتهٍ / ملغى | عرض فقط. |
 
-> قاعدة الاحتساب (للعرض فقط): تُحسب المحاضرة **مكتملة** عند تصوير جميع أجزائها **واستلام ملحقاتها** (النص والمصادر). مبلغ التسجيل يُستحق بالتناسب مع المكتمل، ويُصرف على دفعات.
+**الشاشة:**
+- بطاقة لكل عقد، فيها:
+  - المقرر والحالة والمهلة (`days_left`، أحمر إذا كانت سالبة).
+  - **الساعات المطلوبة** = `required_hours`، وهي ثلثا ساعات المادة (`weekly_hours × semester_weeks = course_hours`).
+  - **الساعات المسجلة** `progress.recorded_hours` مع شريط `progress.percent`.
+  - **مؤشر الإنجاز في مراحل الإنتاج** `progress.production_percent`.
+- **ما عليّ:** البنود `items` بحالتها (`status_ar`).
+- **ما لي:** المبالغ مقطوعة حسب بنود العقد، وتُستحق عند قبول الإدارة للبند.
+  - `accrued` المستحق · `paid` المستلم · `pending` بانتظار تأكيدي · `balance` المتبقي.
+- **PDF العقد:** `GET /video-production/contracts/{id}/pdf`.
+- **كشف الحساب PDF:** `GET /video-production/contracts/{id}/statement`. يصدر بكليشة التعليم عن بعد.
+
+**الدفعات** (`payments[]`: `id, amount, date, stage, status, status_ar, receipt_no`):
+- `pending` ← اعرض بطاقة «صُرف لك X — هل استلمت المبلغ؟» وفيها زران:
+  - **«أؤكد الاستلام»** ← `POST /video-production/my/contracts/{id}/payments/{pid}` بجسم `{"action": "confirm"}`. يعود `receipt_no`، والتأكيد = **سند استلام** يدخل كشف الحساب.
+  - **«لم أستلم / اعتراض»** ← نفس المسار بجسم `{"action": "dispute", "note": "السبب"}`.
+- `received` ← «مستلم — سند VR-2026-00001».
+- `disputed` ← «اعترضت — بانتظار الإدارة».
 
 ## 2) طلب حجز تسجيل (نموذج تسجيل محاضرة في الأستوديو)
 1. قبل الإرسال، اعرض الأستوديوهات المتاحة: `GET /video-production/availability?date=2026-12-01&start=10:00&minutes=30` → `{"studios": [...المتاح فقط], "end": "10:30"}`.
@@ -64,9 +81,13 @@
 
 ## 5) الإشعارات
 - `data.type = "video_session"` (`id` = الجزء، و`status`) ← افتح تفاصيل الجزء. يصل عند: تأكيد، أو نقل موعد، أو اعتذار، أو إلغاء، أو تم التصوير، أو نُشر، أو توقف.
-- `data.type = "video_contract"` (`id` = العقد) ← افتح العقد. يصل عند: اعتماد العقد، أو إلغائه، أو صرف دفعة.
+- `data.type = "video_contract"` (`id` = العقد) ← افتح العقد. يصل عند: إرسال العقد للموافقة، أو تعميده، أو إلغائه.
+- `data.type = "video_payment"` (`id` = العقد، `payment_id`) ← افتح بطاقة تأكيد استلام الدفعة.
 
 ## 6) اختبار سريع
-1. من البوابة: «الإنتاج المرئي» ← «الإعدادات»: أضف أستوديوهين ← «العقود»: أنشئ عقداً للمدرس ← «اعتماد وإصدار».
-2. من التطبيق: يظهر التبويب ← وافق على البنود ← اطلب حجزاً.
-3. من البوابة («الأستوديو ومسيرة التسجيل»): أكّد الحجز ← تم التصوير ← علّم «استُلمت الملحقات» ← ستزيد المحاضرات المكتملة والمستحق في التطبيق.
+1. من البوابة: أنشئ عقداً ← «إرسال للمدرس للموافقة».
+2. من التطبيق: يظهر التبويب ← «أوافق».
+3. من البوابة: «تأكيد التعميد».
+4. من التطبيق: اطلب حجزاً.
+5. من البوابة: أكّد الحجز ← قدّم مراحل الإنتاج ← اقبل بنداً ← «صرف وإشعار المدرس».
+6. من التطبيق: «أؤكد الاستلام» ← يظهر رقم السند في كشف الحساب.

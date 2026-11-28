@@ -1,14 +1,15 @@
 import api from '../../services/api';
 import { downloadBlob } from '../hr/EmployeeDocuments';
 
-export const C_COLOR: Record<string, string> = { draft: '#64748b', issued: '#16a34a', completed: '#2563eb', terminated: '#b91c1c' };
+export const C_COLOR: Record<string, string> = { draft: '#64748b', sent: '#d97706', returned: '#b45309', teacher_accepted: '#0891b2', issued: '#16a34a', completed: '#2563eb', terminated: '#b91c1c' };
+export const P_COLOR: Record<string, string> = { pending: '#d97706', received: '#16a34a', disputed: '#b91c1c' };
 const BASE: Record<string, string> = { requested: '#d97706', confirmed: '#0891b2', rejected: '#b91c1c', cancelled: '#94a3b8', stalled: '#b91c1c' };
 const PALETTE = ['#7c3aed', '#9333ea', '#c026d3', '#2563eb', '#0d9488', '#ca8a04', '#db2777', '#4f46e5'];
 export type Step = { key: string; name: string; is_filming?: boolean; requires_link?: boolean; link_label?: string; notify?: boolean };
 export const stepsOf = (settings: any): Step[] => settings?.pipeline_steps || [];
 export const flowOf = (settings: any): [string, string][] => [['requested', 'طلب حجز'], ['confirmed', 'حجز مؤكد'], ...stepsOf(settings).map((x) => [x.key, x.name] as [string, string])];
 export const sColor = (settings: any, status: string) => { const st = stepsOf(settings); const i = st.findIndex((x) => x.key === status); return i < 0 ? BASE[status] || '#475569' : i === st.length - 1 ? '#16a34a' : PALETTE[i % PALETTE.length]; };
-export const ITEM_COLOR: Record<string, string> = { pending: '#94a3b8', delivered: '#d97706', accepted: '#16a34a' };
+export const ITEM_COLOR: Record<string, string> = { pending: '#94a3b8', delivered: '#d97706', partial: '#0891b2', accepted: '#16a34a' };
 export const money = (v: number) => (v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 export const errOf = (e: any, d = 'تعذر تنفيذ العملية') => e?.response?.data?.detail || d;
 export const vp = (p: string) => `/video-production${p}`;

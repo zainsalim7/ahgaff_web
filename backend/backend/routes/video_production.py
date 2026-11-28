@@ -17,7 +17,11 @@ from models.permissions import Permission, UserRole
 
 router = APIRouter(prefix="/video-production", tags=["video-production"])
 TZ = timezone(timedelta(hours=3))
-C_STATUS = {"draft": "مسودة", "issued": "معتمد / ساري", "completed": "منتهٍ", "terminated": "ملغى"}
+C_STATUS = {"draft": "مسودة", "sent": "بانتظار موافقة المدرس", "returned": "أعاده المدرس للتعديل", "teacher_accepted": "وافق المدرس — بانتظار التعميد",
+            "issued": "معمّد / ساري وملزم", "completed": "منتهٍ", "terminated": "ملغى"}
+TEACHER_VISIBLE = ("sent", "teacher_accepted", "issued", "completed", "terminated")
+PAY_STATUS = {"pending": "بانتظار تأكيد المدرس", "received": "مستلم (سند)", "disputed": "اعترض المدرس"}
+MONEY_KEYS = ("items", "payments", "total_amount")
 BASE_STATUS = {"requested": "طلب حجز", "confirmed": "حجز مؤكد", "rejected": "مرفوض", "cancelled": "ملغى"}
 DEFAULT_STEPS = [
     {"key": "filmed", "name": "تم التصوير", "is_filming": True, "requires_link": False, "link_label": "", "notify": True},
@@ -44,14 +48,14 @@ class Flow:
 
     def step(self, key: str) -> dict:
         return next((x for x in self.steps if x["key"] == key), {})
-ITEM_STATUS = {"pending": "لم يُسلَّم", "delivered": "مُسلَّم — بانتظار القبول", "accepted": "مقبول"}
+ITEM_STATUS = {"pending": "لم يُسلَّم", "delivered": "مُسلَّم — بانتظار القبول", "partial": "مقبول جزئياً", "accepted": "مقبول"}
 DEFAULT_ITEMS = [
     {"key": "spec", "name": "توصيف المادة العلمية", "amount": 50000, "kind": "fixed"},
     {"key": "content", "name": "إعداد المحتوى العلمي وشرائح العرض", "amount": 100000, "kind": "fixed"},
     {"key": "recording", "name": "التسجيل المرئي للمحاضرات", "amount": 250000, "kind": "recording"},
     {"key": "qbank", "name": "إعداد بنك الأسئلة (250 سؤالاً على الأقل)", "amount": 50000, "kind": "fixed"},
 ]
-DEFAULT_SETTINGS = {"studios": [], "min_notice_hours": 2, "max_part_minutes": 60, "stall_days": 3, "pipeline_steps": DEFAULT_STEPS,
+DEFAULT_SETTINGS = {"studios": [], "semester_weeks": 16, "letterhead_id": "", "min_notice_hours": 2, "max_part_minutes": 60, "stall_days": 3, "pipeline_steps": DEFAULT_STEPS,
                     "first_party_org": "كلية التعليم عن بعد جامعة الأحقاف", "first_party_name": "", "first_party_title": "القائم بأعمال العميد",
                     "default_duration_days": 60, "currency": "ريال يمني", "default_items": DEFAULT_ITEMS}
 
@@ -68,6 +72,10 @@ def _oid(v: str) -> ObjectId:
 
 def _p(u, perm) -> bool:
     return has_permission(u, perm)
+
+
+def _fin(u) -> bool:
+    return any(_p(u, x) for x in (Permission.VP_VIEW, Permission.VP_MANAGE_CONTRACTS, Permission.VP_PAYMENTS))
 
 
 def _staff(u) -> bool:
@@ -105,13 +113,18 @@ async def _my_tids(db, u) -> List[str]:
     return [x for x in {u["id"], (d or {}).get("teacher_record_id")} if x]
 
 
+async def _app_visible(db, teacher_id: str) -> bool:
+    f = await db.vp_teacher_flags.find_one({"_id": teacher_id})
+    return (f or {}).get("app_visible", True)
+
+
 async def _contract(db, cid: str, u, staff_only=False) -> dict:
     c = await db.vp_contracts.find_one({"_id": _oid(cid)})
     if not c:
         raise HTTPException(status_code=404, detail="العقد غير موجود")
     if _staff(u) and _in_scope(u, c):
         return c
-    if not staff_only and c["teacher_id"] in await _my_tids(db, u) and c["status"] != "draft":
+    if not staff_only and c["teacher_id"] in await _my_tids(db, u) and c["status"] in TEACHER_VISIBLE and await _app_visible(db, c["teacher_id"]):
         return c
     raise HTTPException(status_code=403, detail="غير مصرح بالوصول إلى هذا العقد")
 
@@ -138,25 +151,40 @@ def _progress(c: dict, sessions: List[dict], fl: Flow) -> dict:
         L["published"] = all(p["status"] == fl.last for p in L["parts"]) and len(L["parts"]) >= L["parts_count"]
         L["pct"] = round(sum(p["pct"] for p in L["parts"]) / max(L["parts_count"], 1), 1)
         completed += L["completed"]
-    req = max(int(c.get("lectures_required") or 0), 1)
+    req_min = max(float(c.get("required_hours") or 0) * 60, 1)
+    live = [s for s in sessions if s["status"] not in ("rejected", "cancelled")]
+    rec_min = sum((s.get("actual_minutes") or s.get("est_minutes") or 0) for s in live if s["status"] in DONE)
+    prod_min = sum((s.get("actual_minutes") or s.get("est_minutes") or 0) * fl.pct(s["status"]) / 100 for s in live)
     accrued, total = 0.0, 0.0
     for it in c.get("items", []):
         total += it["amount"]
-        if it["kind"] == "recording":
-            it["accrued"] = round(it["amount"] * min(completed, req) / req, 2)
-        else:
-            it["accrued"] = it["amount"] if it.get("status") == "accepted" else 0
+        st_ = it.get("status")
+        it["accrued"] = it["amount"] if st_ == "accepted" else (min(float(it.get("accepted_amount") or 0), it["amount"]) if st_ == "partial" else 0)
         accrued += it["accrued"]
-    paid = sum(p["amount"] for p in c.get("payments", []))
+    pays = c.get("payments", [])
+    paid = sum(p["amount"] for p in pays if p.get("status", "received") == "received")
+    pending = sum(p["amount"] for p in pays if p.get("status") == "pending")
     end = c.get("end_date")
     days_left = (datetime.fromisoformat(end).date() - _now().date()).days if end else None
-    stalled = [s for s in sessions if s.get("stalled") and s["status"] not in ("rejected", "cancelled")]
-    return {"lectures_required": c.get("lectures_required") or 0, "lectures_completed": completed,
+    stalled = [s for s in live if s.get("stalled")]
+    return {"required_hours": round(req_min / 60, 2) if c.get("required_hours") else 0, "recorded_hours": round(rec_min / 60, 2),
+            "lectures_completed": completed, "lectures_count": len(by_lec),
             "lectures_published": sum(1 for L in by_lec.values() if L["published"]), "parts_done": len(done_parts),
-            "percent": round(100 * min(completed, req) / req, 1),
-            "production_percent": round(sum(L["pct"] for L in by_lec.values()) / req, 1), "lectures": sorted(by_lec.values(), key=lambda x: x["lecture_no"]),
-            "total": total, "accrued": round(accrued, 2), "paid": paid, "balance": round(accrued - paid, 2),
+            "percent": round(min(100, 100 * rec_min / req_min), 1), "production_percent": round(min(100, 100 * prod_min / req_min), 1),
+            "lectures": sorted(by_lec.values(), key=lambda x: x["lecture_no"]),
+            "total": total, "accrued": round(accrued, 2), "paid": paid, "pending": pending, "balance": round(accrued - paid - pending, 2),
             "days_left": days_left, "stalled": len(stalled), "items_accepted": sum(1 for i in c.get("items", []) if i.get("status") == "accepted")}
+
+
+def _strip_money(o: dict) -> dict:
+    for k in MONEY_KEYS:
+        o.pop(k, None)
+    if "history" in o:
+        o["history"] = [h for h in o["history"] if "دفع" not in h.get("action", "") and "استلام" not in h.get("action", "")]
+    pr = o.get("progress") or {}
+    for k in ("total", "accrued", "paid", "pending", "balance"):
+        pr.pop(k, None)
+    return o
 
 
 def _sess_out(s: dict, fl: Flow) -> dict:
@@ -178,6 +206,9 @@ def _c_out(c: dict, sessions: List[dict], fl: Flow, full=False) -> dict:
     out["status_ar"] = C_STATUS.get(c["status"], c["status"])
     for it in out.get("items", []):
         it["status_ar"] = ITEM_STATUS.get(it.get("status", "pending"))
+    for p_ in out.get("payments", []):
+        p_.setdefault("status", "received")
+        p_["status_ar"] = PAY_STATUS.get(p_["status"])
     out["progress"] = _progress(out, sessions, fl)
     if not full:
         out.pop("history", None)
@@ -221,19 +252,33 @@ class SettingsIn(BaseModel):
     default_duration_days: int = 60
     currency: str = "ريال يمني"
     default_items: List[ItemIn] = []
+    semester_weeks: int = 16
+    letterhead_id: str = ""
+
+
+@router.get("/letterheads")
+async def vp_letterheads(u: dict = Depends(get_current_user)):
+    _need(u, Permission.VP_MANAGE_CONTRACTS, Permission.VP_STUDIO)
+    return [{"id": str(x["_id"]), "name": x.get("name", ""), "is_default": bool(x.get("is_default"))}
+            for x in await get_db().letterheads.find({"is_active": {"$ne": False}}, {"name": 1, "is_default": 1}).to_list(200)]
 
 
 @router.get("/settings")
 async def get_settings(u: dict = Depends(get_current_user)):
     if not _staff(u):
         raise HTTPException(status_code=403, detail="غير مصرح")
-    return await _settings(get_db())
+    st = await _settings(get_db())
+    if not _fin(u):
+        st.pop("default_items", None)
+    return st
 
 
 @router.put("/settings")
 async def put_settings(body: SettingsIn, u: dict = Depends(get_current_user)):
     _need(u, Permission.VP_STUDIO, Permission.VP_MANAGE_CONTRACTS)
     data = body.dict()
+    if not _fin(u):
+        data["default_items"] = (await _settings(get_db()))["default_items"]
     for s in data["studios"]:
         s["id"] = s.get("id") or str(ObjectId())
     for i, it in enumerate(data["default_items"]):
@@ -243,6 +288,7 @@ async def put_settings(body: SettingsIn, u: dict = Depends(get_current_user)):
     if sum(1 for it in data["default_items"] if it["kind"] == "recording") > 1:
         raise HTTPException(status_code=400, detail="يُسمح ببند تسجيل مرئي واحد فقط")
     data["max_part_minutes"] = max(5, min(int(data["max_part_minutes"]), 240))
+    data["semester_weeks"] = max(1, min(int(data["semester_weeks"]), 52))
     steps = data["pipeline_steps"] or (await _settings(get_db()))["pipeline_steps"]
     seen = set()
     for x in steps:
@@ -286,7 +332,7 @@ class ContractIn(BaseModel):
     department_name: str = ""
     course_name: str
     weekly_hours: float = 3
-    lectures_required: int
+    semester_weeks: Optional[int] = None
     contract_date: str = ""
     start_date: str
     duration_days: int = 60
@@ -303,8 +349,11 @@ async def _norm_contract(db, body: ContractIn) -> dict:
         raise HTTPException(status_code=400, detail="اختر المعلم من القائمة")
     if not d["course_name"].strip():
         raise HTTPException(status_code=400, detail="اسم المقرر مطلوب")
-    if d["lectures_required"] < 1:
-        raise HTTPException(status_code=400, detail="عدد المحاضرات المرئية المطلوبة يجب أن يكون 1 على الأقل")
+    if d["weekly_hours"] <= 0:
+        raise HTTPException(status_code=400, detail="الساعات الأسبوعية للمادة مطلوبة")
+    d["semester_weeks"] = int(d["semester_weeks"] or (await _settings(db))["semester_weeks"])
+    d["course_hours"] = round(d["weekly_hours"] * d["semester_weeks"], 2)
+    d["required_hours"] = round(d["course_hours"] * 2 / 3, 2)
     try:
         start = datetime.fromisoformat(d["start_date"]).date()
     except Exception:
@@ -345,13 +394,18 @@ async def list_contracts(status: str = "", faculty_id: str = "", department_id: 
     fl = await _flow(db)
     allS = await _sessions(db, {"contract_id": {"$in": ids}}, fl)
     items = [_c_out(c, [s for s in allS if s["contract_id"] == str(c["_id"])], fl) for c in cs]
+    fin = _fin(u)
     st = await _settings(db)
     lim = (_now() - timedelta(days=st["stall_days"])).isoformat()
     live = [c for c in items if c["status"] in ("issued", "completed")]
     kpis = {"active": sum(1 for c in items if c["status"] == "issued"), "late": sum(1 for c in items if c["status"] == "issued" and (c["progress"]["days_left"] or 0) < 0),
             "stalled": sum(1 for s in allS if (s.get("stalled") and s["status"] not in ("rejected", "cancelled")) or (s["status"] in fl.busy and s["status"] != fl.last and s.get("updated_at", "") < lim)),
-            "accrued": sum(c["progress"]["accrued"] for c in live), "paid": sum(c["progress"]["paid"] for c in live)}
-    return {"items": items, "kpis": kpis}
+            "accrued": sum(c["progress"]["accrued"] for c in live), "paid": sum(c["progress"]["paid"] for c in live),
+            "pending_teacher": sum(1 for c in items if c["status"] in ("sent", "returned", "teacher_accepted"))}
+    if not fin:
+        items = [_strip_money(c) for c in items]
+        kpis.pop("accrued"); kpis.pop("paid")
+    return {"items": items, "kpis": kpis, "can_finance": fin}
 
 
 @router.post("/contracts")
@@ -372,7 +426,11 @@ async def get_contract(cid: str, u: dict = Depends(get_current_user)):
     db = get_db()
     c = await _contract(db, cid, u)
     fl = await _flow(db)
-    return _c_out(c, await _sessions(db, {"contract_id": cid}, fl), fl, full=True)
+    out = _c_out(c, await _sessions(db, {"contract_id": cid}, fl), fl, full=True)
+    if _staff(u) and not _fin(u) and c["teacher_id"] not in await _my_tids(db, u):
+        out = _strip_money(out)
+    out["app_visible"] = await _app_visible(db, c["teacher_id"])
+    return out
 
 
 @router.put("/contracts/{cid}")
@@ -380,15 +438,17 @@ async def update_contract(cid: str, body: ContractIn, u: dict = Depends(get_curr
     _need(u, Permission.VP_MANAGE_CONTRACTS)
     db = get_db()
     c = await _contract(db, cid, u, staff_only=True)
-    if c["status"] in ("completed", "terminated"):
-        raise HTTPException(status_code=400, detail="لا يمكن تعديل عقد منتهٍ أو ملغى")
+    if c["status"] in ("completed", "terminated", "sent", "teacher_accepted"):
+        raise HTTPException(status_code=400, detail="لا يمكن التعديل والعقد بانتظار المدرس/التعميد أو منتهٍ — استرجعه أولاً")
     d = await _norm_contract(db, body)
     _guard_scope(u, d)
     old = {it["key"]: it for it in c.get("items", [])}
     for it in d["items"]:
         if it["key"] in old:
-            it.update({k: old[it["key"]][k] for k in ("status", "delivered_at", "accepted_at", "note") if k in old[it["key"]]})
-    note = "تعديل بيانات العقد" if c["status"] == "draft" else "ملحق تعديل على عقد ساري"
+            it.update({k: old[it["key"]][k] for k in ("status", "delivered_at", "accepted_at", "note", "accepted_amount") if k in old[it["key"]]})
+    note = "ملحق تعديل على عقد ساري" if c["status"] == "issued" else "تعديل بيانات العقد"
+    if c["status"] == "returned":
+        d["status"] = "draft"
     await db.vp_contracts.update_one({"_id": c["_id"]}, {"$set": d, "$push": {"history": _hist(note, u)}})
     return {"ok": True}
 
@@ -403,8 +463,9 @@ async def contract_status(cid: str, body: ActIn, u: dict = Depends(get_current_u
     _need(u, Permission.VP_MANAGE_CONTRACTS)
     db = get_db()
     c = await _contract(db, cid, u, staff_only=True)
-    flow = {"issue": ({"draft"}, "issued", "اعتماد وإصدار العقد"), "complete": ({"issued"}, "completed", "إنهاء العقد (مكتمل)"),
-            "terminate": ({"draft", "issued"}, "terminated", "إلغاء العقد"), "reopen": ({"completed", "terminated"}, "issued", "إعادة فتح العقد")}
+    flow = {"send": ({"draft", "returned"}, "sent", "إرسال العقد للمدرس للموافقة"), "recall": ({"sent", "teacher_accepted"}, "draft", "استرجاع العقد للتعديل"),
+            "issue": ({"teacher_accepted"}, "issued", "تعميد العقد — أصبح ساري وملزم"), "complete": ({"issued"}, "completed", "إنهاء العقد (مكتمل)"),
+            "terminate": ({"draft", "sent", "returned", "teacher_accepted", "issued"}, "terminated", "إلغاء العقد"), "reopen": ({"completed", "terminated"}, "issued", "إعادة فتح العقد")}
     if body.action not in flow:
         raise HTTPException(status_code=400, detail="إجراء غير معروف")
     frm, to, label = flow[body.action]
@@ -415,8 +476,10 @@ async def contract_status(cid: str, body: ActIn, u: dict = Depends(get_current_u
     sets = {"status": to}
     if body.action == "issue":
         sets["issued_at"] = _now().isoformat()
+    if body.action in ("send", "recall"):
+        sets["teacher_accepted_at"] = None
     await db.vp_contracts.update_one({"_id": c["_id"]}, {"$set": sets, "$push": {"history": _hist(label, u, body.note)}})
-    if body.action in ("issue", "terminate"):
+    if body.action in ("send", "issue", "terminate"):
         await notify_users(db, await _teacher_user_ids(db, c["teacher_id"]), "🎬 عقد الإنتاج المرئي",
                            f"{label}: {c['course_name']} ({c['ref_no']})", "video_production", {"type": "video_contract", "id": cid, "route": "/video-production"})
     return {"ok": True, "status": to}
@@ -425,6 +488,7 @@ async def contract_status(cid: str, body: ActIn, u: dict = Depends(get_current_u
 class ItemAct(BaseModel):
     status: str
     note: str = ""
+    accepted_amount: Optional[float] = None
 
 
 @router.put("/contracts/{cid}/items/{key}")
@@ -435,15 +499,17 @@ async def item_status(cid: str, key: str, body: ItemAct, u: dict = Depends(get_c
     if c["status"] != "issued":
         raise HTTPException(status_code=400, detail="تعديل البنود متاح للعقود السارية فقط")
     it = next((i for i in c.get("items", []) if i["key"] == key), None)
-    if not it or it["kind"] == "recording":
-        raise HTTPException(status_code=400, detail="بند التسجيل المرئي يُحتسب تلقائياً من المحاضرات المكتملة")
+    if not it:
+        raise HTTPException(status_code=404, detail="البند غير موجود")
     if body.status not in ITEM_STATUS:
         raise HTTPException(status_code=400, detail="حالة غير صالحة")
+    if body.status == "partial" and not (0 < (body.accepted_amount or 0) < it["amount"]):
+        raise HTTPException(status_code=400, detail=f"أدخل المبلغ المقبول جزئياً (أقل من {it['amount']:,.0f})")
     now = _now().isoformat()
-    upd = {"items.$.status": body.status, "items.$.note": body.note}
+    upd = {"items.$.status": body.status, "items.$.note": body.note, "items.$.accepted_amount": body.accepted_amount if body.status == "partial" else None}
     if body.status == "delivered":
         upd["items.$.delivered_at"] = now
-    if body.status == "accepted":
+    if body.status in ("accepted", "partial"):
         upd["items.$.accepted_at"] = now
     await db.vp_contracts.update_one({"_id": c["_id"], "items.key": key},
                                      {"$set": upd, "$push": {"history": _hist(f"{it['name']}: {ITEM_STATUS[body.status]}", u, body.note)}})
@@ -462,8 +528,8 @@ async def add_payment(cid: str, body: PayIn, u: dict = Depends(get_current_user)
     _need(u, Permission.VP_PAYMENTS)
     db = get_db()
     c = await _contract(db, cid, u, staff_only=True)
-    if c["status"] == "draft":
-        raise HTTPException(status_code=400, detail="لا يُصرف على عقد غير معتمد")
+    if c["status"] not in ("issued", "completed", "terminated"):
+        raise HTTPException(status_code=400, detail="لا يُصرف على عقد غير معمّد")
     if c["status"] == "terminated" and not body.note.strip():
         raise HTTPException(status_code=400, detail="العقد ملغى — الصرف للتسوية فقط مع ذكر ملاحظة التسوية")
     fl = await _flow(db)
@@ -472,11 +538,12 @@ async def add_payment(cid: str, body: PayIn, u: dict = Depends(get_current_user)
         raise HTTPException(status_code=400, detail="المبلغ غير صالح")
     if body.amount > pr["balance"] + 0.01:
         raise HTTPException(status_code=400, detail=f"المبلغ يتجاوز المستحق غير المصروف ({pr['balance']:,.0f})")
-    p = {"id": str(ObjectId()), "amount": body.amount, "date": body.date or _now().date().isoformat(), "stage": body.stage, "note": body.note,
+    p = {"id": str(ObjectId()), "status": "pending", "amount": body.amount, "date": body.date or _now().date().isoformat(), "stage": body.stage, "note": body.note,
          "by": u.get("full_name") or u.get("username"), "at": _now().isoformat()}
     await db.vp_contracts.update_one({"_id": c["_id"]}, {"$push": {"payments": p, "history": _hist(f"صرف دفعة {body.amount:,.0f}", u, body.stage or body.note)}})
-    await notify_users(db, await _teacher_user_ids(db, c["teacher_id"]), "💰 صرف دفعة", f"تم صرف {body.amount:,.0f} من مستحقات عقد {c['course_name']}",
-                       "video_production", {"type": "video_contract", "id": cid, "route": "/video-production"})
+    await notify_users(db, await _teacher_user_ids(db, c["teacher_id"]), "💰 دفعة بانتظار تأكيد استلامك",
+                       f"صُرف لك {body.amount:,.0f} من مستحقات عقد {c['course_name']} — أكّد الاستلام من التطبيق", "video_production",
+                       {"type": "video_payment", "id": cid, "payment_id": p["id"], "route": "/video-production"})
     return p
 
 
@@ -485,8 +552,11 @@ async def del_payment(cid: str, pid: str, u: dict = Depends(get_current_user)):
     _need(u, Permission.VP_PAYMENTS)
     db = get_db()
     c = await _contract(db, cid, u, staff_only=True)
-    if not any(p["id"] == pid for p in c.get("payments", [])):
+    pay = next((p for p in c.get("payments", []) if p["id"] == pid), None)
+    if not pay:
         raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+    if pay.get("status", "received") == "received":
+        raise HTTPException(status_code=400, detail="لا يمكن حذف دفعة أكّد المدرس استلامها (سند استلام)")
     await db.vp_contracts.update_one({"_id": c["_id"]}, {"$pull": {"payments": {"id": pid}}, "$push": {"history": _hist("حذف دفعة", u)}})
     return {"ok": True}
 
@@ -496,8 +566,50 @@ async def contract_pdf(cid: str, u: dict = Depends(get_current_user)):
     from services.vp_pdf import contract_pdf as build
     db = get_db()
     c = await _contract(db, cid, u)
-    pdf = build(c, await _settings(db))
+    if _staff(u) and not _fin(u) and c["teacher_id"] not in await _my_tids(db, u):
+        raise HTTPException(status_code=403, detail="العقد يتضمن بيانات مالية — غير مصرح")
+    st = await _settings(db)
+    pdf = build(c, st, await _letterhead(db, st))
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{c["ref_no"]}.pdf"'})
+
+
+async def _letterhead(db, st: dict) -> dict:
+    lid = st.get("letterhead_id")
+    d = await db.letterheads.find_one({"_id": ObjectId(lid)}) if lid and ObjectId.is_valid(lid) else None
+    return d or await db.letterheads.find_one({"is_default": True}) or {}
+
+
+@router.get("/contracts/{cid}/statement")
+async def statement_pdf(cid: str, u: dict = Depends(get_current_user)):
+    from services.vp_pdf import statement_pdf as build
+    db = get_db()
+    c = await _contract(db, cid, u)
+    if not (_fin(u) or c["teacher_id"] in await _my_tids(db, u)):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    fl = await _flow(db)
+    out = _c_out(c, await _sessions(db, {"contract_id": cid}, fl), fl, full=True)
+    st = await _settings(db)
+    pdf = build(out, st, await _letterhead(db, st))
+    return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="statement-{c["ref_no"]}.pdf"'})
+
+
+class FlagIn(BaseModel):
+    app_visible: bool
+
+
+@router.get("/teachers/{tid}/flags")
+async def get_flags(tid: str, u: dict = Depends(get_current_user)):
+    _need(u, Permission.VP_MANAGE_CONTRACTS)
+    return {"app_visible": await _app_visible(get_db(), tid)}
+
+
+@router.put("/teachers/{tid}/flags")
+async def put_flags(tid: str, body: FlagIn, u: dict = Depends(get_current_user)):
+    _need(u, Permission.VP_MANAGE_CONTRACTS)
+    db = get_db()
+    await db.vp_teacher_flags.update_one({"_id": tid}, {"$set": {"app_visible": body.app_visible, "by": u["id"], "at": _now().isoformat()}}, upsert=True)
+    await db.vp_contracts.update_many({"teacher_id": tid}, {"$push": {"history": _hist("إظهار التبويب في تطبيق المدرس" if body.app_visible else "إخفاء التبويب من تطبيق المدرس", u)}})
+    return {"ok": True}
 
 
 # ---------------- جلسات التسجيل (نموذج تسجيل محاضرة) ----------------
@@ -577,8 +689,8 @@ async def _create_session(db, body: SessionIn, u: dict, c: dict, by_teacher: boo
     st = await _settings(db)
     if c["status"] != "issued":
         raise HTTPException(status_code=400, detail="الحجز متاح فقط للعقود المعتمدة السارية")
-    if not (1 <= body.lecture_no <= int(c.get("lectures_required") or 0)):
-        raise HTTPException(status_code=400, detail=f"رقم المحاضرة يجب أن يكون بين 1 و{c.get('lectures_required')}")
+    if not (1 <= body.lecture_no <= 500):
+        raise HTTPException(status_code=400, detail="رقم المحاضرة غير صالح")
     if not body.lecture_title.strip():
         raise HTTPException(status_code=400, detail="عنوان المحاضرة مطلوب")
     if not (1 <= body.part_no <= max(1, body.parts_count)):
@@ -776,19 +888,24 @@ async def session_pdf(sid: str, u: dict = Depends(get_current_user)):
     db = get_db()
     s = await _session(db, sid, u, staff_only=False)
     st = await _settings(db)
-    pdf = build(s, next((x["name"] for x in st["studios"] if x["id"] == s.get("studio_id")), ""), st["max_part_minutes"])
+    pdf = build(s, next((x["name"] for x in st["studios"] if x["id"] == s.get("studio_id")), ""), st["max_part_minutes"], await _letterhead(db, st))
     return Response(pdf, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{s["ref_no"]}.pdf"'})
 
 
 # ---------------- واجهة المعلم (تطبيق المدرس) ----------------
+async def _visible_tids(db, u) -> List[str]:
+    return [t for t in await _my_tids(db, u) if await _app_visible(db, t)]
+
+
 @router.get("/my/contracts")
 async def my_contracts(u: dict = Depends(get_current_user)):
+    """التبويب يظهر في تطبيق المدرس فقط إذا أعاد عنصراً واحداً على الأقل (عقد مُرسل له + الإظهار مفعّل لهذا المدرس)"""
     db = get_db()
-    tids = await _my_tids(db, u)
-    cs = await db.vp_contracts.find({"teacher_id": {"$in": tids}, "status": {"$ne": "draft"}}).sort("created_at", -1).to_list(100)
+    tids = await _visible_tids(db, u)
+    cs = await db.vp_contracts.find({"teacher_id": {"$in": tids}, "status": {"$in": list(TEACHER_VISIBLE)}}).sort("created_at", -1).to_list(100) if tids else []
+    fl = await _flow(db)
     out = []
     for c in cs:
-        fl = await _flow(db)
         o = _c_out(c, await _sessions(db, {"contract_id": str(c["_id"])}, fl), fl, full=True)
         o.pop("history", None)
         out.append(o)
@@ -798,31 +915,87 @@ async def my_contracts(u: dict = Depends(get_current_user)):
                                         "studios": [s for s in st["studios"] if s.get("is_active", True)], "currency": st["currency"]}}
 
 
+async def _my_contract(db, cid: str, u) -> dict:
+    c = await db.vp_contracts.find_one({"_id": _oid(cid)})
+    if not c or c["teacher_id"] not in await _visible_tids(db, u) or c["status"] not in TEACHER_VISIBLE:
+        raise HTTPException(status_code=404, detail="العقد غير موجود")
+    return c
+
+
+async def _notify_admin(db, c: dict, title: str, msg: str):
+    ids = [c.get("created_by")] + [h.get("by_id") for h in c.get("history", []) if h.get("action", "").startswith(("إرسال", "تعميد"))]
+    await notify_users(db, list({x for x in ids if x}), title, msg, "video_production", {"type": "video_contract", "id": str(c["_id"]), "route": "/video-production"})
+
+
 @router.post("/my/contracts/{cid}/accept")
 async def my_accept(cid: str, u: dict = Depends(get_current_user)):
     db = get_db()
-    c = await _contract(db, cid, u)
-    if c["teacher_id"] not in await _my_tids(db, u):
-        raise HTTPException(status_code=403, detail="غير مصرح")
-    if c["status"] != "issued":
-        raise HTTPException(status_code=400, detail="العقد غير ساري")
-    if not c.get("teacher_accepted_at"):
-        await db.vp_contracts.update_one({"_id": c["_id"]}, {"$set": {"teacher_accepted_at": _now().isoformat()}, "$push": {"history": _hist("موافقة المعلم على البنود", u)}})
+    c = await _my_contract(db, cid, u)
+    if c["status"] != "sent":
+        raise HTTPException(status_code=400, detail="العقد ليس بانتظار موافقتك")
+    await db.vp_contracts.update_one({"_id": c["_id"]}, {"$set": {"status": "teacher_accepted", "teacher_accepted_at": _now().isoformat()},
+                                                        "$push": {"history": _hist("موافقة المدرس على العقد وبنوده", u)}})
+    await _notify_admin(db, c, "🎬 وافق المدرس على العقد", f"{c['teacher_name']} وافق على عقد {c['course_name']} ({c['ref_no']}) — بانتظار التعميد")
     return {"ok": True}
+
+
+class NoteIn(BaseModel):
+    note: str = ""
+
+
+@router.post("/my/contracts/{cid}/return")
+async def my_return(cid: str, body: NoteIn, u: dict = Depends(get_current_user)):
+    db = get_db()
+    c = await _my_contract(db, cid, u)
+    if c["status"] != "sent":
+        raise HTTPException(status_code=400, detail="العقد ليس بانتظار موافقتك")
+    if not body.note.strip():
+        raise HTTPException(status_code=400, detail="اكتب ملاحظتك على العقد")
+    await db.vp_contracts.update_one({"_id": c["_id"]}, {"$set": {"status": "returned", "teacher_note": body.note.strip()},
+                                                        "$push": {"history": _hist("أعاد المدرس العقد بملاحظة", u, body.note.strip())}})
+    await _notify_admin(db, c, "🎬 ملاحظة المدرس على العقد", f"{c['teacher_name']} أعاد عقد {c['ref_no']}: {body.note.strip()}")
+    return {"ok": True}
+
+
+class PayAnswer(BaseModel):
+    action: str
+    note: str = ""
+
+
+@router.post("/my/contracts/{cid}/payments/{pid}")
+async def my_payment_answer(cid: str, pid: str, body: PayAnswer, u: dict = Depends(get_current_user)):
+    """تأكيد المدرس لاستلام الدفعة = سند استلام (يدخل كشف الحساب)، أو الاعتراض بملاحظة"""
+    db = get_db()
+    c = await _my_contract(db, cid, u)
+    pay = next((p for p in c.get("payments", []) if p["id"] == pid), None)
+    if not pay or pay.get("status") not in ("pending", "disputed"):
+        raise HTTPException(status_code=400, detail="الدفعة غير موجودة أو مؤكدة مسبقاً")
+    if body.action == "confirm":
+        rno = await _next_ref(db, "VR", 5)
+        sets = {"payments.$.status": "received", "payments.$.receipt_no": rno, "payments.$.received_at": _now().isoformat(), "payments.$.teacher_note": body.note}
+        label, msg = f"تأكيد استلام دفعة {pay['amount']:,.0f} — سند {rno}", f"أكّد {c['teacher_name']} استلام {pay['amount']:,.0f} (سند {rno})"
+    elif body.action == "dispute":
+        if not body.note.strip():
+            raise HTTPException(status_code=400, detail="اكتب سبب الاعتراض")
+        sets = {"payments.$.status": "disputed", "payments.$.teacher_note": body.note.strip()}
+        label, msg = f"اعتراض على دفعة {pay['amount']:,.0f}", f"{c['teacher_name']} اعترض على دفعة {pay['amount']:,.0f}: {body.note.strip()}"
+    else:
+        raise HTTPException(status_code=400, detail="إجراء غير معروف")
+    await db.vp_contracts.update_one({"_id": c["_id"], "payments.id": pid}, {"$set": sets, "$push": {"history": _hist(label, u, body.note)}})
+    await _notify_admin(db, c, "💰 الدفعات — الإنتاج المرئي", msg)
+    return {"ok": True, **({"receipt_no": sets.get("payments.$.receipt_no")} if body.action == "confirm" else {})}
 
 
 @router.get("/my/sessions")
 async def my_sessions(u: dict = Depends(get_current_user)):
     db = get_db()
-    return {"items": await _sessions(db, {"teacher_id": {"$in": await _my_tids(db, u)}})}
+    return {"items": await _sessions(db, {"teacher_id": {"$in": await _visible_tids(db, u)}})}
 
 
 @router.post("/my/sessions")
 async def my_create_session(body: SessionIn, u: dict = Depends(get_current_user)):
     db = get_db()
-    c = await _contract(db, body.contract_id, u)
-    if c["teacher_id"] not in await _my_tids(db, u):
-        raise HTTPException(status_code=403, detail="غير مصرح")
+    c = await _my_contract(db, body.contract_id, u)
     return await _create_session(db, body, u, c, by_teacher=True)
 
 
