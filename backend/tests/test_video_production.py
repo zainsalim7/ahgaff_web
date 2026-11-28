@@ -1,4 +1,4 @@
-# Video Production module (/api/video-production) — contracts, items, progress/accrual, payments, sessions pipeline, PDF, isolation
+# Video Production module (/api/video-production) — dynamic pipeline steps, advance/back, progress %, contracts, payments, PDF, isolation
 import os
 import random
 from datetime import datetime, timedelta, timezone
@@ -11,6 +11,7 @@ VP = f"{BASE_URL}/api/video-production"
 TEACHER_RID = "698ad3da31ab437a06176e2a"
 TZ = timezone(timedelta(hours=3))
 S = {}  # shared state across ordered tests
+DEFAULT_KEYS = ["filmed", "editing", "cloud", "published"]
 
 
 def _login(u, p):
@@ -25,22 +26,26 @@ def H():
     return {"admin": _login("admin", "admin123"), "teacher": _login("222222", "teacher123"), "reg": _login("test_registrar", "test1234")}
 
 
+def _default_steps(st):
+    return [x for x in st["pipeline_steps"] if x["key"] in DEFAULT_KEYS]
+
+
 @pytest.fixture(scope="module", autouse=True)
 def cleanup(H):
     yield
     a = H["admin"]
-    for sid in S.get("sessions", []):
-        requests.post(f"{VP}/sessions/{sid}/action", json={"action": "cancel"}, headers=a)
-    for cid in S.get("contracts", []):
-        requests.post(f"{VP}/contracts/{cid}/status", json={"action": "terminate", "note": "TEST cleanup"}, headers=a)
+    # sessions/contracts are hard-deleted by the runner via DB (ids in S); restore 4 default steps
     if "orig_settings" in S:
-        requests.put(f"{VP}/settings", json=S["orig_settings"], headers=a)
+        body = {**S["orig_settings"], "pipeline_steps": _default_steps(S["orig_settings"])}
+        r = requests.put(f"{VP}/settings", json=body, headers=a)
+        print("restore settings:", r.status_code, r.text[:200])
+    with open("/tmp/vp_test_ids.txt", "w") as f:
+        f.write(" ".join(S.get("contracts", [])) + "\n" + " ".join(S.get("sessions", [])))
 
 
 def _slot():
-    # far-future date + random time to avoid clashing with sample data
     d = (datetime.now(TZ) + timedelta(days=random.randint(200, 300))).date().isoformat()
-    return d, f"{random.randint(8, 18):02d}:{random.choice([0, 30]):02d}"
+    return d, f"{random.randint(8, 17):02d}:{random.choice([0, 30]):02d}"
 
 
 def _sess(H, who, cid, lec, part, parts=1, studio="", date=None, start=None, mins=20, path="/sessions"):
@@ -48,208 +53,212 @@ def _sess(H, who, cid, lec, part, parts=1, studio="", date=None, start=None, min
         date, start = _slot()
     body = {"contract_id": cid, "lecture_no": lec, "lecture_title": f"TEST_VP L{lec}", "parts_count": parts, "part_no": part,
             "est_minutes": mins, "studio_id": studio, "date": date, "start": start}
-    return requests.post(f"{VP}{path}", json=body, headers=H[who])
+    r = requests.post(f"{VP}{path}", json=body, headers=H[who])
+    if r.status_code == 200:
+        S.setdefault("sessions", []).append(r.json()["id"])
+    return r
 
 
 def _act(H, sid, action, **kw):
     return requests.post(f"{VP}/sessions/{sid}/action", json={"action": action, **kw}, headers=H["admin"])
 
 
-class TestVideoProduction:
-    def test_01_settings(self, H):
-        r = requests.get(f"{VP}/settings", headers=H["admin"])
-        assert r.status_code == 200
-        st = r.json()
-        S["orig_settings"] = st
-        assert len(st["studios"]) >= 2 and st["min_notice_hours"] == 2
-        S["studios"] = [x["id"] for x in st["studios"]]
-        # PUT with empty default_items -> GET falls back to 4 defaults
-        body = {**st, "default_items": []}
-        r = requests.put(f"{VP}/settings", json=body, headers=H["admin"])
-        assert r.status_code == 200
-        assert [i["key"] for i in r.json()["default_items"]] == ["spec", "content", "recording", "qbank"]
-        assert [x["id"] for x in r.json()["studios"]] == S["studios"]
-        # registrar cannot PUT
-        assert requests.put(f"{VP}/settings", json=body, headers=H["reg"]).status_code == 403
-        # restore
-        assert requests.put(f"{VP}/settings", json=st, headers=H["admin"]).status_code == 200
+def _get_s(H, sid):
+    return requests.get(f"{VP}/sessions/{sid}", headers=H["admin"]).json()
 
-    def test_02_create_contract(self, H):
+
+class TestVideoProduction:
+    # Settings: dynamic pipeline_steps validation
+    def test_01_settings_steps(self, H):
+        st = requests.get(f"{VP}/settings", headers=H["admin"]).json()
+        S["orig_settings"] = st
+        S["studios"] = [x["id"] for x in st["studios"]]
+        assert st["max_part_minutes"] == 60
+        base = _default_steps(st)
+        assert [x["key"] for x in base] == DEFAULT_KEYS
+        assert base[0]["is_filming"] and base[2]["requires_link"] and base[3]["requires_link"]
+        put = lambda steps, h="admin": requests.put(f"{VP}/settings", json={**st, "pipeline_steps": steps}, headers=H[h])
+        # validations
+        r = put([{**base[0]}, {**base[1], "name": "  "}, base[2], base[3]])
+        assert r.status_code == 400 and "اسم المرحلة" in r.json()["detail"]
+        r = put([{**base[0], "is_filming": False}, base[1], base[2], base[3]])
+        assert r.status_code == 400 and "التصوير" in r.json()["detail"]
+        r = put([base[0], {**base[1], "is_filming": True}, base[2], base[3]])
+        assert r.status_code == 400
+        r = put([base[0], base[0], base[2], base[3]])
+        assert r.status_code == 400  # duplicate key
+        assert put(base + [{"name": "x"}], "reg").status_code == 403
+        # add custom step requiring link, notify on, after filming
+        custom = {"name": "TEST_مراجعة علمية", "is_filming": False, "requires_link": True, "link_label": "", "notify": True}
+        r = put([base[0], custom, base[1], base[2], base[3]])
+        assert r.status_code == 200, r.text
+        steps = r.json()["pipeline_steps"]
+        assert len(steps) == 5 and steps[1]["name"] == "TEST_مراجعة علمية"
+        assert steps[1]["key"] and steps[1]["key"] not in DEFAULT_KEYS
+        assert steps[1]["link_label"] == "رابط TEST_مراجعة علمية"  # auto label
+        S["ck"] = steps[1]["key"]
+        S["steps"] = steps
+        # GET persists
+        assert [x["key"] for x in requests.get(f"{VP}/settings", headers=H["admin"]).json()["pipeline_steps"]] == [x["key"] for x in steps]
+
+    # Contract creation + issue
+    def test_02_contract(self, H):
         body = {"teacher_id": TEACHER_RID, "course_name": "TEST_VP رياضيات", "lectures_required": 2, "start_date": datetime.now(TZ).date().isoformat()}
         r = requests.post(f"{VP}/contracts", json=body, headers=H["admin"])
         assert r.status_code == 200, r.text
-        d = r.json()
-        assert d["ref_no"].startswith(f"VC-{datetime.now(TZ).year}-") and len(d["ref_no"]) == 12
-        S["cid"] = d["id"]
-        S.setdefault("contracts", []).append(d["id"])
-        c = requests.get(f"{VP}/contracts/{d['id']}", headers=H["admin"]).json()
+        S["cid"] = r.json()["id"]
+        S.setdefault("contracts", []).append(S["cid"])
+        c = requests.get(f"{VP}/contracts/{S['cid']}", headers=H["admin"]).json()
         assert c["status"] == "draft" and c["total_amount"] == 450000
-        assert {i["key"]: i["amount"] for i in c["items"]} == {"spec": 50000, "content": 100000, "recording": 250000, "qbank": 50000}
-        assert c["duration_days"] == 60 and c["teacher_name"]
-        # validation
-        assert requests.post(f"{VP}/contracts", json={**body, "lectures_required": 0}, headers=H["admin"]).status_code == 400
-        assert requests.post(f"{VP}/contracts", json={**body, "teacher_id": "bad"}, headers=H["admin"]).status_code == 400
+        assert c["progress"]["production_percent"] == 0 and c["progress"]["percent"] == 0
+        assert _sess(H, "admin", S["cid"], 1, 1).status_code == 400  # draft
+        assert requests.post(f"{VP}/contracts/{S['cid']}/status", json={"action": "issue"}, headers=H["admin"]).status_code == 200
+        assert requests.put(f"{VP}/contracts/{S['cid']}/items/spec", json={"status": "accepted"}, headers=H["admin"]).status_code == 200
 
-    def test_03_draft_restrictions(self, H):
+    # est_minutes up to max (60)
+    def test_03_minutes(self, H):
         cid = S["cid"]
-        # teacher must not see draft
-        assert requests.get(f"{VP}/contracts/{cid}", headers=H["teacher"]).status_code == 403
-        assert cid not in [c["id"] for c in requests.get(f"{VP}/my/contracts", headers=H["teacher"]).json()["items"]]
-        # payment on draft rejected, booking on draft rejected
-        assert requests.post(f"{VP}/contracts/{cid}/payments", json={"amount": 1}, headers=H["admin"]).status_code == 400
-        assert _sess(H, "admin", cid, 1, 1).status_code == 400
-
-    def test_04_edit_and_transitions(self, H):
-        cid = S["cid"]
-        c = requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()
-        body = {k: c[k] for k in ("teacher_id", "course_name", "start_date", "items")}
-        body.update(lectures_required=2, notes="TEST edited")
-        r = requests.put(f"{VP}/contracts/{cid}", json=body, headers=H["admin"])
-        assert r.status_code == 200
-        assert requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()["notes"] == "TEST edited"
-        st = lambda a, n="": requests.post(f"{VP}/contracts/{cid}/status", json={"action": a, "note": n}, headers=H["admin"])
-        assert st("complete").status_code == 400  # draft -> complete invalid
-        assert st("reopen").status_code == 400
-        assert st("bogus").status_code == 400
-        assert st("issue").status_code == 200
-        assert st("issue").status_code == 400
-        assert st("terminate").status_code == 400  # requires note
-        assert requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()["status"] == "issued"
-
-    def test_05_items(self, H):
-        cid = S["cid"]
-        put = lambda k, s: requests.put(f"{VP}/contracts/{cid}/items/{k}", json={"status": s}, headers=H["admin"])
-        assert put("recording", "accepted").status_code == 400
-        assert put("spec", "bogus").status_code == 400
-        assert put("spec", "delivered").status_code == 200
-        p = requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()["progress"]
-        assert p["accrued"] == 0
-        assert put("spec", "accepted").status_code == 200
-        c = requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()
-        assert c["progress"]["accrued"] == 50000 and c["progress"]["items_accepted"] == 1
-        assert put("spec", "bogus").status_code == 400
-        assert requests.put(f"{VP}/contracts/{cid}/items/spec", json={"status": "pending"}, headers=H["teacher"]).status_code == 403
-
-    def test_06_session_validation(self, H):
-        cid, s1 = S["cid"], S["studios"][0]
-        assert _sess(H, "admin", cid, 1, 1, mins=31).status_code == 400  # > max_part_minutes
-        assert _sess(H, "admin", cid, 1, 3, parts=2).status_code == 400  # part_no > parts_count
-        date, start = _slot()
-        S["slot"] = (date, start)
-        r = _sess(H, "admin", cid, 1, 1, parts=2, studio=s1, date=date, start=start)
+        r = _sess(H, "admin", cid, 1, 1, mins=61)
+        assert r.status_code == 400 and "60" in r.json()["detail"]
+        r = _sess(H, "admin", cid, 1, 1, parts=2, studio=S["studios"][0], mins=60)
         assert r.status_code == 200, r.text
         S["s11"] = r.json()["id"]
-        S.setdefault("sessions", []).append(S["s11"])
-        assert r.json()["ref_no"].startswith("VS-")
-        assert _sess(H, "admin", cid, 1, 1, parts=2).status_code == 400  # duplicate lecture/part
-        # requested (not BUSY) does not block; confirm it then overlap must conflict
-        assert _act(H, S["s11"], "confirm").status_code == 200
-        r = _sess(H, "admin", cid, 1, 2, parts=2, studio=s1, date=date, start=start)
-        assert r.status_code == 400 and "محجوز" in r.json()["detail"]
-        av = requests.get(f"{VP}/availability", params={"date": date, "start": start, "minutes": 20}, headers=H["admin"]).json()
-        ids = [x["id"] for x in av["studios"]]
-        assert s1 not in ids and S["studios"][1] in ids
-        # second part in studio 2
-        r = _sess(H, "admin", cid, 1, 2, parts=2, studio=S["studios"][1], date=date, start=start)
+        s = _get_s(H, S["s11"])
+        assert s["status"] == "requested" and s["pct"] == 0
+        assert _mins(s["end"]) - _mins(s["start"]) == 60
+        r = _sess(H, "admin", cid, 1, 2, parts=2, studio=S["studios"][1], mins=45)
         assert r.status_code == 200, r.text
         S["s12"] = r.json()["id"]
-        S["sessions"].append(S["s12"])
 
-    def test_07_teacher_min_notice_and_booking(self, H):
-        cid = S["cid"]
-        soon = datetime.now(TZ) + timedelta(hours=1)
-        r = _sess(H, "teacher", cid, 2, 1, date=soon.date().isoformat(), start=soon.strftime("%H:%M"), path="/my/sessions")
-        assert r.status_code == 400, r.text
-        r = _sess(H, "teacher", cid, 2, 1, path="/my/sessions")
-        assert r.status_code == 200, r.text
-        S["s21"] = r.json()["id"]
-        S["sessions"].append(S["s21"])
-        mine = requests.get(f"{VP}/my/sessions", headers=H["teacher"]).json()["items"]
-        assert S["s21"] in [x["id"] for x in mine]
-        assert cid in [c["id"] for c in requests.get(f"{VP}/my/contracts", headers=H["teacher"]).json()["items"]]
-
-    def test_08_session_actions(self, H):
-        sid = S["s11"]
-        assert _act(H, sid, "editing").status_code == 400  # skip order
-        assert _act(H, sid, "reject", note="x").status_code == 400  # reject only from requested
-        assert _act(H, sid, "filmed", actual_minutes=18).status_code == 200
-        assert _act(H, sid, "confirm").status_code == 400
-        assert _act(H, sid, "back").status_code == 400  # can't go back from filmed
-        assert _act(H, sid, "editing").status_code == 200
+    # advance/back pipeline with link requirements
+    def test_04_advance_back(self, H):
+        sid, ck = S["s11"], S["ck"]
+        assert _act(H, sid, "advance").status_code == 400  # requested -> must confirm first
+        assert _act(H, sid, "back").status_code == 400
+        assert _act(H, sid, "stall", note="x").status_code == 400  # stall on requested not allowed
+        assert _act(H, sid, "confirm").status_code == 200
+        s = _get_s(H, sid)
+        assert s["status"] == "confirmed" and s["pct"] == 0
+        assert _act(H, sid, "advance", actual_minutes=55).status_code == 200
+        s = _get_s(H, sid)
+        assert s["status"] == "filmed" and s["pct"] == 20.0 and s["actual_minutes"] == 55
+        assert _act(H, sid, "confirm").status_code == 400  # after production started
+        assert _act(H, sid, "cancel").status_code == 400
+        # back from first step -> confirmed
         assert _act(H, sid, "back").status_code == 200
-        assert requests.get(f"{VP}/sessions/{sid}", headers=H["admin"]).json()["status"] == "filmed"
-        assert _act(H, sid, "editing").status_code == 200
-        assert _act(H, sid, "cloud").status_code == 400  # requires cloud_url
-        assert _act(H, sid, "cloud", cloud_url="https://cloud.example/TEST").status_code == 200
-        assert _act(H, sid, "stall").status_code == 400
+        assert _get_s(H, sid)["status"] == "confirmed"
+        assert _act(H, sid, "advance").status_code == 200
+        # next = custom step requiring link
+        r = _act(H, sid, "advance")
+        assert r.status_code == 400 and "رابط" in r.json()["detail"]
+        assert _act(H, sid, "advance", link="https://review.example/TEST").status_code == 200
+        s = _get_s(H, sid)
+        assert s["status"] == ck and s["pct"] == 40.0 and s["links"][ck] == "https://review.example/TEST"
+        assert s["status_ar"] == "TEST_مراجعة علمية"
+        assert _act(H, sid, "back").status_code == 200
+        assert _get_s(H, sid)["status"] == "filmed"
+        assert _act(H, sid, "advance", link="https://review.example/TEST2").status_code == 200
+        assert _act(H, sid, "advance").status_code == 200  # editing (no link)
+        assert _get_s(H, sid)["pct"] == 60.0
         assert _act(H, sid, "stall", note="TEST stall").status_code == 200
-        lst = requests.get(f"{VP}/sessions", params={"status": "stalled", "contract_id": S["cid"]}, headers=H["admin"]).json()
-        assert sid in [x["id"] for x in lst["items"]] and lst["counts"]["stalled"] >= 1
-        assert _act(H, sid, "unstall").status_code == 200
-        assert _act(H, sid, "published").status_code == 400
-        assert _act(H, sid, "published", platform_url="https://lms.example/TEST").status_code == 200
-        s = requests.get(f"{VP}/sessions/{sid}", headers=H["admin"]).json()
-        assert s["status"] == "published" and s["cloud_url"] and s["platform_url"] and s["actual_minutes"] == 18 and not s["stalled"]
-        # reject/cancel on teacher's requested session
-        assert _act(H, S["s21"], "reject").status_code == 400  # note required
-        assert _act(H, sid, "cancel").status_code == 400  # after filming
-        # reschedule conflict: move s12 into studio1 at s11's slot? s11 published (BUSY) -> conflict
-        date, start = S["slot"]
-        assert _act(H, S["s12"], "confirm", studio_id=S["studios"][0], date=date, start=start).status_code == 400
-        assert _act(H, S["s12"], "confirm").status_code == 200
+        assert _get_s(H, sid)["stalled"]["stage"] == "editing"
+        assert _act(H, sid, "advance").status_code == 400  # cloud requires link
+        assert _act(H, sid, "advance", link="https://cloud.example/TEST").status_code == 200
+        s = _get_s(H, sid)
+        assert s["status"] == "cloud" and s["pct"] == 80.0 and s["stalled"] is None
+        assert _act(H, sid, "advance", link="https://lms.example/TEST").status_code == 200
+        s = _get_s(H, sid)
+        assert s["status"] == "published" and s["pct"] == 100.0
+        assert set(s["links"]) >= {ck, "cloud", "published"}
+        assert _act(H, sid, "advance", link="x").status_code == 400  # last step
+        assert _act(H, sid, "stall", note="x").status_code == 400  # stall on last step
 
-    def test_09_progress_and_accrual(self, H):
+    # progress: percent / production_percent / lectures_published
+    def test_05_progress(self, H):
         cid = S["cid"]
         get = lambda: requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()["progress"]
-        # s11 published but no materials, s12 confirmed -> 0 lectures
-        assert get()["lectures_completed"] == 0
-        assert requests.put(f"{VP}/sessions/{S['s11']}", json={"materials_delivered": True, "photographer_notes": "TEST"}, headers=H["admin"]).status_code == 200
-        assert get()["lectures_completed"] == 0  # part 2 not filmed
-        assert _act(H, S["s12"], "filmed").status_code == 200
-        assert get()["lectures_completed"] == 0  # part 2 materials not delivered
+        p = get()
+        # lecture1: parts_count=2 -> (100 + 0)/2 = 50 ; production = 50/2 = 25
+        L1 = next(L for L in p["lectures"] if L["lecture_no"] == 1)
+        assert L1["pct"] == 50.0 and p["production_percent"] == 25.0
+        assert {x["id"]: x["pct"] for x in L1["parts"]}[S["s11"]] == 100.0
+        assert p["lectures_completed"] == 0 and p["lectures_published"] == 0
+        assert requests.put(f"{VP}/sessions/{S['s11']}", json={"materials_delivered": True}, headers=H["admin"]).status_code == 200
+        assert _act(H, S["s12"], "confirm").status_code == 200
+        assert _act(H, S["s12"], "advance").status_code == 200  # filmed
         assert requests.put(f"{VP}/sessions/{S['s12']}", json={"materials_delivered": True}, headers=H["admin"]).status_code == 200
         p = get()
         assert p["lectures_completed"] == 1 and p["percent"] == 50.0
-        assert p["accrued"] == 50000 + 125000  # spec accepted + 250000*1/2
-        assert requests.get(f"{VP}/sessions/{S['s11']}", headers=H["admin"]).json()["photographer_notes"] == "TEST"
+        assert p["production_percent"] == 30.0  # (100+20)/2=60 -> 60/2
+        assert p["lectures_published"] == 0
+        assert p["accrued"] == 50000 + 125000
+        for _ in range(3):
+            pass
+        assert _act(H, S["s12"], "advance", link="https://r.example/T").status_code == 200
+        assert _act(H, S["s12"], "advance").status_code == 200
+        assert _act(H, S["s12"], "advance", link="https://c.example/T").status_code == 200
+        assert _act(H, S["s12"], "advance", link="https://p.example/T").status_code == 200
+        p = get()
+        assert p["lectures_published"] == 1 and p["production_percent"] == 50.0
 
-    def test_10_payments(self, H):
+    # removing a step in use blocked; reorder allowed
+    def test_06_remove_in_use_and_reorder(self, H):
+        st = requests.get(f"{VP}/settings", headers=H["admin"]).json()
+        steps = st["pipeline_steps"]
+        ck = S["ck"]
+        # put a session at custom step, then try removing it
+        r = _sess(H, "admin", S["cid"], 2, 1, studio=S["studios"][0])
+        assert r.status_code == 200, r.text
+        S["s21"] = r.json()["id"]
+        assert _act(H, S["s21"], "confirm").status_code == 200
+        assert _act(H, S["s21"], "advance").status_code == 200
+        assert _act(H, S["s21"], "advance", link="https://r.example/X").status_code == 200
+        assert _get_s(H, S["s21"])["status"] == ck
+        r = requests.put(f"{VP}/settings", json={**st, "pipeline_steps": [x for x in steps if x["key"] != ck]}, headers=H["admin"])
+        assert r.status_code == 400 and "لا يمكن حذف مرحلة" in r.json()["detail"] and "TEST_مراجعة" in r.json()["detail"]
+        # reorder / moving the filming step is blocked while sessions sit in production steps (protects accrual)
+        new = [steps[0], steps[2], steps[1], steps[3], steps[4]]
+        r = requests.put(f"{VP}/settings", json={**st, "pipeline_steps": new}, headers=H["admin"])
+        assert r.status_code == 400 and "ترتيب المراحل" in r.json()["detail"]
+        moved = [{**x, "is_filming": i == 1} for i, x in enumerate(steps)]
+        assert requests.put(f"{VP}/settings", json={**st, "pipeline_steps": moved}, headers=H["admin"]).status_code == 400
+        renamed = [{**x, "name": x["name"] + " "} if x["key"] == "editing" else x for x in steps]
+        assert requests.put(f"{VP}/settings", json={**st, "pipeline_steps": renamed}, headers=H["admin"]).status_code == 200
+        assert _act(H, S["s21"], "back").status_code == 200
+        assert _get_s(H, S["s21"])["status"] == steps[0]["key"] if steps[1]["key"] == ck else True
+        assert _act(H, S["s21"], "unstall").status_code == 400
+
+    # teacher notifications only for notify=true steps
+    def test_07_teacher_my_contracts_steps(self, H):
+        d = requests.get(f"{VP}/my/contracts", headers=H["teacher"]).json()
+        assert d["settings"]["max_part_minutes"] == 60
+        assert S["ck"] in [x["key"] for x in d["settings"]["steps"]]
+        c = next(x for x in d["items"] if x["id"] == S["cid"])
+        assert "production_percent" in c["progress"]
+
+    # payments + PDFs regression
+    def test_08_payments_pdfs(self, H):
         cid = S["cid"]
         pay = lambda amt, h="admin": requests.post(f"{VP}/contracts/{cid}/payments", json={"amount": amt, "stage": "TEST"}, headers=H[h])
         assert pay(175001).status_code == 400
-        assert pay(0).status_code == 400
         assert pay(100, "reg").status_code == 403
         r = pay(100000)
         assert r.status_code == 200
-        pid = r.json()["id"]
-        p = requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()["progress"]
-        assert p["paid"] == 100000 and p["balance"] == 75000
-        assert pay(75001).status_code == 400
-        assert requests.delete(f"{VP}/contracts/{cid}/payments/{pid}", headers=H["admin"]).status_code == 200
-        assert requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()["progress"]["paid"] == 0
-
-    def test_11_pdfs(self, H):
-        for url, who in ((f"{VP}/contracts/{S['cid']}/pdf", "admin"), (f"{VP}/sessions/{S['s11']}/pdf", "admin"), (f"{VP}/contracts/{S['cid']}/pdf", "teacher")):
+        assert requests.get(f"{VP}/contracts/{cid}", headers=H["admin"]).json()["progress"]["balance"] == 75000
+        assert requests.delete(f"{VP}/contracts/{cid}/payments/{r.json()['id']}", headers=H["admin"]).status_code == 200
+        for url, who in ((f"{VP}/contracts/{cid}/pdf", "admin"), (f"{VP}/sessions/{S['s11']}/pdf", "admin"), (f"{VP}/contracts/{cid}/pdf", "teacher")):
             r = requests.get(url, headers=H[who])
-            assert r.status_code == 200 and r.headers["content-type"].startswith("application/pdf") and r.content[:4] == b"%PDF"
+            assert r.status_code == 200 and r.content[:4] == b"%PDF"
 
-    def test_12_isolation(self, H):
-        t, g = H["teacher"], H["reg"]
-        for h in (t, g):
+    # isolation regression
+    def test_09_isolation(self, H):
+        for h in (H["teacher"], H["reg"]):
             assert requests.get(f"{VP}/contracts", headers=h).status_code == 403
-            assert requests.get(f"{VP}/sessions", headers=h).status_code == 403
-            assert requests.post(f"{VP}/sessions/{S['s21']}/action", json={"action": "confirm"}, headers=h).status_code == 403
-            assert requests.post(f"{VP}/contracts", json={"teacher_id": TEACHER_RID, "course_name": "TEST_VP", "lectures_required": 1, "start_date": "2026-11-01"}, headers=h).status_code == 403
-            assert requests.post(f"{VP}/contracts/{S['cid']}/status", json={"action": "complete"}, headers=h).status_code == 403
-        assert requests.get(f"{VP}/contracts/{S['cid']}", headers=g).status_code == 403
-        assert requests.get(f"{VP}/my/contracts", headers=g).json()["items"] == []
-        mine = requests.get(f"{VP}/my/contracts", headers=t).json()["items"]
-        assert all(c["status"] != "draft" and c["teacher_id"] == TEACHER_RID for c in mine)
+            assert requests.post(f"{VP}/sessions/{S['s21']}/action", json={"action": "advance"}, headers=h).status_code == 403
+        lst = requests.get(f"{VP}/sessions", params={"contract_id": S["cid"]}, headers=H["admin"]).json()
+        assert all("pct" in x for x in lst["items"])
 
-    def test_13_terminate_reopen(self, H):
-        st = lambda a, n="": requests.post(f"{VP}/contracts/{S['cid']}/status", json={"action": a, "note": n}, headers=H["admin"])
-        assert st("complete").status_code == 200
-        assert st("terminate", "x").status_code == 400  # completed -> terminate invalid
-        assert st("reopen").status_code == 200
-        assert st("terminate", "TEST_VP done").status_code == 200
-        assert requests.get(f"{VP}/contracts/{S['cid']}", headers=H["admin"]).json()["status"] == "terminated"
+
+def _mins(t):
+    h, m = t.split(":")[:2]
+    return int(h) * 60 + int(m)

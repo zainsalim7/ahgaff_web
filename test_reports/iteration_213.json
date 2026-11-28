@@ -1,0 +1,37 @@
+{
+  "summary": "Tested the dynamic production pipeline for Video Production (/video-production) on both backend and frontend. Backend: rewrote /app/backend/tests/test_video_production.py to use the new 'advance' + 'link' API. 9/9 tests pass. They cover pipeline_steps validation (missing name, zero or two filming steps, duplicate key, registrar 403), adding a custom step with a generated key and auto link label, reordering, blocking removal of a step that has sessions on it (400 with Arabic message naming the step), advance/back (requested blocked, confirmed→first step, back from first step→confirmed, link required with Arabic error, links stored in session.links[key], actual_minutes on the filming step, no advance past the last step, no stall on requested or last step), pct per session (20/40/60/80/100 with 5 steps), contract percent / production_percent / lectures_published, 60-minute parts accepted and 61 rejected, payments, contract and session PDFs, teacher /my/contracts settings.steps, and access isolation. Checked the notifications collection: the teacher is notified for confirm, filmed, the custom notify=true step, published and stall, and not for editing, cloud or back. Frontend: everything requested works (StepsEditor add/label/notify/up-down/filming radio/delete/save message and empty-name error; custom step shows as studio KPI chip and in the session pipeline header; vp-sd-next shows the next step name; link input only when needed; missing-link error; back; vp-sd-link-{key}; list badge with mini bar; contract detail's two bars and part chips with %).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/video-production/settings", "issue": "New step keys come from f\"st_{ObjectId()}\"[-12:], which cuts off the 'st_' prefix, so keys are bare hex (e.g. cbc37bf3dcb3). It works, but the prefix was probably meant to stay: use 'st_' + str(ObjectId())[-8:]."},
+      {"endpoint": "POST /api/video-production/sessions/{id}/action (back → advance)", "issue": "After 'back', advancing again sends the teacher a second notification for the same step. Observed: two 'تم التصوير' and two custom-step notifications for one part. 'back' also leaves links[step] and actual_minutes in place."},
+      {"endpoint": "PUT /api/video-production/settings", "issue": "Moving the is_filming flag or reordering steps changes lectures_completed and recording accrual for existing contracts. Accrual can drop below the amount already paid, giving a negative balance. No warning or guard."},
+      {"endpoint": "POST /sessions/{id}/action unstall", "issue": "No state check: unstall is accepted in any status."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Studio tab filters / session modal", "issues": ["Native browser date/time pickers (mm/dd/yyyy) are used for vp-s-from/vp-s-to/vp-sd-date/vp-sd-start. Existing issue, not part of this change."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_video_production.py", "/app/test_reports/pytest/vp_dynamic.xml"],
+  "action_items": [
+    "Optional: keep the 'st_' prefix when generating step keys",
+    "Optional: skip the teacher notification when a step is entered again after 'back' (or dedupe it); consider clearing links[step] on back",
+    "Optional: warn when changing the filming step or step order would change accrual for contracts that already have payments"
+  ],
+  "critical_code_review_comments": [
+    "my_contracts calls _flow(db) inside the per-contract loop (extra settings query per contract). Load it once before the loop.",
+    "Flow.busy includes every post-filming step, so a part at editing/cloud/published keeps its studio slot. That is fine for past dates, but if the meaning is 'filming done', those steps could be left out of the conflict check.",
+    "video_production.py is 849 lines (more than 700). Consider splitting settings/contracts/sessions/my routes into separate modules."
+  ],
+  "updated_files": ["/app/backend/tests/test_video_production.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100%"},
+  "seed_data_creation": "None kept. Test contracts TEST_VP رياضيات and TEST_UI_VP (with their sessions and notifications) were created and then hard-deleted by id. TEST_FLOW and its session were also deleted from vp_contracts/vp_sessions, as the briefing allowed. pipeline_steps restored to the 4 defaults (filmed, editing, cloud, published); max_part_minutes=60; both studios unchanged. The main agent's earlier custom step 'مراجعة علمية' was removed, as requested. vp_contracts and vp_sessions are now empty.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest from /app/backend with REACT_APP_BACKEND_URL exported; no xdist or pytest.ini. The suite restores the default 4 steps in teardown and writes created ids to /tmp/vp_test_ids.txt; /tmp/vp_cleanup.py <file> hard-deletes those ids. UI login: first input username, second password, button 'تسجيل الدخول', then go to /video-production.",
+  "rca of the issue": "No blocking bugs found."
+}

@@ -249,7 +249,7 @@ async def put_settings(body: SettingsIn, u: dict = Depends(get_current_user)):
         x["name"] = x["name"].strip()
         if not x["name"]:
             raise HTTPException(status_code=400, detail="اسم المرحلة مطلوب")
-        x["key"] = x.get("key") or f"st_{ObjectId()}"[-12:]
+        x["key"] = x.get("key") or "st_" + str(ObjectId())[-8:]
         if x["key"] in BASE_STATUS or x["key"] in seen:
             raise HTTPException(status_code=400, detail="مفتاح مرحلة مكرر")
         seen.add(x["key"])
@@ -261,6 +261,13 @@ async def put_settings(body: SettingsIn, u: dict = Depends(get_current_user)):
     if in_use:
         old = {x["key"]: x["name"] for x in (await _settings(get_db()))["pipeline_steps"]}
         raise HTTPException(status_code=400, detail="لا يمكن حذف مرحلة عليها تسجيلات حالياً: " + "، ".join(old.get(k, k) for k in in_use))
+    old_steps = (await _settings(get_db()))["pipeline_steps"]
+    old_keys = [x["key"] for x in old_steps]
+    kept = [x["key"] for x in steps if x["key"] in old_keys]
+    old_film = next((x["key"] for x in old_steps if x.get("is_filming")), None)
+    new_film = next((x["key"] for x in steps if x.get("is_filming")), None)
+    if (kept != [k for k in old_keys if k in kept] or old_film != new_film) and await get_db().vp_sessions.find_one({"status": {"$in": old_keys}}, {"_id": 1}):
+        raise HTTPException(status_code=400, detail="توجد تسجيلات داخل مراحل الإنتاج: لا يمكن تغيير مرحلة «التصوير» أو ترتيب المراحل القائمة (يمكن تعديل الأسماء وإضافة مراحل جديدة)")
     data["pipeline_steps"] = steps
     await get_db().vp_settings.update_one({"_id": "main"}, {"$set": data}, upsert=True)
     return await _settings(get_db())
@@ -702,7 +709,10 @@ async def session_action(sid: str, body: SessAct, u: dict = Depends(get_current_
         step = fl.step(nxt)
         if step.get("requires_link") and not body.link.strip():
             raise HTTPException(status_code=400, detail=f"أدخل {step.get('link_label') or 'الرابط'}")
-        sets, label, notify = {"status": nxt, "stalled": None}, step["name"], bool(step.get("notify"))
+        sets, label = {"status": nxt, "stalled": None}, step["name"]
+        notify = bool(step.get("notify")) and nxt not in (s.get("notified_steps") or [])
+        if notify:
+            sets["notified_steps"] = [*(s.get("notified_steps") or []), nxt]
         if body.link.strip():
             sets[f"links.{nxt}"] = body.link.strip()
         if step.get("is_filming") and body.actual_minutes:
@@ -719,6 +729,8 @@ async def session_action(sid: str, body: SessAct, u: dict = Depends(get_current_
             raise HTTPException(status_code=400, detail="اكتب سبب التوقف")
         sets, label = {"stalled": {"reason": body.note.strip(), "at": _now().isoformat(), "stage": st}}, "توقف"
     elif a == "unstall":
+        if not s.get("stalled"):
+            raise HTTPException(status_code=400, detail="الجزء غير متوقف")
         sets, label = {"stalled": None}, "استئناف"
     else:
         raise HTTPException(status_code=400, detail="إجراء غير معروف")
