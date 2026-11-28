@@ -13261,6 +13261,8 @@ async def absence_summary_report(
     section: Optional[str] = None,
     semester_id: Optional[str] = None,
     fmt: str = "json",
+    outcome: Optional[str] = None,
+    view: str = "sheet",
     current_user: dict = Depends(get_current_user)
 ):
     """كشف «المحصلة النهائية للغياب» لمستوى/شعبة — نفس النموذج الرسمي (دور أول · تكميلي · إعادة · فصل)"""
@@ -13312,15 +13314,29 @@ async def absence_summary_report(
                           "excess_t": p["excess_total_hours"], "outcome": p["outcome"], "outcome_ar": p["outcome_ar"],
                           "pct_total": p["pct_total"], "board": bool(p.get("board_decision"))})
         st = studs[sid]
-        d["rows"].append({"student_db_id": sid, "name": st.get("full_name", ""), "reg_no": str(st.get("student_id") or ""), "section": st.get("section") or "", "cells": cells})
-    d["counts"] = counts
+        outs = {c["outcome"] for c in cells if c}
+        d["rows"].append({"student_db_id": sid, "name": st.get("full_name", ""), "reg_no": str(st.get("student_id") or ""), "section": st.get("section") or "",
+                          "cells": cells, "outcomes": sorted(outs), "all_first": outs <= {"first"}})
+    # عدّ الطلاب (لا الخانات): «دور أول» = كل مقرراته دور أول · البقية = طالب لديه هذه النتيجة في مقرر واحد على الأقل
+    d["cell_counts"] = counts
+    d["counts"] = {"first": sum(r["all_first"] for r in d["rows"]), **{k: sum(k in r["outcomes"] for r in d["rows"]) for k in ("takmili", "repeat", "dismiss")}}
+    d["students"] = len(d["rows"])
+    if outcome in ("first", "takmili", "repeat", "dismiss"):
+        d["rows"] = [r for r in d["rows"] if (r["all_first"] if outcome == "first" else outcome in r["outcomes"])]
     if fmt == "json":
         return d
     dep = await db.departments.find_one({"_id": ObjectId(department_id)}, {"name": 1}) if ObjectId.is_valid(department_id) else None
     sem = await db.semesters.find_one({"_id": ObjectId(semester_id)}, {"name": 1, "academic_year": 1}) if semester_id and ObjectId.is_valid(semester_id) else None
     sub = " · ".join(x for x in [f"المستوى {level} {((dep or {}).get('name') or '').strip()} {section or ''}".strip(),
                                  f"الفصل الدراسي: {(sem or {}).get('name', '')}" if sem else "", f"العام الجامعي: {(sem or {}).get('academic_year', '')}" if sem else ""] if x)
-    title = "المحصلة النهائية للغياب"
+    from services.absence_engine import OUTCOME_AR
+    title = "المحصلة النهائية للغياب" + (f" — {OUTCOME_AR[outcome]}" if outcome in OUTCOME_AR else "")
+    if view == "summary":
+        title = "ملخص المحصلة النهائية للغياب" + (f" — {OUTCOME_AR[outcome]}" if outcome in OUTCOME_AR else "")
+        if fmt == "pdf":
+            return StreamingResponse(AX.summary_pdf(d, title, sub, outcome), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=absence_summary_brief.pdf"})
+        return StreamingResponse(AX.summary_xlsx(d, title, sub, outcome), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                 headers={"Content-Disposition": "attachment; filename=absence_summary_brief.xlsx"})
     if fmt == "pdf":
         return StreamingResponse(AX.to_pdf(d, title, sub), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=absence_summary.pdf"})
     return StreamingResponse(AX.to_xlsx(d, title, sub), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

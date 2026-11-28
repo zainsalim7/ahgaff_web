@@ -5,8 +5,10 @@ type Cell = { excused: number; unexcused: number; excess_u: number; excess_t: nu
 export type SummaryData = {
   limits: { unexcused: number; total: number; dismiss: number };
   courses: { id: string; name: string; executed_hours: number; h_u: number; h_t: number }[];
-  rows: { student_db_id: string; name: string; reg_no: string; section: string; cells: Cell[] }[];
+  rows: { student_db_id: string; name: string; reg_no: string; section: string; cells: Cell[]; outcomes: string[]; all_first: boolean }[];
   counts: { first: number; takmili: number; repeat: number; dismiss: number };
+  cell_counts: { first: number; takmili: number; repeat: number; dismiss: number };
+  students: number;
 };
 
 const FILLS = ['#FCE4D6', '#DDEBF7', '#E4DFEC', '#E2EFDA', '#FBE2E6', '#DDEBF7', '#FFF2CC', '#EDEDED'];

@@ -137,3 +137,105 @@ def to_pdf(d: dict, title: str, subtitle: str) -> io.BytesIO:
     doc.build([Paragraph(_ar(title), ts), Paragraph(_ar(subtitle), ss), Spacer(1, 6), t])
     buf.seek(0)
     return buf
+
+
+def summary_rows(d: dict, outcome=None):
+    """صف لكل طالب: النتيجة الأشد + المقررات حسب كل نتيجة"""
+    order = ["dismiss", "repeat", "takmili"]
+    names = [c["name"] for c in d["courses"]]
+    out = []
+    for r in d["rows"]:
+        by = {k: [names[j] for j, c in enumerate(r["cells"]) if c and c["outcome"] == k] for k in order}
+        worst = next((k for k in order if by[k]), "first")
+        if outcome and outcome != "first":
+            worst = outcome
+        out.append([r["name"], r["reg_no"], r["section"], {"first": "دور أول", "takmili": "تكميلي", "repeat": "إعادة", "dismiss": "فصل"}[worst],
+                    "، ".join(by["takmili"]) or "-", "، ".join(by["repeat"]) or "-", "، ".join(by["dismiss"]) or "-"])
+    return ["م", "الاسم", "رقم القيد", "الشعبة", "النتيجة", "مقررات التكميلي", "مقررات الإعادة", "مقررات الفصل"], out
+
+
+def _counts_line(d):
+    c = d["counts"]
+    return f"عدد الطلاب: {d['students']} · دور أول (كل المقررات): {c['first']} · تكميلي: {c['takmili']} · إعادة: {c['repeat']} · فصل: {c['dismiss']}"
+
+
+def summary_xlsx(d, title, subtitle, outcome=None) -> io.BytesIO:
+    import openpyxl
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    head, rows = summary_rows(d, outcome)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "الملخص"
+    ws.sheet_view.rightToLeft = True
+    box = Border(*(Side(style="thin"),) * 4)
+    for r, (txt, size) in enumerate([(title, 16), (subtitle, 11), (_counts_line(d), 11)], 1):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=len(head))
+        ws.cell(r, 1, txt).font = Font(bold=True, size=size)
+        ws.cell(r, 1).alignment = Alignment(horizontal="center")
+    for j, h in enumerate(head, 1):
+        c = ws.cell(5, j, h)
+        c.font, c.border, c.fill = Font(bold=True), box, PatternFill("solid", fgColor="F1F5F9")
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for i, line in enumerate(rows, 1):
+        for j, v in enumerate([i] + line, 1):
+            c = ws.cell(5 + i, j, v)
+            c.border = box
+            c.alignment = Alignment(horizontal="right" if j in (2, 6, 7, 8) else "center", vertical="center", wrap_text=True)
+            if j == 5 and v in ("تكميلي", "إعادة", "فصل"):
+                c.fill = PatternFill("solid", fgColor={"تكميلي": "FDE7C8", "إعادة": "F8C9C9", "فصل": "E6A3A3"}[v])
+    for col, w in zip("ABCDEFGH", [5, 32, 13, 8, 10, 34, 34, 34]):
+        ws.column_dimensions[col].width = w
+    ws.freeze_panes = "C6"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def _wrap(text, cap, ar):
+    out, cur = [], ""
+    for w in str(text).split():
+        if cur and len(cur) + 1 + len(w) > cap:
+            out.append(cur)
+            cur = w
+        else:
+            cur = f"{cur} {w}".strip()
+    out.append(cur)
+    return "\n".join(ar(x) for x in out)
+
+
+def summary_pdf(d, title, subtitle, outcome=None) -> io.BytesIO:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from .pdf_pages import _ar, _fonts
+    _fonts()
+    head, rows = summary_rows(d, outcome)
+    widths = [0.8, 5.2, 2.2, 1.2, 1.6, 5.6, 5.6, 5.6]
+    data = [[_ar(h) for h in head][::-1]]
+    st = [("FONTNAME", (0, 0), (-1, -1), "Amiri-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 8.5), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+          ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEADING", (0, 0), (-1, -1), 11), ("GRID", (0, 0), (-1, -1), 0.4, colors.black), ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F1F5F9"))]
+    fills = {"تكميلي": "#FDE7C8", "إعادة": "#F8C9C9", "فصل": "#E6A3A3"}
+    for i, line in enumerate(rows, 1):
+        vals = [str(i), _ar(line[0]), line[1], _ar(line[2]), _ar(line[3])] + [_wrap(x, 34, _ar) for x in line[4:]]
+        data.append(vals[::-1])
+        if line[3] in fills:
+            st.append(("BACKGROUND", (3, i), (3, i), colors.HexColor(fills[line[3]])))
+    t = Table(data, colWidths=[w * cm for w in widths][::-1], repeatRows=1)
+    t.setStyle(TableStyle(st))
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=cm, rightMargin=cm, topMargin=cm, bottomMargin=cm, title=title)
+    ps = lambda size: ParagraphStyle("p", fontName="Amiri-Bold", fontSize=size, leading=size * 1.35, alignment=1)
+    c = d["counts"]
+    kp = Table([[_ar(x) for x in [f"عدد الطلاب: {d['students']}", f"دور أول في كل المقررات: {c['first']}", f"تكميلي: {c['takmili']}", f"إعادة: {c['repeat']}", f"فصل: {c['dismiss']}"]][::-1]],
+               colWidths=[5 * cm] * 5)
+    kp.setStyle(TableStyle([("FONTNAME", (0, 0), (-1, -1), "Amiri-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 10), ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                            ("BOX", (0, 0), (-1, -1), 0.4, colors.grey), ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.grey)]))
+    doc.build([Paragraph(_ar(title), ps(16)), Paragraph(_ar(subtitle), ps(11)), Spacer(1, 4), kp, Spacer(1, 8), t])
+    buf.seek(0)
+    return buf
