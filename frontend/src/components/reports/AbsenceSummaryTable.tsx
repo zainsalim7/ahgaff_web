@@ -4,7 +4,7 @@ import { ScrollBox } from '../ScrollBox';
 type Cell = { excused: number; unexcused: number; excess_u: number; excess_t: number; outcome: string; outcome_ar: string; board?: boolean } | null;
 export type SummaryData = {
   limits: { unexcused: number; total: number; dismiss: number };
-  courses: { id: string; name: string; executed_hours: number; h_u: number; h_t: number }[];
+  courses: { id: string; name: string; executed_hours: number; hours_label?: string; h_u: number; h_t: number }[];
   rows: { student_db_id: string; name: string; reg_no: string; section: string; cells: Cell[]; outcomes: string[]; all_first: boolean }[];
   counts: { first: number; takmili: number; repeat: number; dismiss: number };
   cell_counts: { first: number; takmili: number; repeat: number; dismiss: number };
@@ -28,15 +28,16 @@ export const AbsenceSummaryTable = ({ d }: { d: SummaryData }) => {
       <table dir="rtl" style={{ borderCollapse: 'separate', borderSpacing: 0, background: '#fff' }} data-testid="as-table">
         <thead>
           <tr style={{ height: H }}>
-            <th rowSpan={4} style={{ ...th, ...top(0), right: 0, zIndex: 5, background: '#f1f5f9' }}>م</th>
-            <th rowSpan={4} style={{ ...th, ...top(0), right: 34, zIndex: 5, background: '#f1f5f9', minWidth: 220 }}>الاسم</th>
+            <th rowSpan={4} style={{ ...th, ...top(0), right: 0, zIndex: 5, background: '#f1f5f9', width: 34, minWidth: 34, boxSizing: 'border-box' }}>م</th>
+            <th rowSpan={4} style={{ ...th, ...top(0), right: 34, zIndex: 5, background: '#f1f5f9', width: 220, minWidth: 220, maxWidth: 220, boxSizing: 'border-box' }}>الاسم</th>
+            <th rowSpan={4} style={{ ...th, ...top(0), right: 254, zIndex: 5, background: '#f1f5f9', minWidth: 90 }}>رقم القيد</th>
             {d.courses.map((c, i) => <th key={c.id} colSpan={5} style={{ ...th, ...top(0), background: FILLS[i % FILLS.length], fontSize: 13 }}>{c.name}</th>)}
           </tr>
           <tr style={{ height: H }}>
             {d.courses.map((c, i) => (
               <React.Fragment key={c.id}>
                 <th colSpan={4} style={{ ...th, ...top(1), background: FILLS[i % FILLS.length] }}>الساعات الفعلية</th>
-                <th style={{ ...th, ...top(1), background: FILLS[i % FILLS.length], fontSize: 13 }}>{Math.round(c.executed_hours)}</th>
+                <th style={{ ...th, ...top(1), background: FILLS[i % FILLS.length], fontSize: 13 }}>{c.hours_label || Math.round(c.executed_hours)}</th>
               </React.Fragment>
             ))}
           </tr>
@@ -58,8 +59,9 @@ export const AbsenceSummaryTable = ({ d }: { d: SummaryData }) => {
         <tbody>
           {d.rows.map((r, i) => (
             <tr key={r.student_db_id} data-testid={`as-row-${i}`}>
-              <td style={{ ...td, position: 'sticky', right: 0, background: '#fff', zIndex: 2 }}>{i + 1}</td>
-              <td style={{ ...td, position: 'sticky', right: 34, background: '#fff', zIndex: 2, textAlign: 'right', fontWeight: 600 }}>{r.name}</td>
+              <td style={{ ...td, position: 'sticky', right: 0, background: '#fff', zIndex: 2, width: 34, minWidth: 34, boxSizing: 'border-box' }}>{i + 1}</td>
+              <td style={{ ...td, position: 'sticky', right: 34, background: '#fff', zIndex: 2, textAlign: 'right', fontWeight: 600, width: 220, minWidth: 220, maxWidth: 220, boxSizing: 'border-box', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</td>
+              <td style={{ ...td, position: 'sticky', right: 254, background: '#fff', zIndex: 2, minWidth: 90 }} data-testid={`as-reg-${i}`}>{r.reg_no || '—'}</td>
               {r.cells.map((c, j) => c ? (
                 <React.Fragment key={j}>
                   <td style={td}>{n(c.excused)}</td>

@@ -13294,13 +13294,23 @@ async def absence_summary_report(
                 and (not studs[x].get("department_id") or str(studs[x]["department_id"]) == department_id)
                 and (not section or str(studs[x].get("section") or "") == section)]
         profs = await course_profiles(db, c, mine, limits=limits) if mine else {}
-        ex_h = max([p["executed_hours"] for p in profs.values()] or [0])
-        cols.append({"course": c, "profs": profs, "limits": limits, "executed_hours": ex_h})
+        hrs = [p["executed_hours"] for p in profs.values()]
+        # نفس المقرر مكرر لكل شعبة (سجل مستقل لكل شعبة/أستاذ) ⇒ عمود واحد في الكشف
+        key = (" ".join(str(c.get("name") or "").split()), str(c.get("code") or "").strip())
+        same = next((x for x in cols if x["key"] == key), None)
+        if same:
+            same["profs"].update(profs)
+            same["hours"] += hrs
+            same["executed_hours"] = max(same["hours"] or [0])
+            continue
+        cols.append({"key": key, "course": c, "profs": dict(profs), "limits": limits, "hours": hrs, "executed_hours": max(hrs or [0])})
+    cols = [x for x in cols if x["profs"]] or cols
     lim = lim or {"unexcused_limit": 10.9, "total_limit": 25.9}
     sids_all = sorted({sid for col in cols for sid in col["profs"]}, key=lambda x: studs[x].get("full_name", ""))
     d = {"limits": {"unexcused": lim["unexcused_limit"], "total": lim["total_limit"], "dismiss": lim.get("dismiss_limit", 50.9)},
          "courses": [{"id": str(col["course"]["_id"]), "name": col["course"].get("name", ""), "code": col["course"].get("code", ""),
-                      "executed_hours": col["executed_hours"], "h_u": round(col["executed_hours"] * col["limits"]["unexcused_limit"] / 100, 3),
+                      "executed_hours": col["executed_hours"],
+                      "hours_label": (f"{round(min(col['hours']))}–{round(max(col['hours']))}" if col["hours"] and round(min(col["hours"])) != round(max(col["hours"])) else ""), "h_u": round(col["executed_hours"] * col["limits"]["unexcused_limit"] / 100, 3),
                       "h_t": round(col["executed_hours"] * col["limits"]["total_limit"] / 100, 3)} for col in cols],
          "rows": []}
     counts = {"first": 0, "takmili": 0, "repeat": 0, "dismiss": 0}

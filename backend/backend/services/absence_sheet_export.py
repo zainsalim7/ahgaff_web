@@ -18,16 +18,16 @@ def layout(d: dict):
     lim = d["limits"]
     u, t = f"{lim['unexcused']:g}", f"{lim['total']:g}"
     n = len(d["courses"])
-    N = 2 + 5 * n
-    m = [(0, 0, 3, 0, "م"), (0, 1, 3, 1, "الاسم")]
+    N = 3 + 5 * n
+    m = [(0, 0, 3, 0, "م"), (0, 1, 3, 1, "الاسم"), (0, 2, 3, 2, "رقم القيد")]
     for i, c in enumerate(d["courses"]):
-        k = 2 + 5 * i
-        m += [(0, k, 0, k + 4, c["name"]), (1, k, 1, k + 3, "الساعات الفعلية"), (1, k + 4, 1, k + 4, int(c["executed_hours"] + 0.5)),
+        k = 3 + 5 * i
+        m += [(0, k, 0, k + 4, c["name"]), (1, k, 1, k + 3, "الساعات الفعلية"), (1, k + 4, 1, k + 4, c.get("hours_label") or int(c["executed_hours"] + 0.5)),
               (2, k, 2, k + 1, "ساعات الغياب"), (2, k + 2, 2, k + 2, _h(round(c["h_u"], 2))), (2, k + 3, 2, k + 4, int(c["h_t"] + 0.5))]
         m += [(3, k + j, 3, k + j, x.format(u=u, t=t)) for j, x in enumerate(SUB)]
     body, marks = [], []
     for i, r in enumerate(d["rows"], 1):
-        line, mk = [i, r["name"]], []
+        line, mk = [i, r["name"], r.get("reg_no") or ""], []
         for c in r["cells"]:
             if not c:
                 line += ["", "", "", "", "—"]
@@ -58,7 +58,7 @@ def to_xlsx(d: dict, title: str, subtitle: str) -> io.BytesIO:
         ws.cell(r, 1).alignment = Alignment(horizontal="center", vertical="center")
     top = 3
     for r0, c0, r1, c1, t in merges:
-        fill = PatternFill("solid", fgColor=FILLS[((c0 - 2) // 5) % len(FILLS)] if c0 >= 2 else "F1F5F9")
+        fill = PatternFill("solid", fgColor=FILLS[((c0 - 3) // 5) % len(FILLS)] if c0 >= 3 else "F1F5F9")
         for rr in range(r0, r1 + 1):
             for cc in range(c0, c1 + 1):
                 cell = ws.cell(top + rr, cc + 1)
@@ -73,18 +73,19 @@ def to_xlsx(d: dict, title: str, subtitle: str) -> io.BytesIO:
             cell.border, cell.alignment, cell.font = box, mid, Font(bold=j != 1, size=10)
             if j == 1:
                 cell.alignment = Alignment(horizontal="right", vertical="center")
-            if j >= 2 and (j - 2) % 5 == 4 and marks[i][(j - 2) // 5] in OUT_FILL:
-                cell.fill = PatternFill("solid", fgColor=OUT_FILL[marks[i][(j - 2) // 5]])
+            if j >= 3 and (j - 3) % 5 == 4 and marks[i][(j - 3) // 5] in OUT_FILL:
+                cell.fill = PatternFill("solid", fgColor=OUT_FILL[marks[i][(j - 3) // 5]])
     ws.column_dimensions["A"].width = 5
     ws.column_dimensions["B"].width = 34
-    for j in range(3, N + 1):
-        ws.column_dimensions[L(j)].width = 8 if (j - 3) % 5 != 4 else 9.5
+    ws.column_dimensions["C"].width = 13
+    for j in range(4, N + 1):
+        ws.column_dimensions[L(j)].width = 8 if (j - 4) % 5 != 4 else 9.5
     last = top + HEAD_ROWS + len(body) - 1
-    for k in range(2, N, 5):
+    for k in range(3, N, 5):
         for rr in range(top, max(last, top + HEAD_ROWS - 1) + 1):
             c = ws.cell(rr, k + 1)
             c.border = Border(left=c.border.left, right=thick, top=c.border.top, bottom=c.border.bottom)
-    ws.freeze_panes = ws.cell(top + HEAD_ROWS, 3)
+    ws.freeze_panes = ws.cell(top + HEAD_ROWS, 4)
     ws.page_setup.orientation = "landscape"
     ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
     ws.sheet_properties.pageSetUpPr.fitToPage = True
@@ -105,7 +106,7 @@ def to_pdf(d: dict, title: str, subtitle: str) -> io.BytesIO:
     _fonts()
     N, merges, body, marks = layout(d)
     page = landscape(A3 if N > 32 else A4)
-    base = [0.7, 4.6] + [1.0, 1.05, 1.0, 1.0, 1.25] * ((N - 2) // 5)
+    base = [0.7, 4.6, 1.9] + [1.0, 1.05, 1.0, 1.0, 1.25] * ((N - 3) // 5)
     k = (page[0] - 1.6 * cm) / (sum(base) * cm)
     widths = [w * cm * k for w in base][::-1]
     fs = max(5.0, min(8.0, 8 * k))
@@ -118,15 +119,15 @@ def to_pdf(d: dict, title: str, subtitle: str) -> io.BytesIO:
         grid[r0][X(c1)] = _ar(str(t)) if isinstance(t, str) else str(t)
         if (r0, c0) != (r1, c1):
             st.append(("SPAN", (X(c1), r0), (X(c0), r1)))
-        st.append(("BACKGROUND", (X(c1), r0), (X(c0), r1), colors.HexColor("#" + (FILLS[((c0 - 2) // 5) % len(FILLS)] if c0 >= 2 else "F1F5F9"))))
+        st.append(("BACKGROUND", (X(c1), r0), (X(c0), r1), colors.HexColor("#" + (FILLS[((c0 - 3) // 5) % len(FILLS)] if c0 >= 3 else "F1F5F9"))))
     for i, line in enumerate(body):
         grid.append([""] * N)
         for j, v in enumerate(line):
             grid[-1][X(j)] = _ar(v) if isinstance(v, str) else str(v)
-            if j >= 2 and (j - 2) % 5 == 4 and marks[i][(j - 2) // 5] in OUT_FILL:
-                st.append(("BACKGROUND", (X(j), HEAD_ROWS + i), (X(j), HEAD_ROWS + i), colors.HexColor("#" + OUT_FILL[marks[i][(j - 2) // 5]])))
+            if j >= 3 and (j - 3) % 5 == 4 and marks[i][(j - 3) // 5] in OUT_FILL:
+                st.append(("BACKGROUND", (X(j), HEAD_ROWS + i), (X(j), HEAD_ROWS + i), colors.HexColor("#" + OUT_FILL[marks[i][(j - 3) // 5]])))
     st.append(("ALIGN", (X(1), HEAD_ROWS), (X(1), -1), "RIGHT"))
-    for c in range(2, N, 5):
+    for c in range(3, N, 5):
         st.append(("LINEAFTER", (X(c), 0), (X(c), -1), 1.3, colors.black))
     t = Table(grid, colWidths=widths, repeatRows=HEAD_ROWS)
     t.setStyle(TableStyle(st))
