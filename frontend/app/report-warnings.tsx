@@ -1,6 +1,6 @@
 import { goBack } from '../src/utils/navigation';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
@@ -23,14 +23,25 @@ export default function WarningsReport() {
   const [summary, setSummary] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'warnings' | 'deprivations'>('warnings');
   const [exporting, setExporting] = useState<'' | 'pdf' | 'excel'>('');
+  const [level, setLevel] = useState('');
+  const [section, setSection] = useState('');
+  const [q, setQ] = useState('');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const deptName = selectedDept ? departments.find(d => d.id === selectedDept)?.name : undefined;
 
-  const handleExport = async (fmt: 'pdf' | 'excel') => {
-    setExporting(fmt);
-    const params: any = {}
+  const scopeParams = () => {
+    const params: any = {};
     if (selectedDept) params.department_id = selectedDept;
     else if (selectedFaculty) params.faculty_id = selectedFaculty;
+    if (level) params.level = Number(level);
+    return params;
+  };
+  const handleExport = async (fmt: 'pdf' | 'excel', onlyPicked = picked.size > 0) => {
+    setExporting(fmt);
+    const params: any = scopeParams();
+    if (onlyPicked) params.student_ids = [...picked].join(',');
+    else { if (section) params.section = section; if (q.trim()) params.q = q.trim(); }
     await downloadReport(fmt === 'pdf' ? '/reports/warnings/export-pdf' : '/export/report/warnings/excel', params, ['تقرير الإنذارات والحرمان', deptName], fmt === 'pdf' ? 'pdf' : 'xlsx');
     setExporting('');
   };
@@ -49,9 +60,8 @@ export default function WarningsReport() {
   const runReport = useCallback(async () => {
     setExecuting(true);
     try {
-      const params: any = {}
-      if (selectedDept) params.department_id = selectedDept;
-      else if (selectedFaculty) params.faculty_id = selectedFaculty;
+      const params: any = scopeParams();
+      setPicked(new Set());
       const reportRes = await reportsAPI.getWarningsReport(params);
       setWarnings(reportRes.data.warnings || []);
       setDeprivations(reportRes.data.deprivations || []);
@@ -64,7 +74,7 @@ export default function WarningsReport() {
       setExecuting(false);
       setRefreshing(false);
     }
-  }, [selectedDept, selectedFaculty]);
+  }, [selectedDept, selectedFaculty, level]);
 
   const onRefresh = () => {
     if (!hasRun) return;
@@ -81,8 +91,17 @@ export default function WarningsReport() {
     );
   }
 
-  const currentList = activeTab === 'warnings' ? warnings : deprivations;
-  const total = warnings.length + deprivations.length;
+  const match = (x: any) => (!section || x.student_section === section || String(x.section) === section)
+    && (!q.trim() || String(x.student_name || '').includes(q.trim()) || String(x.student_id || '').includes(q.trim()));
+  const fw = warnings.filter(match), fd = deprivations.filter(match);
+  const currentList = activeTab === 'warnings' ? fw : fd;
+  const total = fw.length + fd.length;
+  const sections = [...new Set([...warnings, ...deprivations].map((x) => x.student_section || x.section).filter(Boolean))].sort();
+  const toggle = (id: string) => { const n = new Set(picked); n.has(id) ? n.delete(id) : n.add(id); setPicked(n); };
+  const listIds = [...new Set(currentList.map((x) => x.student_db_id))];
+  const allOn = listIds.length > 0 && listIds.every((id) => picked.has(id));
+  const toggleAll = () => { const n = new Set(picked); listIds.forEach((id) => (allOn ? n.delete(id) : n.add(id))); setPicked(n); };
+  const canExp = hasPermission('export_reports');
 
 
   return (
@@ -100,7 +119,7 @@ export default function WarningsReport() {
         />
 
         <ReportFilters onRun={runReport} running={executing} hasRun={hasRun}>
-          <View style={{ flex: 1, minWidth: 220 }}>
+          <View style={{ flex: 1, minWidth: 170 }}>
             <Text style={reportPage.label}>الكلية</Text>
             <View style={reportPage.pickerBox}>
               <Picker selectedValue={selectedFaculty} onValueChange={(v) => { setSelectedFaculty(v); setSelectedDept(''); }} style={reportPage.picker} testID="warnings-faculty-filter">
@@ -109,13 +128,39 @@ export default function WarningsReport() {
               </Picker>
             </View>
           </View>
-          <View style={{ flex: 1, minWidth: 220 }}>
+          <View style={{ flex: 1, minWidth: 170 }}>
             <Text style={reportPage.label}>القسم</Text>
             <View style={reportPage.pickerBox}>
               <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker} enabled={!!selectedFaculty} testID="warnings-department-filter">
                 <Picker.Item label={selectedFaculty ? 'جميع الأقسام' : 'اختر الكلية أولاً'} value="" />
                 {departments.filter(d => d.faculty_id === selectedFaculty).map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
               </Picker>
+            </View>
+          </View>
+          <View style={{ width: 120 }}>
+            <Text style={reportPage.label}>المستوى</Text>
+            <View style={reportPage.pickerBox}>
+              <Picker selectedValue={level} onValueChange={setLevel} style={reportPage.picker} testID="warnings-level-filter">
+                <Picker.Item label="الكل" value="" />
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((l) => <Picker.Item key={l} label={`المستوى ${l}`} value={String(l)} />)}
+              </Picker>
+            </View>
+          </View>
+          <View style={{ width: 120 }}>
+            <Text style={reportPage.label}>الشعبة</Text>
+            <View style={[reportPage.pickerBox, !sections.length && { opacity: 0.6 }]}>
+              <Picker selectedValue={section} onValueChange={setSection} style={reportPage.picker} enabled={sections.length > 0} testID="warnings-section-filter">
+                <Picker.Item label={sections.length ? 'الكل' : 'نفّذ أولاً'} value="" />
+                {sections.map((x) => <Picker.Item key={x} label={x} value={x} />)}
+              </Picker>
+            </View>
+          </View>
+          <View style={{ flex: 1, minWidth: 170 }}>
+            <Text style={reportPage.label}>بحث بالطالب</Text>
+            <View style={[reportPage.pickerBox, { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 8, height: 36 }]}>
+              <Ionicons name="search" size={14} color="#94a3b8" />
+              <TextInput value={q} onChangeText={setQ} placeholder="الاسم أو رقم القيد" placeholderTextColor="#94a3b8" style={styles.search} testID="warnings-search-input" />
+              {!!q && <TouchableOpacity onPress={() => setQ('')} testID="warnings-search-clear"><Ionicons name="close-circle" size={15} color="#94a3b8" /></TouchableOpacity>}
             </View>
           </View>
         </ReportFilters>
@@ -141,21 +186,31 @@ export default function WarningsReport() {
           <View style={styles.tabsContainer}>
             <TouchableOpacity style={[styles.tab, activeTab === 'warnings' && styles.tabActive]} onPress={() => setActiveTab('warnings')} testID="tab-warnings">
               <Ionicons name="warning" size={18} color={activeTab === 'warnings' ? '#f97316' : '#999'} />
-              <Text style={[styles.tabText, activeTab === 'warnings' && styles.tabTextActive]}>الإنذارات ({warnings.length})</Text>
+              <Text style={[styles.tabText, activeTab === 'warnings' && styles.tabTextActive]}>الإنذارات ({fw.length})</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.tab, activeTab === 'deprivations' && styles.tabActiveDanger]} onPress={() => setActiveTab('deprivations')} testID="tab-deprivations">
               <Ionicons name="close-circle" size={18} color={activeTab === 'deprivations' ? '#dc2626' : '#999'} />
-              <Text style={[styles.tabText, activeTab === 'deprivations' && styles.tabTextActiveDanger]}>المحرومون ({deprivations.length})</Text>
+              <Text style={[styles.tabText, activeTab === 'deprivations' && styles.tabTextActiveDanger]}>المحرومون ({fd.length})</Text>
             </TouchableOpacity>
           </View>
+          {canExp && total > 0 && (
+            <View style={styles.selBar} testID="warnings-selection-bar">
+              <Text style={styles.selTxt} testID="warnings-selection-count">{picked.size ? `تم تحديد ${picked.size} طالب` : `التصدير يشمل ${new Set([...fw, ...fd].map((x) => x.student_id)).size} طالباً حسب الفلاتر — أو حدّد طلاباً من الجدول`}</Text>
+              {picked.size > 0 && <>
+                <TouchableOpacity style={[styles.selBtn, { backgroundColor: '#b91c1c' }]} onPress={() => handleExport('pdf', true)} disabled={!!exporting} testID="warnings-export-picked-pdf"><Ionicons name="document" size={13} color="#fff" /><Text style={styles.selBtnTxt}>PDF للمحددين</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.selBtn, { backgroundColor: '#15803d' }]} onPress={() => handleExport('excel', true)} disabled={!!exporting} testID="warnings-export-picked-excel"><Ionicons name="grid" size={13} color="#fff" /><Text style={styles.selBtnTxt}>Excel للمحددين</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setPicked(new Set())} testID="warnings-clear-selection"><Text style={{ color: '#2962ff', fontSize: 12.5, fontWeight: '700' }}>إلغاء التحديد</Text></TouchableOpacity>
+              </>}
+            </View>
+          )}
 
           {currentList.length === 0 ? (
             <ReportEmpty text={activeTab === 'warnings' ? 'لا يوجد إنذارات' : 'لا يوجد محرومون'} icon="checkmark-circle-outline" />
           ) : (
-            <DenseTable testID="warnings" head={['#', 'الطالب', 'رقم القيد', 'المقرر', 'منفَّذة', 'بلا عذر', 'الإجمالي', 'متبقٍ بلا عذر', 'الحالة']}
-              align={['center', 'right', 'right', 'right', 'center', 'center', 'center', 'center', 'center']}
+            <DenseTable testID="warnings" head={[<input type="checkbox" checked={allOn} onChange={toggleAll} data-testid="warnings-select-all" title="تحديد الكل" />, '#', 'الطالب', 'رقم القيد', 'المقرر', 'منفَّذة', 'بلا عذر', 'الإجمالي', 'متبقٍ بلا عذر', 'الحالة']}
+              align={['center', 'center', 'right', 'right', 'right', 'center', 'center', 'center', 'center', 'center']}
               rowTestID={(i) => `warning-row-${i}`}
-              rows={currentList.map((item, i) => [i + 1, <b style={{ color: '#0f2440' }}>{item.student_name}</b>, <span style={{ color: '#64748b', direction: 'ltr' }}>{item.student_id}</span>,
+              rows={currentList.map((item, i) => [<input type="checkbox" checked={picked.has(item.student_db_id)} onChange={() => toggle(item.student_db_id)} data-testid={`warnings-pick-${i}`} />, i + 1, <b style={{ color: '#0f2440' }}>{item.student_name}</b>, <span style={{ color: '#64748b', direction: 'ltr' }}>{item.student_id}</span>,
                 <span>{item.course_name} <span style={{ color: '#94a3b8', fontSize: 11 }}>({item.course_code})</span>{item.early ? <div style={{ fontSize: 10.5, color: '#64748b' }}>مؤشر مبكر — محاضرات منفَّذة قليلة</div> : null}</span>,
                 <span>{item.total_lectures} <span style={{ color: '#94a3b8', fontSize: 11 }}>({item.executed_hours} س)</span></span>,
                 <Pill color={item.exceeded_unexcused ? '#dc2626' : '#0f2440'}>{item.pct_unexcused}% · {item.unexcused_hours} س</Pill>,
@@ -173,6 +228,11 @@ export default function WarningsReport() {
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
+  search: { flex: 1, fontSize: 13, textAlign: 'right', paddingHorizontal: 6, outlineStyle: 'none' } as any,
+  selBar: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8, paddingHorizontal: 4 },
+  selTxt: { fontSize: 12.5, color: '#475569', fontWeight: '600', textAlign: 'right' },
+  selBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+  selBtnTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
   chipRow: { flexDirection: 'row-reverse', gap: 6 },
   chip: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
   chipText: { fontSize: 12, color: '#666', fontWeight: '600' },

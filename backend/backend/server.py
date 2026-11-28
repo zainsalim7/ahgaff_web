@@ -13259,6 +13259,9 @@ async def get_warnings_report(
     department_id: Optional[str] = None,
     faculty_id: Optional[str] = None,
     level: Optional[int] = None,
+    section: Optional[str] = None,
+    q: Optional[str] = None,
+    student_ids: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير الإنذارات والمرشحين للحرمان — وفق لائحة الكلية (محرك absence_engine):
@@ -13283,6 +13286,7 @@ async def get_warnings_report(
     warnings, deprivations = [], []
     students_cache: dict = {}
     limits_used = None
+    picked = {x for x in (student_ids or "").split(",") if x} or None
     for course in courses:
         cid = str(course["_id"])
         limits = await course_limits(db, course)
@@ -13310,6 +13314,13 @@ async def get_warnings_report(
                 "status": "مرشَّح للحرمان" if pr["status"] == "candidate" else ("خطر الحرمان" if pr["status"] == "danger" else "إنذار"),
                 "status_key": pr["status"], "status_ar": pr["status_ar"],
             }
+            row["student_section"] = str(st.get("section") or "")
+            if section and section not in (row["student_section"], str(row["section"])):
+                continue
+            if q and q.strip() and q.strip() not in row["student_name"] and q.strip() not in str(row["student_id"]):
+                continue
+            if picked is not None and sid not in picked:
+                continue
             (deprivations if pr["status"] == "candidate" else warnings).append(row)
     warnings.sort(key=lambda r: -max(r["pct_unexcused"], r["pct_total"]))
     deprivations.sort(key=lambda r: -max(r["pct_unexcused"], r["pct_total"]))
@@ -13950,13 +13961,16 @@ async def export_attendance_overview_pdf(department_id: Optional[str] = None, fa
 
 
 @api_router.get("/reports/warnings/export-pdf")
-async def export_warnings_pdf(department_id: Optional[str] = None, faculty_id: Optional[str] = None, warning_threshold: float = 25.0, deprivation_threshold: float = 40.0, current_user: dict = Depends(get_current_user)):
+async def export_warnings_pdf(department_id: Optional[str] = None, faculty_id: Optional[str] = None, level: Optional[int] = None, section: Optional[str] = None, q: Optional[str] = None, student_ids: Optional[str] = None, warning_threshold: float = 25.0, deprivation_threshold: float = 40.0, current_user: dict = Depends(get_current_user)):
     """📄 تقرير الإنذارات والحرمان PDF"""
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
     from routes.report_pdf import build_report_pdf
-    report = await get_warnings_report(department_id=department_id, faculty_id=faculty_id, current_user=current_user)
+    report = await get_warnings_report(department_id=department_id, faculty_id=faculty_id, level=level, section=section, q=q, student_ids=student_ids, current_user=current_user)
     dept = await _dept_name_for_export(department_id)
+    scope_bits = [b for b in [f"المستوى {level}" if level else "", f"الشعبة {section}" if section else "", f"بحث: {q}" if q else "", "طلاب محددون" if student_ids else ""] if b]
+    if scope_bits:
+        dept = " · ".join([dept or "جميع الأقسام"] + scope_bits)
     head = ["#", "الطالب", "رقم القيد", "المقرر", "الرمز", "المحاضرات", "الغياب", "نسبة الغياب", "المتبقي المسموح"]
     def _rows(items):
         return [head] + [[i, x["student_name"], x["student_id"], x["course_name"], x["course_code"], x["total_lectures"], x["absent_count"], f"{x['absence_rate']}%", x.get("remaining_allowed", "")] for i, x in enumerate(items, 1)]
@@ -14665,6 +14679,10 @@ async def export_warnings_excel(
     faculty_id: Optional[str] = None,
     warning_threshold: float = 25.0,
     deprivation_threshold: float = 40.0,
+    level: Optional[int] = None,
+    section: Optional[str] = None,
+    q: Optional[str] = None,
+    student_ids: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تصدير تقرير الإنذارات إلى Excel"""
@@ -14672,7 +14690,7 @@ async def export_warnings_excel(
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جلب البيانات
-    report = await get_warnings_report(department_id=department_id, faculty_id=faculty_id, current_user=current_user)
+    report = await get_warnings_report(department_id=department_id, faculty_id=faculty_id, level=level, section=section, q=q, student_ids=student_ids, current_user=current_user)
     
     # إعداد البيانات
     all_data = []
@@ -14688,7 +14706,12 @@ async def export_warnings_excel(
     
     # تحويل للـ DataFrame
     df = pd.DataFrame(all_data)
+    keep = [c for c in ["student_name", "student_id", "student_section", "level", "course_name", "course_code", "total_lectures", "executed_hours",
+                        "unexcused_hours", "pct_unexcused", "excused_hours", "pct_total", "remaining_allowed", "status", "ملاحظة"] if c in df.columns]
+    df = df[keep]
     df = df.rename(columns={
+        "student_section": "الشعبة", "level": "المستوى", "executed_hours": "الساعات المنفذة", "unexcused_hours": "غياب بلا عذر (س)",
+        "pct_unexcused": "بلا عذر %", "excused_hours": "غياب بعذر (س)", "pct_total": "الإجمالي %",
         "student_id": "رقم القيد",
         "student_name": "اسم الطالب",
         "course_name": "المقرر",
