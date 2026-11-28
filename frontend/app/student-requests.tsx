@@ -4,6 +4,8 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput } from 'react-nativ
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
+import { ExcusesPanel } from '../src/components/excuses/ExcusesPanel';
 import api, { departmentsAPI, facultiesAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, DenseTable, reportPage } from '../src/components/reports/ReportShell';
@@ -28,7 +30,11 @@ export default function StudentRequestsPage() {
   const { hasPermission } = useAuth();
   const canReview = hasPermission('manage_student_requests');
   const canTypes = hasPermission('manage_request_types');
-  const [tab, setTab] = useState<'list' | 'types'>(canReview ? 'list' : 'types');
+  const canExcuses = hasPermission('manage_student_excuses');
+  const params = useLocalSearchParams<{ tab?: string }>();
+  type Tab = 'list' | 'excuses' | 'types';
+  const tabs = ([['list', 'الطلبات', 'file-tray-full-outline', canReview], ['excuses', 'أعذار الغياب', 'document-attach-outline', canExcuses], ['types', 'النماذج وحقولها', 'construct-outline', canTypes]] as const).filter((t) => t[3]);
+  const [tab, setTab] = useState<Tab>((tabs.find((t) => t[0] === params.tab) || tabs[0] || ['list'])[0] as Tab);
   const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [types, setTypes] = useState<{ id: string; name: string }[]>([]);
@@ -53,11 +59,11 @@ export default function StudentRequestsPage() {
   return (
     <SafeAreaView style={reportPage.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={reportPage.content}>
-        <ReportHero title="طلبات الطلاب" kicker="شؤون الطلاب" subtitle="النماذج التي يقدمها الطلاب من التطبيق — تصل إلى مسجل الكلية ضمن نطاق كلياته وأقسامه"
+        <ReportHero title="طلبات الطلاب" kicker="شؤون الطلاب" subtitle="النماذج وأعذار الغياب التي يقدمها الطلاب من التطبيق — تصل إلى مسجل الكلية ضمن نطاق كلياته وأقسامه"
           onBack={() => goBack()} canExport={false} testID="sr-hero" />
-        {canReview && canTypes && (
+        {tabs.length > 1 && (
           <View style={{ flexDirection: 'row-reverse', gap: 6, marginBottom: 10 }}>
-            {([['list', 'الطلبات', 'file-tray-full-outline'], ['types', 'النماذج وحقولها', 'construct-outline']] as const).map(([k, l, ic]) => (
+            {tabs.map(([k, l, ic]) => (
               <TouchableOpacity key={k} onPress={() => setTab(k)} testID={`sr-tab-${k}`}
                 style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: tab === k ? '#1a2540' : '#eef1f6' }}>
                 <Ionicons name={ic} size={15} color={tab === k ? '#fff' : '#1a2540'} /><Text style={{ fontWeight: '700', color: tab === k ? '#fff' : '#1a2540' }}>{l}</Text>
@@ -65,7 +71,7 @@ export default function StudentRequestsPage() {
             ))}
           </View>
         )}
-        {tab === 'types' ? <RequestTypesEditor faculties={faculties} /> : (
+        {tab === 'types' ? <RequestTypesEditor faculties={faculties} /> : tab === 'excuses' ? <ExcusesPanel /> : (
           <>
             <View style={[reportPage.pickerBox, { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10, padding: 12, borderRadius: 12, marginBottom: 10, height: undefined }]} testID="sr-filters">
               <Pick label="الكلية" value={f.faculty_id} onChange={(v) => setF({ ...f, faculty_id: v, department_id: '' })} items={faculties} all="كل الكليات" testID="sr-faculty" />
