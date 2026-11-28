@@ -83,6 +83,7 @@ interface Settings {
   attendance_late_minutes: number;
   max_unexcused_percent: number;
   max_excused_percent?: number;
+  dismiss_absence_percent?: number;
   max_absence_percent: number;
   primary_color: string;
   secondary_color: string;
@@ -164,6 +165,7 @@ export default function GeneralSettingsScreen() {
     attendance_late_minutes: 15,
     max_unexcused_percent: 10.9,
     max_excused_percent: 15.9,
+    dismiss_absence_percent: 50,
     max_absence_percent: 25.9,
     primary_color: '#1565c0',
     secondary_color: '#ff9800',
@@ -182,6 +184,7 @@ export default function GeneralSettingsScreen() {
     attendance_late_minutes: number;
     max_unexcused_percent: number;
     max_excused_percent?: number;
+  dismiss_absence_percent?: number;
     max_absence_percent: number;
     attendance_duration_minutes: number;
     max_attendance_delay_minutes: number;
@@ -197,6 +200,7 @@ export default function GeneralSettingsScreen() {
     attendance_late_minutes: 15,
     max_unexcused_percent: 10.9,
     max_excused_percent: 15.9,
+    dismiss_absence_percent: 50,
     max_absence_percent: 25.9,
     attendance_duration_minutes: 15,
     max_attendance_delay_minutes: 30,
@@ -1133,6 +1137,7 @@ export default function GeneralSettingsScreen() {
           attendance_late_minutes: data.attendance_late_minutes || 15,
           max_unexcused_percent: data.max_unexcused_percent || 10.9,
           max_excused_percent: data.max_excused_percent || 15.9,
+          dismiss_absence_percent: data.dismiss_absence_percent || 50,
           max_absence_percent: data.max_absence_percent || 25.9,
           attendance_duration_minutes: data.attendance_duration_minutes || 15,
           max_attendance_delay_minutes: data.max_attendance_delay_minutes || 30,
@@ -1347,6 +1352,17 @@ export default function GeneralSettingsScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <Text style={styles.label}>حد الفصل (%) — تجاوز الإجمالي هذا الحد في مقرر = «فصل»، وما بين الحد الإجمالي وهذا الحد = «إعادة»</Text>
+              <View style={styles.optionsRow}>
+                {[40, 50, 60, 75].map(percent => (
+                  <TouchableOpacity key={percent} style={[styles.optionBtn, facultySettings.dismiss_absence_percent === percent && styles.optionBtnActive]}
+                    onPress={() => setFacultySettings({ ...facultySettings, dismiss_absence_percent: percent })} testID={`dismiss-limit-${percent}`}>
+                    <Text style={[styles.optionText, facultySettings.dismiss_absence_percent === percent && styles.optionTextActive]}>{percent}%</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 6, textAlign: 'right' }}>المحصلة النهائية: تجاوز حد بلا عذر أو بعذر = تكميلي (دور ثانٍ) · تجاوز الإجمالي = إعادة المقرر · تجاوز حد الفصل = فصل</Text>
 
               <Text style={[styles.label, { marginTop: 20, color: '#1565c0' }]}>مدة التحضير (دقيقة)</Text>
               <Text style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>المدة المتاحة للأستاذ لتسجيل الحضور بعد فتح التحضير</Text>

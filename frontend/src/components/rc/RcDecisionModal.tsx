@@ -9,7 +9,7 @@ import { DecKind } from './RcMarksTable';
 export const RcDecisionModal = ({ courseId, row, kind, cap, onClose, onDone }: { courseId: string; row: RcRow; kind: DecKind; cap: number; onClose: () => void; onDone: () => void }) => {
   const existing = row.decisions[kind];
   const [sessions, setSessions] = useState<{ id: string; name: string }[]>([]);
-  const [f, setF] = useState({ reason: '', session_id: '', capped: true });
+  const [f, setF] = useState({ reason: '', session_id: '', capped: true, deduct: true });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => { api.get('/rc/board-sessions').then((r) => setSessions(r.data.items.map((s: any) => ({ id: s.id, name: s.label })))).catch(() => {}); }, []);
@@ -17,7 +17,7 @@ export const RcDecisionModal = ({ courseId, row, kind, cap, onClose, onDone }: {
 
   const save = async () => {
     setBusy(true); setMsg(null);
-    try { await api.post(`/rc/courses/${courseId}/decisions`, { student_db_id: row.student_db_id, kind, ...f }); onDone(); }
+    try { await api.post(`/rc/courses/${courseId}/decisions`, { student_db_id: row.student_db_id, kind, reason: f.reason, session_id: f.session_id, capped: f.capped, deduct_pct: kind === 'second_uncapped' && f.deduct ? 10 : 0 }); onDone(); }
     catch (e: any) { setMsg({ ok: false, text: e?.response?.data?.detail || 'فشل الحفظ' }); } finally { setBusy(false); }
   };
   const remove = async () => {
@@ -31,7 +31,7 @@ export const RcDecisionModal = ({ courseId, row, kind, cap, onClose, onDone }: {
       <Msg m={msg} testID="rc-decision-msg" />
       {existing ? (
         <View testID="rc-decision-existing">
-          <Text style={rc.td}>القرار: {kind === 'exceptional' ? (existing.capped ? `دخول التصفية بسقف ${cap}` : 'دخول التصفية بلا سقف') : 'تُحتسب درجة الدور الثاني كاملة'}</Text>
+          <Text style={rc.td}>القرار: {kind === 'exceptional' ? (existing.capped ? `دخول التصفية بسقف ${cap}` : 'دخول التصفية بلا سقف') : `تُحتسب درجة الدور الثاني كاملة${existing.deduct_pct ? ` مع خصم ${existing.deduct_pct}%` : ''}`}</Text>
           <Text style={rc.td}>السبب: {existing.reason}</Text>
           {!!existing.session_label && <Text style={rc.td}>{existing.session_label}</Text>}
           <Text style={[rc.td, { color: '#94a3b8', fontSize: 12, marginBottom: 12 }]}>بواسطة {existing.decided_by_name}</Text>
@@ -46,6 +46,12 @@ export const RcDecisionModal = ({ courseId, row, kind, cap, onClose, onDone }: {
             <View style={{ marginTop: 10 }}>
               <PickerField label="جلسة المجلس (اختياري)" options={sessions} value={f.session_id} onChange={(session_id) => setF({ ...f, session_id })} testID="rc-decision-session" placeholder="بدون" />
             </View>
+          )}
+          {kind === 'second_uncapped' && (
+            <TouchableOpacity style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 12 }} onPress={() => setF({ ...f, deduct: !f.deduct })} testID="rc-decision-deduct-toggle">
+              <Ionicons name={f.deduct ? 'checkbox' : 'square-outline'} size={20} color="#6d28d9" />
+              <Text style={rc.td}>خصم 10% من الدرجة (للتكميلي بقرار المجلس) — أزل العلامة لاحتسابها كاملة دون خصم</Text>
+            </TouchableOpacity>
           )}
           {kind === 'exceptional' && (
             <TouchableOpacity style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 12 }} onPress={() => setF({ ...f, capped: !f.capped })} testID="rc-decision-capped-toggle">

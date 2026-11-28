@@ -43,10 +43,13 @@ const RawCell = ({ field, r, can, edits, setEdit }: { field: Field; r: RcRow; ca
 };
 
 const Note = ({ r }: { r: RcRow }) => {
+  const blk = r.att_outcome === 'repeat' ? 'إعادة المقرر' : r.att_outcome === 'dismiss' ? 'فصل' : '';
+  if (blk) return <View><Text style={{ color: '#c62828', fontWeight: '800', fontSize: 13, textAlign: 'right' }} testID={`cw-note-${r.student_db_id}`}>{blk}</Text>
+    <Text style={{ fontSize: 10.5, color: '#64748b', textAlign: 'right' }}>{r.att_outcome === 'repeat' ? 'تجاوز الحد الإجمالي للغياب — لا يدخل أي دور' : 'تجاوز حد الفصل للغياب'}</Text></View>;
   const t = r.in_second ? `دور ثان${r.pass2 === true ? ` · ناجح (المعتمد ${fmt(r.final2)})` : r.pass2 === false ? ' · راسب (المعتمد 0)' : ''}`
     : r.pass1 ? 'ناجح دور أول' : r.eligible && r.need_first !== null && r.first_exam === null ? `يحتاج ${r.need_first} في الدور الأول` : '';
   const c = r.in_second ? (r.pass2 ? '#2e7d32' : r.pass2 === false ? '#c62828' : '#ef6c00') : r.pass1 ? '#2e7d32' : '#64748b';
-  const why = r.in_second ? (!r.att_ok ? 'بسبب الغياب' : r.pass1 === false ? 'رسب في الدور الأول' : !r.cw_ok ? 'لم يبلغ حد السعي' : '') : '';
+  const why = r.in_second ? (!r.att_ok ? 'تكميلي بسبب الغياب' : r.pass1 === false ? 'رسب في الدور الأول' : !r.cw_ok ? 'لم يبلغ حد السعي' : '') : '';
   return t ? <View><Text style={{ color: c, fontWeight: '800', fontSize: 13, textAlign: 'right' }} testID={`cw-note-${r.student_db_id}`}>{t}</Text>
     {!!why && <Text style={{ fontSize: 10.5, color: '#64748b', textAlign: 'right' }}>{why}</Text>}</View> : <Text style={rc.td}> </Text>;
 };

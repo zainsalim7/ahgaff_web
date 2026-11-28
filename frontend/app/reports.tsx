@@ -543,6 +543,16 @@ export default function ReportsScreen() {
             </TouchableOpacity>
             )}
 
+            {canViewReport(userRole, userPermissions, 'report_warnings') && (
+            <TouchableOpacity style={styles.reportTypeCard} onPress={() => router.push('/report-absence-summary')} data-testid="report-absence-summary-btn">
+              <View style={[styles.reportTypeIcon, { backgroundColor: '#fce4ec' }]}>
+                <Ionicons name="grid" size={28} color="#c62828" />
+              </View>
+              <Text style={styles.reportTypeTitle}>المحصلة النهائية للغياب</Text>
+              <Text style={styles.reportTypeDesc}>دور أول · تكميلي · إعادة · فصل</Text>
+            </TouchableOpacity>
+            )}
+
             {/* التقرير اليومي */}
             {canViewReport(userRole, userPermissions, 'report_daily') && (
             <TouchableOpacity 

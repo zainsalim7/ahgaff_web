@@ -6,6 +6,7 @@
 - غياب بلا عذر > 10.9%  أو  بعذر > 15.9%  أو  الإجمالي (بعذر + بلا عذر) يبلغ 25.9% ⇒ مرشَّح للحرمان (قرار مجلس الكلية). الحدود من إعدادات الكلية.
 - الحدّان الفرديان: أكبر من · الإجمالي: يبلغ أو يتجاوز. لا حالة «متأخر» (تُعامل حضوراً). السجل المفقود في محاضرة منفَّذة = غياب بلا عذر (إلا إن سبقت المحاضرة تاريخ تسجيل الطالب).
 - قبل تنفيذ MIN_EXECUTED محاضرات تُعرض النسب بعلامة «مؤشر مبكر».
+- المحصلة النهائية (لائحة الجامعة): دور أول · تكميلي (تجاوز حد بلا عذر/بعذر = دور ثانٍ) · إعادة (تجاوز الإجمالي) · فصل (تجاوز حد الفصل).
 """
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -14,6 +15,7 @@ from bson import ObjectId
 DEFAULT_UNEXCUSED_LIMIT = 10.9
 DEFAULT_EXCUSED_LIMIT = 15.9
 DEFAULT_TOTAL_LIMIT = 25.9
+DEFAULT_DISMISS_LIMIT = 50.0
 MIN_EXECUTED = 4
 
 STATUS_AR = {
@@ -34,11 +36,12 @@ def lecture_hours(lec: dict) -> float:
 
 
 async def faculty_limits(db, faculty_id: Optional[str]) -> dict:
-    fac = await db.faculties.find_one({"_id": ObjectId(faculty_id)}, {"max_absence_percent": 1, "max_unexcused_percent": 1, "max_excused_percent": 1}) if faculty_id and ObjectId.is_valid(faculty_id) else None
+    fac = await db.faculties.find_one({"_id": ObjectId(faculty_id)}, {"max_absence_percent": 1, "max_unexcused_percent": 1, "max_excused_percent": 1, "dismiss_absence_percent": 1}) if faculty_id and ObjectId.is_valid(faculty_id) else None
     fac = fac or {}
     return {"unexcused_limit": float(fac.get("max_unexcused_percent") or DEFAULT_UNEXCUSED_LIMIT),
             "excused_limit": float(fac.get("max_excused_percent") or DEFAULT_EXCUSED_LIMIT),
-            "total_limit": float(fac.get("max_absence_percent") or DEFAULT_TOTAL_LIMIT), "min_executed": MIN_EXECUTED}
+            "total_limit": float(fac.get("max_absence_percent") or DEFAULT_TOTAL_LIMIT),
+            "dismiss_limit": float(fac.get("dismiss_absence_percent") or DEFAULT_DISMISS_LIMIT), "min_executed": MIN_EXECUTED}
 
 
 async def course_limits(db, course: dict) -> dict:
@@ -80,7 +83,37 @@ def classify(unexcused_h: float, excused_h: float, executed_h: float, executed_c
         "exceeded_unexcused": ex_u, "exceeded_total": ex_t,
         "early": executed_count < limits.get("min_executed", MIN_EXECUTED),
         "status": status, "status_ar": STATUS_AR[status] + (" · مؤشر مبكر" if executed_count < limits.get("min_executed", MIN_EXECUTED) and executed_count > 0 else ""),
+        **outcome_of(unexcused_h, excused_h, executed_h, ex_u, ex_e, ex_t, pct_t, limits),
     }
+
+
+OUTCOME_AR = {"first": "دور أول", "takmili": "تكميلي", "repeat": "إعادة", "dismiss": "فصل"}
+
+
+def outcome_of(unexcused_h, excused_h, executed_h, ex_u, ex_e, ex_t, pct_t, limits) -> dict:
+    """المحصلة النهائية للغياب بأعمدة الكشف الرسمي: التجاوز بالساعات فوق حد بلا عذر وفوق الحد الإجمالي"""
+    lu, lt, ld = limits["unexcused_limit"], limits["total_limit"], limits.get("dismiss_limit", DEFAULT_DISMISS_LIMIT)
+    h_u, h_t = executed_h * lu / 100, executed_h * lt / 100
+    if executed_h <= 0:
+        oc = "first"
+    elif ex_t:
+        oc = "dismiss" if pct_t > ld else "repeat"
+    elif ex_u or ex_e:
+        oc = "takmili"
+    else:
+        oc = "first"
+    return {"outcome": oc, "outcome_ar": OUTCOME_AR[oc], "limit_dismiss": ld,
+            "hours_unexcused_limit": round(h_u, 3), "hours_total_limit": round(h_t, 3),
+            "excess_unexcused_hours": round(max(0.0, unexcused_h - h_u), 3), "excess_total_hours": round(max(0.0, unexcused_h + excused_h - h_t), 3)}
+
+
+def apply_decision_outcome(prof: dict) -> None:
+    """قرار المجلس: الاستثناء ⇒ دور أول · الحرمان ⇒ تكميلي على الأقل"""
+    if prof.get("status") == "exempted":
+        prof["outcome"] = "first"
+    elif prof.get("status") == "deprived" and prof.get("outcome") == "first":
+        prof["outcome"] = "takmili"
+    prof["outcome_ar"] = OUTCOME_AR[prof["outcome"]]
 
 
 async def executed_lectures(db, course_id: str, date_from: str = None, date_to: str = None) -> List[dict]:
@@ -192,6 +225,7 @@ async def course_profiles(db, course: dict, student_ids: Optional[List[str]] = N
                 "id": str(dec["_id"]), "scope": dec.get("scope"), "reason": dec.get("reason", ""),
                 "decided_by_name": dec.get("decided_by_name", ""), "decided_at": dec.get("created_at"),
             }
+            apply_decision_outcome(prof)
         out[sid] = prof
     return out
 

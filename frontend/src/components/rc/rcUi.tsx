@@ -4,13 +4,13 @@ import { Ionicons } from '@expo/vector-icons';
 
 export type Field = 'coursework' | 'first_exam' | 'second_exam' | 'exceptional_exam';
 export type Mark = number | string | null;
-export interface Dec { id: string; capped: boolean; reason: string; session_label: string; decided_by_name: string }
+export interface Dec { id: string; capped: boolean; deduct_pct?: number; reason: string; session_label: string; decided_by_name: string }
 export interface RcRow {
   student_db_id: string; name: string; reg_no: string; section: string;
   coursework: Mark; first_exam: Mark; second_exam: Mark; exceptional_exam: Mark;
   att: { pct_unexcused: number; pct_excused: number; pct_total: number; status: string; status_ar: string; exceeded_unexcused: boolean; exceeded_excused: boolean; exceeded_total: boolean };
   decisions: { second_uncapped?: Dec; exceptional?: Dec };
-  cw_need: number; cw_ok: boolean; att_ok: boolean; att_eligibility: string; eligible: boolean; eligibility: string; reasons: string[]; need_first: number | null;
+  cw_need: number; cw_ok: boolean; att_ok: boolean; att_outcome?: 'first' | 'takmili' | 'repeat' | 'dismiss'; att_eligibility: string; eligible: boolean; eligibility: string; reasons: string[]; need_first: number | null;
   total1: number | null; pass1: boolean | null; in_second: boolean; pass2: boolean | null; final2: number | null;
   in_exc: boolean; pass3: boolean | null; final3: number | null; final: number | null; stage: string; stage_label: string; result: string; letter: string | null;
 }

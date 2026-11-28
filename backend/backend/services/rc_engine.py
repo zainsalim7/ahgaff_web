@@ -4,7 +4,7 @@ from typing import Optional
 ABSENT = "غ"
 DEFAULT_SCALE = [{"min": 90, "label": "ممتاز"}, {"min": 80, "label": "جيد جداً"}, {"min": 65, "label": "جيد"},
                  {"min": 50, "label": "مقبول"}, {"min": 0, "label": "راسب"}]
-DEFAULTS = {"coursework_max": 40, "coursework_pass_pct": 40, "exam_pass_pct": 50, "pass_mark": 50, "second_cap": 50, "exceptional_cap": 50,
+DEFAULTS = {"coursework_max": 40, "coursework_pass_pct": 40, "exam_pass_pct": 50, "pass_mark": 50, "second_cap": 50, "exceptional_cap": 50, "second_full_deduct_pct": 10,
             "grade_scale": DEFAULT_SCALE}
 FIELDS = {"coursework": "السعي", "first_exam": "الدور الأول", "second_exam": "الدور الثاني", "exceptional_exam": "الدور الاستثنائي"}
 ATT_BLOCK = ("candidate", "deprived")
@@ -56,7 +56,9 @@ def compute(m: dict, cfg: dict, att: dict, decs: dict) -> dict:
     cw_need = round(cwm * cfg["coursework_pass_pct"] / 100, 2)
     cw_ok = _num(cw) is not None and cw >= cw_need
     att_status = (att or {}).get("status", "excellent")
-    att_ok = att_status not in ATT_BLOCK
+    outcome = (att or {}).get("outcome") or "first"
+    att_ok = att_status not in ATT_BLOCK and outcome == "first"
+    blocked = outcome in ("repeat", "dismiss")
     reasons = []
     if cw is None:
         if att_ok:
@@ -64,10 +66,12 @@ def compute(m: dict, cfg: dict, att: dict, decs: dict) -> dict:
     elif not cw_ok:
         reasons.append(f"السعي أقل من {fmt(cw_need)}")
     if not att_ok:
-        reasons.append("محروم بقرار المجلس" if att_status == "deprived" else "تجاوز حد الغياب")
+        reasons.append({"repeat": "إعادة المقرر (تجاوز الحد الإجمالي للغياب)", "dismiss": "فصل (تجاوز حد الفصل للغياب)"}.get(outcome)
+                       or ("محروم بقرار المجلس — تكميلي" if att_status == "deprived" else "تكميلي (تجاوز حد الغياب)"))
     eligible = cw_ok and att_ok
     r = {"cw_need": cw_need, "cw_ok": cw_ok, "att_ok": att_ok, "att_status": att_status, "eligible": eligible,
-         "att_eligibility": "مؤهل بالحضور" if att_ok else "غير مؤهل بالغياب",
+         "att_eligibility": "مؤهل بالحضور" if att_ok else {"repeat": "إعادة بالغياب", "dismiss": "فصل بالغياب"}.get(outcome, "تكميلي بالغياب"),
+         "att_outcome": outcome,
          "eligibility": "مؤهل" if eligible else ("بانتظار السعي" if cw is None and att_ok else "غير مؤهل"), "reasons": reasons,
          "need_first": None, "total1": None, "pass1": None,
          "in_second": False, "pass2": None, "final2": None, "in_exc": False, "pass3": None, "final3": None}
@@ -78,17 +82,22 @@ def compute(m: dict, cfg: dict, att: dict, decs: dict) -> dict:
     if eligible and f1 is not None:
         r["total1"] = round(cw + (_num(f1) or 0), 2)
         r["pass1"] = _num(f1) is not None and f1 >= r["need_first"]
-    r["in_second"] = not att_ok or (cw is not None and not cw_ok) or r["pass1"] is False
-    unc = bool(decs.get("second_uncapped"))
+    r["in_second"] = not blocked and (not att_ok or (cw is not None and not cw_ok) or r["pass1"] is False)
+    unc = decs.get("second_uncapped")
     if r["in_second"] and s2 is not None:
         r["pass2"] = _num(s2) is not None and s2 >= pm
-        r["final2"] = (s2 if unc else min(s2, cfg["second_cap"])) if r["pass2"] else 0
+        # قرار المجلس: درجة كاملة (مع خصم النسبة المقررة إن وُجد)
+        ded = float(unc.get("deduct_pct") or 0) if isinstance(unc, dict) else 0
+        r["final2"] = (round(s2 * (1 - ded / 100), 2) if unc else min(s2, cfg["second_cap"])) if r["pass2"] else 0
     exc = decs.get("exceptional")
     r["in_exc"] = bool(exc) and r["pass2"] is False
     if r["in_exc"] and x3 is not None:
         r["pass3"] = _num(x3) is not None and x3 >= pm
         capped = exc.get("capped", True)
         r["final3"] = (min(x3, cfg["exceptional_cap"]) if capped else x3) if _num(x3) is not None else 0
+    if blocked:
+        r.update(final=0, stage="failed", result="راسب", letter={"repeat": "إعادة المقرر", "dismiss": "فصل"}[outcome])
+        return r
     if r["pass1"]:
         r.update(final=r["total1"], stage="first", result="ناجح")
     elif r["pass2"]:

@@ -155,7 +155,7 @@ async def _decisions(db, cid: str) -> dict:
     out: dict = {}
     async for d in db.rc_decisions.find({"course_id": cid}):
         out.setdefault(d["student_db_id"], {})[d["kind"]] = {
-            "id": str(d["_id"]), "capped": d.get("capped", True), "reason": d.get("reason", ""), "session_label": d.get("session_label", ""),
+            "id": str(d["_id"]), "capped": d.get("capped", True), "deduct_pct": d.get("deduct_pct", 0), "reason": d.get("reason", ""), "session_label": d.get("session_label", ""),
             "decided_by_name": d.get("decided_by_name", ""), "decided_at": d["created_at"].isoformat() if isinstance(d.get("created_at"), datetime) else d.get("created_at")}
     return out
 
@@ -179,7 +179,7 @@ async def _build(db, course: dict) -> dict:
             "student_db_id": sid, "name": st.get("full_name", ""), "reg_no": str(st.get("student_id") or ""), "section": st.get("section", ""),
             "st_level": st.get("level"), "st_department_id": str(st.get("department_id") or ""),
             **{k: m.get(k) for k in E.FIELDS},
-            "att": {k: att.get(k) for k in ("pct_unexcused", "pct_excused", "pct_total", "status", "status_ar", "exceeded_unexcused", "exceeded_excused", "exceeded_total")},
+            "att": {k: att.get(k) for k in ("pct_unexcused", "pct_excused", "pct_total", "status", "status_ar", "exceeded_unexcused", "exceeded_excused", "exceeded_total", "outcome", "outcome_ar")},
             "decisions": decs.get(sid) or {}, **r, "stage_label": STAGE_AR.get(r["stage"], ""),
         })
     rows.sort(key=lambda x: x["name"])
@@ -240,7 +240,7 @@ async def _save(db, user: dict, course: dict, field: str, items: list, via: str,
         if not block and field == "coursework" and any(row.get(k) is not None for k in ("first_exam", "second_exam", "exceptional_exam")):
             m2 = {k: row.get(k) for k in E.FIELDS}
             m2["coursework"] = val
-            n = E.compute(m2, cfg, {"status": row["att"].get("status")}, row.get("decisions") or {})
+            n = E.compute(m2, cfg, {"status": row["att"].get("status"), "outcome": row["att"].get("outcome")}, row.get("decisions") or {})
             if val is None or any(n[k] != row[k] for k in ("eligible", "in_second", "in_exc")):
                 block = "تعديل السعي يغيّر أهلية الطالب وقد رُصدت له درجة دور — احذف درجة الدور أولاً"
         if block:
@@ -516,11 +516,14 @@ async def add_decision(course_id: str, data: dict = Body(...), current_user: dic
         s = await db.faculty_board_sessions.find_one({"_id": ObjectId(data["session_id"])})
         label = f"جلسة {s.get('meeting_number', '')} · {s.get('meeting_date', '')}" if s else ""
     capped = bool(data.get("capped", True)) if kind == "exceptional" else False
+    deduct = float(data.get("deduct_pct") or 0) if kind == "second_uncapped" else 0
+    if not 0 <= deduct < 100:
+        raise HTTPException(status_code=400, detail="نسبة الخصم غير صحيحة")
     now = _now()
     await db.rc_decisions.update_one({"course_id": course_id, "student_db_id": sid, "kind": kind}, {"$set": {
-        "capped": capped, "reason": reason, "session_id": data.get("session_id") or None, "session_label": label,
+        "capped": capped, "deduct_pct": deduct, "reason": reason, "session_id": data.get("session_id") or None, "session_label": label,
         "decided_by": current_user.get("id"), "decided_by_name": current_user.get("full_name", ""), "created_at": now}}, upsert=True)
-    note = {"second_uncapped": "احتساب درجة الدور الثاني كاملة", "exceptional": "دخول الدور الاستثنائي" + ("" if capped else " بلا سقف")}[kind]
+    note = {"second_uncapped": "احتساب درجة الدور الثاني كاملة" + (f" مع خصم {deduct:g}%" if deduct else ""), "exceptional": "دخول الدور الاستثنائي" + ("" if capped else " بلا سقف")}[kind]
     await db.rc_log.insert_one({"course_id": course_id, "student_db_id": sid, "reg_no": row["reg_no"], "name": row["name"], "field": "decision",
                                 "new": note, "note": reason, "by_name": current_user.get("full_name", ""), "by": current_user.get("id"), "at": now})
     await log_activity(current_user, "rc_board_decision", "rc_decisions", course_id, row["name"], {"kind": kind, "capped": capped, "reason": reason})

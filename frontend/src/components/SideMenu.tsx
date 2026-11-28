@@ -153,6 +153,9 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 'report-warnings', label: 'الإنذارات', icon: 'warning', path: '/report-warnings', category: 'academic', permissions: [
     PERMISSIONS.REPORT_WARNINGS
   ]},
+  { id: 'report-absence-summary', label: 'المحصلة النهائية للغياب', icon: 'grid', path: '/report-absence-summary', category: 'academic', permissions: [
+    PERMISSIONS.REPORT_WARNINGS
+  ]},
   { id: 'report-teacher-delays', label: 'تأخر المعلمين', icon: 'alarm', path: '/report-teacher-delays', category: 'academic', permissions: [
     PERMISSIONS.REPORT_TEACHER_DELAYS, PERMISSIONS.VIEW_REPORTS
   ]},

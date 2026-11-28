@@ -13254,6 +13254,79 @@ async def get_daily_report(
         }
     }
 
+@api_router.get("/reports/absence-summary")
+async def absence_summary_report(
+    department_id: str,
+    level: int,
+    section: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    fmt: str = "json",
+    current_user: dict = Depends(get_current_user)
+):
+    """كشف «المحصلة النهائية للغياب» لمستوى/شعبة — نفس النموذج الرسمي (دور أول · تكميلي · إعادة · فصل)"""
+    if not has_permission(current_user, Permission.VIEW_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if fmt != "json" and not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بالتصدير")
+    from services.absence_engine import course_profiles, course_limits
+    from services import absence_sheet_export as AX
+    cq: dict = {"is_active": True, "department_id": department_id, "level": level}
+    if semester_id:
+        cq["semester_id"] = semester_id
+    own_scope = await _report_scope_guard(current_user, "courses")
+    if own_scope:
+        cq = {"$and": [cq, own_scope]}
+    courses = sorted(await db.courses.find(cq).to_list(100), key=lambda c: (str(c.get("code") or ""), c.get("name", "")))
+    studs: dict = {}
+    cols, lim = [], None
+    for c in courses:
+        cid = str(c["_id"])
+        limits = await course_limits(db, c)
+        lim = lim or limits
+        sids = [e["student_id"] async for e in db.enrollments.find({"course_id": cid}, {"student_id": 1}) if ObjectId.is_valid(e.get("student_id") or "")]
+        for st in await db.students.find({"_id": {"$in": [ObjectId(x) for x in sids if x not in studs]}}, {"full_name": 1, "student_id": 1, "section": 1, "level": 1, "department_id": 1}).to_list(None):
+            studs[str(st["_id"])] = st
+        mine = [x for x in sids if x in studs and str(studs[x].get("level") or "") == str(level)
+                and (not studs[x].get("department_id") or str(studs[x]["department_id"]) == department_id)
+                and (not section or str(studs[x].get("section") or "") == section)]
+        profs = await course_profiles(db, c, mine, limits=limits) if mine else {}
+        ex_h = max([p["executed_hours"] for p in profs.values()] or [0])
+        cols.append({"course": c, "profs": profs, "limits": limits, "executed_hours": ex_h})
+    lim = lim or {"unexcused_limit": 10.9, "total_limit": 25.9}
+    sids_all = sorted({sid for col in cols for sid in col["profs"]}, key=lambda x: studs[x].get("full_name", ""))
+    d = {"limits": {"unexcused": lim["unexcused_limit"], "total": lim["total_limit"], "dismiss": lim.get("dismiss_limit", 50)},
+         "courses": [{"id": str(col["course"]["_id"]), "name": col["course"].get("name", ""), "code": col["course"].get("code", ""),
+                      "executed_hours": col["executed_hours"], "h_u": round(col["executed_hours"] * col["limits"]["unexcused_limit"] / 100, 3),
+                      "h_t": round(col["executed_hours"] * col["limits"]["total_limit"] / 100, 3)} for col in cols],
+         "rows": []}
+    counts = {"first": 0, "takmili": 0, "repeat": 0, "dismiss": 0}
+    for sid in sids_all:
+        cells = []
+        for col in cols:
+            p = col["profs"].get(sid)
+            if not p:
+                cells.append(None)
+                continue
+            counts[p["outcome"]] += 1
+            cells.append({"excused": p["excused_hours"], "unexcused": p["unexcused_hours"], "excess_u": p["excess_unexcused_hours"],
+                          "excess_t": p["excess_total_hours"], "outcome": p["outcome"], "outcome_ar": p["outcome_ar"],
+                          "pct_total": p["pct_total"], "board": bool(p.get("board_decision"))})
+        st = studs[sid]
+        d["rows"].append({"student_db_id": sid, "name": st.get("full_name", ""), "reg_no": str(st.get("student_id") or ""), "section": st.get("section") or "", "cells": cells})
+    d["counts"] = counts
+    if fmt == "json":
+        return d
+    dep = await db.departments.find_one({"_id": ObjectId(department_id)}, {"name": 1}) if ObjectId.is_valid(department_id) else None
+    sem = await db.semesters.find_one({"_id": ObjectId(semester_id)}, {"name": 1, "academic_year": 1}) if semester_id and ObjectId.is_valid(semester_id) else None
+    sub = " · ".join(x for x in [f"المستوى {level} {((dep or {}).get('name') or '').strip()} {section or ''}".strip(),
+                                 f"الفصل الدراسي: {(sem or {}).get('name', '')}" if sem else "", f"العام الجامعي: {(sem or {}).get('academic_year', '')}" if sem else ""] if x)
+    title = "المحصلة النهائية للغياب"
+    if fmt == "pdf":
+        return StreamingResponse(AX.to_pdf(d, title, sub), media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=absence_summary.pdf"})
+    return StreamingResponse(AX.to_xlsx(d, title, sub), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=absence_summary.xlsx"})
+
+
 @api_router.get("/reports/warnings")
 async def get_warnings_report(
     department_id: Optional[str] = None,
@@ -19156,6 +19229,7 @@ async def get_faculty(faculty_id: str, current_user: dict = Depends(get_current_
         "max_absence_percent": faculty.get("max_absence_percent", 25.9),
         "max_unexcused_percent": faculty.get("max_unexcused_percent", 10.9),
         "max_excused_percent": faculty.get("max_excused_percent", 15.9),
+        "dismiss_absence_percent": faculty.get("dismiss_absence_percent", 50),
         "attendance_duration_minutes": faculty.get("attendance_duration_minutes", 15),
         "max_attendance_delay_minutes": faculty.get("max_attendance_delay_minutes", 30),
         "excuse_window_days": faculty.get("excuse_window_days", 3),
@@ -19185,7 +19259,8 @@ async def update_faculty_settings(
     allowed_fields = [
         "levels_count", "sections", "attendance_late_minutes", "max_absence_percent",
         "primary_color", "secondary_color", "phone", "whatsapp", "email",
-        "attendance_duration_minutes", "max_attendance_delay_minutes", "max_unexcused_percent", "max_excused_percent", "excuse_window_days"
+        "attendance_duration_minutes", "max_attendance_delay_minutes", "max_unexcused_percent", "max_excused_percent", "excuse_window_days",
+        "dismiss_absence_percent"
     ]
     
     update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
