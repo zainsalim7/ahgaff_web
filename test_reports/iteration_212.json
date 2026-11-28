@@ -1,0 +1,48 @@
+{
+  "summary": "Tested the Video Production module (backend + frontend). Backend: 13/13 pytest tests pass (/app/backend/tests/test_video_production.py). They cover settings GET/PUT (empty default_items falls back to the 4 defaults; registrar gets 403), contract create (ref VC-YYYY-NNNN, 450,000 default items, validation), edit, status flow (issue/complete/terminate needs a note/reopen; invalid transitions return 400), item status (recording returns 400; accrues only on accepted), session validation (max minutes, part_no range, duplicate, studio overlap conflict, availability), teacher min-notice of 2h (/my/sessions), the full pipeline (strict order, cloud/platform URLs required, back, stall needs a note/unstall, reject needs a note, no cancel after filming, reschedule conflict), progress/accrual (lecture counts only when all parts are filmed AND materials are delivered: 50,000 + 250,000*1/2), payments (cap at accrued-paid, draft rejected, needs vp_payments, delete), PDFs (%PDF magic for contract, for session, and for the teacher), and isolation (teacher/registrar get 403 on staff endpoints; teacher sees only own non-draft contracts). A separate ad-hoc probe found the edge-case defects listed below. Frontend (admin, 1920x1080): tabs, KPIs, new contract form (teacher search/select, total 450,000, save as draft), detail modal (issue, item accept, over-pay error shown, payment add, contract PDF download, terminate via prompt, reopen button), studio tab (KPI filter, new session form with studio buttons showing متاح/محجوز and the booked one disabled, full pipeline confirm→filmed→editing→cloud (missing-URL error shown)→stall/unstall→published, materials checkbox persisted, session PDF download), settings tab (add-studio row, save message). Registrar: no side-menu item and the page shows the no-permission message. Admin side menu shows 'الإنتاج المرئي'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/video-production/availability, POST /sessions/{id}/action (confirm/reschedule)", "issue": "A malformed 'start' (e.g. 'abc'/'xx') returns HTTP 500. _mins() raises ValueError with no validation. It should return 400."},
+      {"endpoint": "POST /sessions, /my/sessions", "issue": "A session that runs past midnight gets end='24:20' (start 23:50 + 30). It is stored as an invalid HH:MM string, string overlap comparison breaks, and the UI shows '24:20'. Reject sessions that cross midnight, or cap the time."},
+      {"endpoint": "POST /contracts/{id}/payments, PUT /contracts/{id}/items/{key}, POST /my/contracts/{id}/accept", "issue": "All three still work on a terminated contract: a payment of 1000 was accepted, an item was set to accepted, and the teacher could accept. Only draft is blocked. Block terminated (and maybe completed) contracts for item changes and teacher accept, and decide the business rule for payments."},
+      {"endpoint": "POST /sessions/{id}/action stall, PUT /sessions/{id}", "issue": "Stall and materials edits are allowed on cancelled/rejected sessions. _progress counts stalled sessions that are cancelled, so a cancelled + stalled session shows ⛔ on the contract row and in the 'stalled' KPIs."},
+      {"endpoint": "POST /sessions", "issue": "lecture_no is not checked against 1..lectures_required. lecture_no=99 was accepted on a contract that requires 1 lecture. 0 or negative values may also pass."},
+      {"endpoint": "GET /settings, GET /availability", "issue": "Any logged-in user can read these, including test_registrar who has no vp_* permission (both return 200). They expose studios, first-party info and default amounts. Consider requiring a vp_* permission or teacher status."},
+      {"endpoint": "GET /contracts kpis", "issue": "The accrued/paid KPIs add up terminated contracts as well. Consider counting only issued/completed contracts."},
+      {"endpoint": "Ref numbers", "issue": "VC-/VS- numbers come from count_documents+1, so two concurrent creates can get the same ref. There is no unique index."},
+      {"endpoint": "DELETE /contracts/{id}/payments/{pid}", "issue": "Returns 200 and writes a history entry even when the payment id does not exist."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SessionDetail", "issue": "The 'back' button only renders inside the `next &&` block, so a published session cannot be sent back from the UI even though the backend allows published→cloud. The stall button also shows for published sessions.", "selector": "[data-testid=vp-sd-back]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Session form / contract form / studio filters", "issues": ["Date and time fields use the browser's native date/time pickers (input type=date/time). In the RTL Arabic UI the time shows as '10:10 AM' in English."]},
+      {"screen": "Studio sessions list", "issues": ["In RTL the time range shows as 'end–start' (e.g. '10:30–10:00'). Wrap it in dir=ltr or use an arrow."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_video_production.py", "/app/test_reports/pytest/vp_results.xml"],
+  "action_items": [
+    "Validate the HH:MM format of 'start' (availability, confirm/reschedule) so a bad value returns 400 instead of 500",
+    "Reject sessions that cross midnight (end > 24:00)",
+    "Block item status changes, teacher accept and (per business rule) payments on terminated contracts",
+    "Block stall/materials edits on cancelled/rejected sessions and leave cancelled/rejected out of the stalled counts",
+    "Check that lecture_no is between 1 and lectures_required",
+    "Consider adding a permission check to GET /settings and /availability",
+    "Optional: unique index on ref_no, KPIs that skip terminated contracts, back button for published sessions in the UI, a custom date/time picker"
+  ],
+  "critical_code_review_comments": [
+    "video_production.py is 745 lines (over the 700 guideline). Split it into contracts, sessions and teacher-facing (my) routers.",
+    "session_action L602: `if PIPE.index(a) != PIPE.index(st) + 1 if st in PIPE else True` is correct but hard to read. Rewrite it with explicit parentheses.",
+    "Sessions of terminated contracts in BUSY states (confirmed..published) keep blocking studio slots forever. There is no endpoint to delete or archive sessions."
+  ],
+  "updated_files": ["/app/backend/tests/test_video_production.py"],
+  "success_rate": {"backend": "100% of the requested flows (13/13 tests); 9 minor edge-case defects", "frontend": "100% of the tested flows"},
+  "seed_data_creation": "Created TEST contracts VC-2026-0002..0005 (course 'TEST_VP ...', teacher زين سالم), all now terminated, with every test payment deleted. Their sessions in requested/confirmed state were cancelled. Some test sessions are left in filmed/published state on random 2027 dates. One is studio 1 on 2027-02-10 10:00-10:30, and there are random slots from 2027-06 to 2027-09. They cannot be cancelled or deleted through the API and still block those studio slots. Settings (2 studios, min_notice 2, 4 default items) were restored and checked. VC-2026-0001 sample data was not changed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && REACT_APP_BACKEND_URL=<url> python -m pytest tests/test_video_production.py -v. It creates its own TEST_VP contract per run (it cannot be deleted, so the run terminates it in teardown) and restores settings. Login is POST /api/auth/login {username,password} and returns access_token. In the UI, the materials checkbox is controlled, so page.check() reports 'did not change state'; check it through the API instead. Contract terminate uses window.prompt, so accept the dialog."
+}

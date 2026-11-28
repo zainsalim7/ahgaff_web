@@ -84,7 +84,7 @@ const StudioTab = ({ settings, canStudio, openSession, reloadKey }: any) => {
             <thead><tr>{['الموعد', 'الأستوديو', 'المعلم', 'المقرر', 'المحاضرة / الجزء', 'الملحقات', 'المرحلة'].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{data.items.map((s: any) => (
               <tr key={s.id} onClick={() => openSession(s.id)} style={{ cursor: 'pointer' }} data-testid={`vp-s-row-${s.id}`}>
-                <td style={{ ...td, fontWeight: 800 }}>{s.date}<div style={{ fontSize: 10.5, color: '#64748b' }}>{s.start}–{s.end}</div></td><td style={td}>{sName(s.studio_id)}</td>
+                <td style={{ ...td, fontWeight: 800 }}>{s.date}<div style={{ fontSize: 10.5, color: '#64748b' }} dir="ltr">{s.start} – {s.end}</div></td><td style={td}>{sName(s.studio_id)}</td>
                 <td style={td}>{s.teacher_name}</td><td style={td}>{s.course_name}</td><td style={td}>م{s.lecture_no}: {s.lecture_title}<div style={{ fontSize: 10.5, color: '#64748b' }}>الجزء {s.part_no}/{s.parts_count}</div></td>
                 <td style={td}>{s.materials_delivered ? '📎 مستلمة' : '—'}</td>
                 <td style={td}><Badge text={s.status_ar} color={S_COLOR[s.status]} />{s.stalled && <div style={{ fontSize: 10.5, color: '#b91c1c', fontWeight: 800 }}>⛔ {s.stalled.reason}</div>}</td>

@@ -122,7 +122,7 @@ def _progress(c: dict, sessions: List[dict]) -> dict:
     paid = sum(p["amount"] for p in c.get("payments", []))
     end = c.get("end_date")
     days_left = (datetime.fromisoformat(end).date() - _now().date()).days if end else None
-    stalled = [s for s in sessions if s.get("stalled")]
+    stalled = [s for s in sessions if s.get("stalled") and s["status"] not in ("rejected", "cancelled")]
     return {"lectures_required": c.get("lectures_required") or 0, "lectures_completed": completed,
             "lectures_published": sum(1 for L in by_lec.values() if L["published"]), "parts_done": len(done_parts),
             "percent": round(100 * min(completed, req) / req, 1), "lectures": sorted(by_lec.values(), key=lambda x: x["lecture_no"]),
@@ -184,6 +184,8 @@ class SettingsIn(BaseModel):
 
 @router.get("/settings")
 async def get_settings(u: dict = Depends(get_current_user)):
+    if not _staff(u):
+        raise HTTPException(status_code=403, detail="غير مصرح")
     return await _settings(get_db())
 
 
@@ -277,9 +279,10 @@ async def list_contracts(status: str = "", faculty_id: str = "", department_id: 
     items = [_c_out(c, [s for s in allS if s["contract_id"] == str(c["_id"])]) for c in cs]
     st = await _settings(db)
     lim = (_now() - timedelta(days=st["stall_days"])).isoformat()
+    live = [c for c in items if c["status"] in ("issued", "completed")]
     kpis = {"active": sum(1 for c in items if c["status"] == "issued"), "late": sum(1 for c in items if c["status"] == "issued" and (c["progress"]["days_left"] or 0) < 0),
-            "stalled": sum(1 for s in allS if s.get("stalled") or (s["status"] in ("filmed", "editing", "cloud") and s.get("updated_at", "") < lim)),
-            "accrued": sum(c["progress"]["accrued"] for c in items), "paid": sum(c["progress"]["paid"] for c in items)}
+            "stalled": sum(1 for s in allS if (s.get("stalled") and s["status"] not in ("rejected", "cancelled")) or (s["status"] in ("filmed", "editing", "cloud") and s.get("updated_at", "") < lim)),
+            "accrued": sum(c["progress"]["accrued"] for c in live), "paid": sum(c["progress"]["paid"] for c in live)}
     return {"items": items, "kpis": kpis}
 
 
@@ -289,9 +292,7 @@ async def create_contract(body: ContractIn, u: dict = Depends(get_current_user))
     db = get_db()
     d = await _norm_contract(db, body)
     _guard_scope(u, d)
-    year = _now().year
-    n = await db.vp_contracts.count_documents({"ref_no": {"$regex": f"^VC-{year}-"}}) + 1
-    d.update({"ref_no": f"VC-{year}-{n:04d}", "status": "draft", "payments": [], "created_at": _now().isoformat(),
+    d.update({"ref_no": await _next_ref(db, "VC", 4), "status": "draft", "payments": [], "created_at": _now().isoformat(),
               "created_by": u["id"], "history": [_hist("إنشاء العقد", u)]})
     r = await db.vp_contracts.insert_one(d)
     await log_activity(u, "vp_contract_create", f"عقد إنتاج مرئي {d['ref_no']} — {d['teacher_name']}")
@@ -362,6 +363,8 @@ async def item_status(cid: str, key: str, body: ItemAct, u: dict = Depends(get_c
     _need(u, Permission.VP_MANAGE_CONTRACTS)
     db = get_db()
     c = await _contract(db, cid, u, staff_only=True)
+    if c["status"] != "issued":
+        raise HTTPException(status_code=400, detail="تعديل البنود متاح للعقود السارية فقط")
     it = next((i for i in c.get("items", []) if i["key"] == key), None)
     if not it or it["kind"] == "recording":
         raise HTTPException(status_code=400, detail="بند التسجيل المرئي يُحتسب تلقائياً من المحاضرات المكتملة")
@@ -392,6 +395,8 @@ async def add_payment(cid: str, body: PayIn, u: dict = Depends(get_current_user)
     c = await _contract(db, cid, u, staff_only=True)
     if c["status"] == "draft":
         raise HTTPException(status_code=400, detail="لا يُصرف على عقد غير معتمد")
+    if c["status"] == "terminated" and not body.note.strip():
+        raise HTTPException(status_code=400, detail="العقد ملغى — الصرف للتسوية فقط مع ذكر ملاحظة التسوية")
     pr = _progress({k: v for k, v in c.items()}, await _sessions(db, {"contract_id": cid}))
     if body.amount <= 0:
         raise HTTPException(status_code=400, detail="المبلغ غير صالح")
@@ -410,6 +415,8 @@ async def del_payment(cid: str, pid: str, u: dict = Depends(get_current_user)):
     _need(u, Permission.VP_PAYMENTS)
     db = get_db()
     c = await _contract(db, cid, u, staff_only=True)
+    if not any(p["id"] == pid for p in c.get("payments", [])):
+        raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
     await db.vp_contracts.update_one({"_id": c["_id"]}, {"$pull": {"payments": {"id": pid}}, "$push": {"history": _hist("حذف دفعة", u)}})
     return {"ok": True}
 
@@ -441,8 +448,30 @@ class SessionIn(BaseModel):
 
 
 def _mins(t: str) -> int:
-    h, m = t.split(":")[:2]
-    return int(h) * 60 + int(m)
+    m = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)(:\d\d)?", (t or "").strip())
+    if not m:
+        raise HTTPException(status_code=400, detail="الوقت غير صالح (HH:MM)")
+    return int(m.group(1)) * 60 + int(m.group(2))
+
+
+def _end(start: str, minutes: int) -> str:
+    e = _mins(start) + minutes
+    if e > 24 * 60 - 1:
+        raise HTTPException(status_code=400, detail="الجلسة يجب أن تنتهي قبل منتصف الليل")
+    return _hhmm(e)
+
+
+_IDX = {"done": False}
+
+
+async def _next_ref(db, prefix: str, width: int) -> str:
+    if not _IDX["done"]:
+        await db.vp_contracts.create_index("ref_no", unique=True)
+        await db.vp_sessions.create_index("ref_no", unique=True)
+        _IDX["done"] = True
+    year = _now().year
+    r = await db.vp_counters.find_one_and_update({"_id": f"{prefix}-{year}"}, {"$inc": {"n": 1}}, upsert=True, return_document=True)
+    return f"{prefix}-{year}-{r['n']:0{width}d}"
 
 
 def _hhmm(m: int) -> str:
@@ -468,7 +497,9 @@ async def _free_studios(db, st: dict, date: str, start: str, end: str, skip: str
 async def availability(date: str, start: str, minutes: int = 30, u: dict = Depends(get_current_user)):
     db = get_db()
     st = await _settings(db)
-    end = _hhmm(_mins(start) + minutes)
+    if not (_staff(u) or await db.vp_contracts.find_one({"teacher_id": {"$in": await _my_tids(db, u)}, "status": "issued"}, {"_id": 1})):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    end = _end(start, minutes)
     return {"studios": await _free_studios(db, st, date, start, end), "end": end}
 
 
@@ -476,6 +507,8 @@ async def _create_session(db, body: SessionIn, u: dict, c: dict, by_teacher: boo
     st = await _settings(db)
     if c["status"] != "issued":
         raise HTTPException(status_code=400, detail="الحجز متاح فقط للعقود المعتمدة السارية")
+    if not (1 <= body.lecture_no <= int(c.get("lectures_required") or 0)):
+        raise HTTPException(status_code=400, detail=f"رقم المحاضرة يجب أن يكون بين 1 و{c.get('lectures_required')}")
     if not body.lecture_title.strip():
         raise HTTPException(status_code=400, detail="عنوان المحاضرة مطلوب")
     if not (1 <= body.part_no <= max(1, body.parts_count)):
@@ -492,14 +525,13 @@ async def _create_session(db, body: SessionIn, u: dict, c: dict, by_teacher: boo
                                          "status": {"$nin": ["rejected", "cancelled"]}})
     if dup:
         raise HTTPException(status_code=400, detail=f"الجزء {body.part_no} من المحاضرة {body.lecture_no} محجوز/مسجل مسبقاً")
-    start, end = body.start[:5], _hhmm(_mins(body.start) + body.est_minutes)
+    end = _end(body.start, body.est_minutes)
+    start = _hhmm(_mins(body.start))
     if body.studio_id and not any(s["id"] == body.studio_id for s in st["studios"]):
         raise HTTPException(status_code=400, detail="الأستوديو غير موجود")
     if body.studio_id and await _conflict(db, body.studio_id, body.date, start, end):
         raise HTTPException(status_code=400, detail="الأستوديو محجوز في هذا الوقت — اختر وقتاً أو أستوديو آخر")
-    year = _now().year
-    n = await db.vp_sessions.count_documents({"ref_no": {"$regex": f"^VS-{year}-"}}) + 1
-    d = {**body.dict(), "start": start, "end": end, "ref_no": f"VS-{year}-{n:05d}", "teacher_id": c["teacher_id"], "teacher_name": c["teacher_name"],
+    d = {**body.dict(), "start": start, "end": end, "ref_no": await _next_ref(db, "VS", 5), "teacher_id": c["teacher_id"], "teacher_name": c["teacher_name"],
          "course_name": c["course_name"], "faculty_id": c.get("faculty_id", ""), "department_id": c.get("department_id", ""),
          "department_name": c.get("department_name", ""), "status": "requested", "materials_delivered": False, "materials_note": "",
          "photographer_notes": "", "cloud_url": "", "platform_url": "", "stalled": None, "created_at": _now().isoformat(),
@@ -581,10 +613,11 @@ async def session_action(sid: str, body: SessAct, u: dict = Depends(get_current_
     if a in ("confirm", "reschedule"):
         if st not in ("requested", "confirmed"):
             raise HTTPException(status_code=400, detail="لا يمكن تأكيد/نقل حجز بعد التصوير")
-        studio, date, start = body.studio_id or s.get("studio_id"), body.date or s["date"], (body.start or s["start"])[:5]
+        studio, date = body.studio_id or s.get("studio_id"), body.date or s["date"]
+        start = _hhmm(_mins(body.start or s["start"]))
         if not studio:
             raise HTTPException(status_code=400, detail="اختر الأستوديو")
-        end = _hhmm(_mins(start) + s["est_minutes"])
+        end = _end(start, s["est_minutes"])
         if await _conflict(db, studio, date, start, end, skip=sid):
             raise HTTPException(status_code=400, detail="الأستوديو محجوز في هذا الوقت")
         moved = (studio, date, start) != (s.get("studio_id"), s["date"], s["start"])
@@ -617,6 +650,8 @@ async def session_action(sid: str, body: SessAct, u: dict = Depends(get_current_
             raise HTTPException(status_code=400, detail="لا يمكن الرجوع من هذه المرحلة")
         sets, label = {"status": PIPE[PIPE.index(st) - 1]}, f"إرجاع إلى «{S_STATUS[PIPE[PIPE.index(st) - 1]]}»"
     elif a == "stall":
+        if st in ("rejected", "cancelled", "published"):
+            raise HTTPException(status_code=400, detail="لا يمكن تسجيل توقف لهذه الحالة")
         if not body.note.strip():
             raise HTTPException(status_code=400, detail="اكتب سبب التوقف")
         sets, label = {"stalled": {"reason": body.note.strip(), "at": _now().isoformat(), "stage": st}}, "توقف"
@@ -649,6 +684,8 @@ async def session_edit(sid: str, body: SessEdit, u: dict = Depends(get_current_u
     _need(u, Permission.VP_STUDIO)
     db = get_db()
     s = await _session(db, sid, u)
+    if s["status"] in ("rejected", "cancelled"):
+        raise HTTPException(status_code=400, detail="الحجز مرفوض/ملغى")
     sets = {k: v for k, v in body.dict().items() if v is not None}
     if not sets:
         return {"ok": True}
@@ -690,6 +727,8 @@ async def my_accept(cid: str, u: dict = Depends(get_current_user)):
     c = await _contract(db, cid, u)
     if c["teacher_id"] not in await _my_tids(db, u):
         raise HTTPException(status_code=403, detail="غير مصرح")
+    if c["status"] != "issued":
+        raise HTTPException(status_code=400, detail="العقد غير ساري")
     if not c.get("teacher_accepted_at"):
         await db.vp_contracts.update_one({"_id": c["_id"]}, {"$set": {"teacher_accepted_at": _now().isoformat()}, "$push": {"history": _hist("موافقة المعلم على البنود", u)}})
     return {"ok": True}

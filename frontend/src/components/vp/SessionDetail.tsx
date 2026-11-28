@@ -28,7 +28,7 @@ export const SessionDetail = ({ id, settings, onChanged }: { id: string; setting
       <div style={{ ...card, fontSize: 12.5, display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 6 }}>
         <div>المعلم: <strong>{s.teacher_name}</strong></div><div>المقرر: <strong>{s.course_name}</strong></div>
         <div>المحاضرة {s.lecture_no}: <strong>{s.lecture_title}</strong></div><div>الجزء <strong>{s.part_no} / {s.parts_count}</strong> · {s.est_minutes} د{s.actual_minutes ? ` (فعلي ${s.actual_minutes} د)` : ''}</div>
-        <div>الموعد: <strong>{studioName} · {s.date} {s.start}–{s.end}</strong></div><div>الموضوع: {s.topic || '—'}</div>
+        <div>الموعد: <strong>{studioName} · {s.date} <span dir="ltr">{s.start} – {s.end}</span></strong></div><div>الموضوع: {s.topic || '—'}</div>
         <div style={{ gridColumn: '1/-1' }}>الملخص: {s.summary || '—'}</div><div>المرفق: {s.attachment_note || '—'}</div><div>ملاحظات الأستاذ: {s.teacher_notes || '—'}</div>
         {s.cloud_url && <div>السحابة: <a href={s.cloud_url} target="_blank" rel="noreferrer" data-testid="vp-sd-cloud-link">فتح</a></div>}
         {s.platform_url && <div>المنصة: <a href={s.platform_url} target="_blank" rel="noreferrer" data-testid="vp-sd-platform-link">فتح</a></div>}
@@ -52,9 +52,9 @@ export const SessionDetail = ({ id, settings, onChanged }: { id: string; setting
               {next[0] === 'cloud' && <input style={{ ...inp, flex: 1 }} placeholder="رابط الملف على السحابة" value={x.cloud_url} onChange={(e) => setX({ ...x, cloud_url: e.target.value })} data-testid="vp-sd-cloud" />}
               {next[0] === 'published' && <input style={{ ...inp, flex: 1 }} placeholder="رابط المحاضرة على منصة التعليم" value={x.platform_url} onChange={(e) => setX({ ...x, platform_url: e.target.value })} data-testid="vp-sd-platform" />}
               <button onClick={() => act(next[0], { cloud_url: x.cloud_url, platform_url: x.platform_url, actual_minutes: x.actual_minutes ? +x.actual_minutes : null })} style={btn(S_COLOR[next[0]])} data-testid="vp-sd-next">← {next[1]}</button>
-              {idx >= 3 && <button onClick={() => act('back')} style={btn('#f1f5f9', { color: '#0f2440' })} data-testid="vp-sd-back">إرجاع مرحلة</button>}
             </div>)}
-          {idx >= 1 && (s.stalled ? <button onClick={() => act('unstall')} style={btn('#16a34a', { alignSelf: 'flex-start' })} data-testid="vp-sd-unstall">استئناف</button>
+          {idx >= 3 && <button onClick={() => act('back')} style={btn('#f1f5f9', { color: '#0f2440', alignSelf: 'flex-start' })} data-testid="vp-sd-back">إرجاع مرحلة</button>}
+          {idx >= 1 && s.status !== 'published' && (s.stalled ? <button onClick={() => act('unstall')} style={btn('#16a34a', { alignSelf: 'flex-start' })} data-testid="vp-sd-unstall">استئناف</button>
             : <button onClick={() => act('stall')} style={btn('#fee2e2', { color: '#b91c1c', alignSelf: 'flex-start' })} data-testid="vp-sd-stall">تسجيل توقف (اكتب السبب)</button>)}
           <div style={{ borderTop: '1px solid #eef0f3', paddingTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontWeight: 800, fontSize: 12.5 }}><input type="checkbox" checked={!!s.materials_delivered} onChange={(e) => run(() => api.put(vp(`/sessions/${id}`), { materials_delivered: e.target.checked, materials_note: x.materials_note }))} data-testid="vp-sd-materials" />استُلمت الملحقات (النص والمصادر التعليمية)</label>
