@@ -4,7 +4,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 from services.absence_engine import classify  # noqa: E402
 from services import rc_engine as E  # noqa: E402
 
-L = {"unexcused_limit": 10, "excused_limit": 15.9, "total_limit": 25, "dismiss_limit": 50, "min_executed": 4}
+L = {"unexcused_limit": 10, "excused_limit": 15.9, "total_limit": 25, "dismiss_limit": 50.9, "min_executed": 4}
 CASES = [  # (بعذر, بدون عذر, الساعات الفعلية) → (تجاوز 10%, تجاوز 25%, النتيجة)
     (0, 8, 67, 1.3, 0, "تكميلي"), (3.5, 33.5, 67, 26.8, 20.25, "فصل"), (1.5, 26, 56.5, 20.35, 13.375, "إعادة"),
     (3, 21, 42, 16.8, 13.5, "فصل"), (1.5, 16.5, 39, 12.6, 8.25, "إعادة"), (1.5, 16.5, 40.5, 12.45, 7.875, "إعادة"),

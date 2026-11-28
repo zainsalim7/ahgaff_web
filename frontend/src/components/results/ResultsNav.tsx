@@ -30,15 +30,17 @@ export const useResultsGo = () => {
 const LINKS = [
   { path: '/student-results', label: 'النتائج', icon: 'ribbon-outline', perms: ['view_results', 'manage_results'] },
   { path: '/results-center', label: 'مركز النتائج', icon: 'school-outline', perms: ['rc_view', 'rc_enter_coursework', 'rc_enter_exams', 'rc_board_decisions', 'rc_approve', 'rc_manage_settings'] },
-  { path: '/grades', label: 'الدرجات وكشوف الطلاب', icon: 'document-text-outline', perms: ['manage_grades'] },
-] as const;
+  { path: '/grades', label: 'الدرجات وكشوف الطلاب', icon: 'document-text-outline', perms: ['manage_grades'], hideOn: ['/results-center'] },
+  { path: '/report-absence-summary', label: 'المحصلة النهائية للغياب', icon: 'grid-outline', perms: ['report_warnings', 'view_reports'], showOn: ['/results-center'] },
+] as { path: string; label: string; icon: string; perms: string[]; hideOn?: string[]; showOn?: string[] }[];
 
 export type Crumb = { label: string; onPress?: () => void };
 
 export const ResultsNav = ({ current, crumbs = [] }: { current: '/student-results' | '/results-center' | '/grades'; crumbs?: Crumb[] }) => {
   const { hasPermission } = useAuth();
   const go = useResultsGo();
-  const links = LINKS.filter((l) => l.path === current || l.perms.some((p) => hasPermission(p)));
+  const links = LINKS.filter((l) => !l.hideOn?.includes(current) && (!l.showOn || l.showOn.includes(current))
+    && (l.path === current || l.perms.some((p) => hasPermission(p))));
   return (
     <View style={s.wrap} testID="results-nav">
       <View style={s.crumbs}>

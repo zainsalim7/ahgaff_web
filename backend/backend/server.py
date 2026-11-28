@@ -13294,7 +13294,7 @@ async def absence_summary_report(
         cols.append({"course": c, "profs": profs, "limits": limits, "executed_hours": ex_h})
     lim = lim or {"unexcused_limit": 10.9, "total_limit": 25.9}
     sids_all = sorted({sid for col in cols for sid in col["profs"]}, key=lambda x: studs[x].get("full_name", ""))
-    d = {"limits": {"unexcused": lim["unexcused_limit"], "total": lim["total_limit"], "dismiss": lim.get("dismiss_limit", 50)},
+    d = {"limits": {"unexcused": lim["unexcused_limit"], "total": lim["total_limit"], "dismiss": lim.get("dismiss_limit", 50.9)},
          "courses": [{"id": str(col["course"]["_id"]), "name": col["course"].get("name", ""), "code": col["course"].get("code", ""),
                       "executed_hours": col["executed_hours"], "h_u": round(col["executed_hours"] * col["limits"]["unexcused_limit"] / 100, 3),
                       "h_t": round(col["executed_hours"] * col["limits"]["total_limit"] / 100, 3)} for col in cols],
@@ -19229,7 +19229,7 @@ async def get_faculty(faculty_id: str, current_user: dict = Depends(get_current_
         "max_absence_percent": faculty.get("max_absence_percent", 25.9),
         "max_unexcused_percent": faculty.get("max_unexcused_percent", 10.9),
         "max_excused_percent": faculty.get("max_excused_percent", 15.9),
-        "dismiss_absence_percent": faculty.get("dismiss_absence_percent", 50),
+        "dismiss_absence_percent": faculty.get("dismiss_absence_percent", 50.9),
         "attendance_duration_minutes": faculty.get("attendance_duration_minutes", 15),
         "max_attendance_delay_minutes": faculty.get("max_attendance_delay_minutes", 30),
         "excuse_window_days": faculty.get("excuse_window_days", 3),
