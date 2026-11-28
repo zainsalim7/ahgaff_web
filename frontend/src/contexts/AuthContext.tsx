@@ -102,6 +102,10 @@ export const PERMISSIONS = {
   MANAGE_STUDENT_EXCUSES: 'manage_student_excuses',
   MANAGE_STUDENT_REQUESTS: 'manage_student_requests',
   MANAGE_REQUEST_TYPES: 'manage_request_types',
+  VP_VIEW: 'vp_view',
+  VP_MANAGE_CONTRACTS: 'vp_manage_contracts',
+  VP_STUDIO: 'vp_studio',
+  VP_PAYMENTS: 'vp_payments',
   MANAGE_LECTURE_SWAPS: 'manage_lecture_swaps',
   USE_ASSISTANT: 'use_assistant',
   // صلاحيات أخرى

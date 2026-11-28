@@ -133,6 +133,7 @@ export const MENU_ITEMS: MenuItem[] = [
   ]},
   { id: 'absence-justifications', label: 'تبرير غياب الأساتذة 🩺', icon: 'medkit', path: '/absence-justifications', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
   { id: 'lecture-swaps', label: 'تبادل / إنابة المحاضرات 🔁', icon: 'swap-horizontal', path: '/lecture-swaps', category: 'academic', permissions: [PERMISSIONS.MANAGE_LECTURE_SWAPS] },
+  { id: 'video-production', label: 'الإنتاج المرئي 🎬', icon: 'videocam', path: '/video-production', category: 'academic', permissions: [PERMISSIONS.VP_VIEW, PERMISSIONS.VP_MANAGE_CONTRACTS, PERMISSIONS.VP_STUDIO, PERMISSIONS.VP_PAYMENTS] },
   { id: 'student-requests', label: 'طلبات الطلاب', icon: 'file-tray-full', path: '/student-requests', category: 'academic', permissions: [PERMISSIONS.MANAGE_STUDENT_REQUESTS, PERMISSIONS.MANAGE_STUDENT_EXCUSES, PERMISSIONS.MANAGE_REQUEST_TYPES] },
   { id: 'attendance-locations', label: 'مواقع تحضير المحاضرات 📍', icon: 'location', path: '/attendance-locations', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
   { id: 'reports', label: 'جميع التقارير', icon: 'document-text', path: '/reports', category: 'academic', permissions: [

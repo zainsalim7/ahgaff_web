@@ -161,6 +161,10 @@ class Permission:
     MANAGE_STUDENT_EXCUSES = "manage_student_excuses"
     MANAGE_STUDENT_REQUESTS = "manage_student_requests"
     MANAGE_REQUEST_TYPES = "manage_request_types"
+    VP_VIEW = "vp_view"
+    VP_MANAGE_CONTRACTS = "vp_manage_contracts"
+    VP_STUDIO = "vp_studio"
+    VP_PAYMENTS = "vp_payments"
     MANAGE_LECTURE_SWAPS = "manage_lecture_swaps"      # 🔁 تبادل/إنابة المحاضرات بين الأساتذة
     USE_ASSISTANT = "use_assistant"  # 🤖 استخدام مرشد الأحقاف (المساعد الإرشادي)  # 📄 مراجعة أعذار غياب الطلاب والبت فيها (حسب مسار التوجيه)
 
@@ -423,6 +427,10 @@ ALL_PERMISSIONS = [
     {"key": Permission.MANAGE_STUDENT_EXCUSES, "label": "مراجعة أعذار غياب الطلاب والبت فيها (التسجيل/العميد/مجلس الكلية حسب التوجيه)", "category": "الحضور"},
     {"key": Permission.MANAGE_STUDENT_REQUESTS, "label": "مراجعة طلبات/نماذج الطلاب والبت فيها ضمن نطاق كلياته وأقسامه", "category": "طلبات الطلاب"},
     {"key": Permission.MANAGE_REQUEST_TYPES, "label": "إدارة أنواع نماذج طلبات الطلاب وحقولها", "category": "طلبات الطلاب"},
+    {"key": Permission.VP_VIEW, "label": "عرض عقود الإنتاج المرئي ومتابعة التسجيل (قراءة فقط ضمن النطاق)", "category": "الإنتاج المرئي"},
+    {"key": Permission.VP_MANAGE_CONTRACTS, "label": "إنشاء عقود الإنتاج المرئي واعتمادها وقبول بنودها", "category": "الإنتاج المرئي"},
+    {"key": Permission.VP_STUDIO, "label": "إدارة الأستوديوهات والحجوزات ومسيرة التسجيل (تصوير/مونتاج/سحابة/منصة)", "category": "الإنتاج المرئي"},
+    {"key": Permission.VP_PAYMENTS, "label": "صرف مستحقات عقود الإنتاج المرئي", "category": "الإنتاج المرئي"},
     {"key": Permission.MANAGE_LECTURE_SWAPS, "label": "تبادل/إنابة المحاضرات بين الأساتذة", "category": "الحضور"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},

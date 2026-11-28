@@ -164,6 +164,7 @@ export default function RootLayout() {
           <Stack.Screen name="absence-justifications" options={{ title: 'تبرير غياب الأساتذة' }} />
           <Stack.Screen name="student-excuses" options={{ title: 'أعذار غياب الطلاب' }} />
           <Stack.Screen name="student-requests" options={{ title: 'طلبات الطلاب' }} />
+          <Stack.Screen name="video-production" options={{ title: 'الإنتاج المرئي' }} />
           <Stack.Screen name="lecture-swaps" options={{ title: 'تبادل / إنابة المحاضرات' }} />
           <Stack.Screen name="attendance-locations" options={{ title: 'مواقع تحضير المحاضرات' }} />
           <Stack.Screen name="grades" options={{ title: 'نظام الدرجات', headerShown: false }} />
