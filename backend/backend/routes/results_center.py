@@ -150,6 +150,52 @@ async def list_courses(faculty_id: str = "", department_id: str = "", level: int
     } for c in courses]}
 
 
+# ==================== 🔎 الاستعلام عن طالب ====================
+@router.get("/rc/student-lookup")
+async def student_lookup(q: str = "", student_db_id: str = "", semester_id: str = "", current_user: dict = Depends(get_current_user)):
+    """بحث بالاسم/رقم القيد ضمن النطاق، ثم وضع الطالب في كل مقرراته للفصل (السعي · الأدوار · الأهلية · النتيجة)"""
+    import re
+    _view(current_user)
+    db = get_db()
+    sc = await _user_scope(db, current_user)
+    deps_q = {"department_id": {"$in": list(sc["deps"])}} if sc is not None else {}
+    if not student_db_id:
+        t = q.strip()
+        if len(t) < 2:
+            return {"matches": []}
+        rx = re.escape(t)
+        found = await db.students.find({**deps_q, "$or": [{"full_name": {"$regex": rx, "$options": "i"}}, {"student_id": {"$regex": f"^{rx}"}}]},
+                                       {"full_name": 1, "student_id": 1, "level": 1, "section": 1, "department_id": 1, "status": 1}).limit(20).to_list(20)
+        dn = {str(d["_id"]): d.get("name", "") async for d in db.departments.find({"_id": {"$in": [ObjectId(x["department_id"]) for x in found if ObjectId.is_valid(x.get("department_id") or "")]}}, {"name": 1})}
+        return {"matches": [{"id": str(x["_id"]), "name": x.get("full_name", ""), "reg_no": str(x.get("student_id") or ""), "level": x.get("level"),
+                             "section": x.get("section") or "", "department_name": dn.get(x.get("department_id"), ""), "status": x.get("status", "")} for x in found]}
+    st = await db.students.find_one({"_id": ObjectId(student_db_id), **deps_q}) if ObjectId.is_valid(student_db_id) else None
+    if not st:
+        raise HTTPException(status_code=404, detail="الطالب غير موجود ضمن نطاقك")
+    if not semester_id:
+        semester_id = (await get_active_semester(db) or {}).get("id", "")
+    cids = [e["course_id"] async for e in db.enrollments.find({"student_id": student_db_id}, {"course_id": 1}) if ObjectId.is_valid(e.get("course_id") or "")]
+    cq: dict = {"_id": {"$in": [ObjectId(x) for x in cids]}}
+    if semester_id:
+        cq["semester_id"] = semester_id
+    rows = []
+    for c in await db.courses.find(cq).sort([("level", 1), ("name", 1)]).to_list(100):
+        if sc is not None and c.get("department_id") not in sc["deps"]:
+            continue
+        cid = str(c["_id"])
+        cfg = await _settings(db, await _course_faculty(db, c))
+        att = (await course_profiles(db, c, [student_db_id])).get(student_db_id) or {}
+        m = await db.rc_marks.find_one({"course_id": cid, "student_db_id": student_db_id}) or {}
+        r = E.compute(m, cfg, att, (await _decisions(db, cid)).get(student_db_id) or {})
+        rows.append({"course_id": cid, "name": c.get("name", ""), "code": c.get("code", ""), "level": c.get("level"), "section": c.get("section", ""),
+                     **{k: m.get(k) for k in E.FIELDS}, "att_pct": att.get("pct_total"), "att_outcome_ar": att.get("outcome_ar"),
+                     "eligibility": r.get("eligibility"), "final": r.get("final"), "result": r.get("result"), "stage_label": STAGE_AR.get(r.get("stage"), ""),
+                     "letter": r.get("letter")})
+    return {"student": {"id": student_db_id, "name": st.get("full_name", ""), "reg_no": str(st.get("student_id") or ""), "level": st.get("level"),
+                        "section": st.get("section") or "", "status": st.get("status", "")}, "semester_id": semester_id, "rows": rows,
+            "note": "الطالب مسجّل «إعادة» — لا يدخل كشوف المركز" if st.get("status") == "repeat" else ""}
+
+
 # ==================== 📋 كشف المقرر ====================
 async def _decisions(db, cid: str) -> dict:
     out: dict = {}

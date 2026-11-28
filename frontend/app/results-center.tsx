@@ -13,6 +13,7 @@ import { RcSettingsModal } from '../src/components/rc/RcSettingsModal';
 import { RcPublishModal } from '../src/components/rc/RcPublishModal';
 import { RcLevelSheet } from '../src/components/rc/RcLevelSheet';
 import { Badge } from '../src/components/rc/rcUi';
+import { RcStudentLookup } from '../src/components/rc/RcStudentLookup';
 
 type Dep = Opt & { faculty_id?: string };
 type Course = { id: string; name: string; code: string; level: number; section: string; department_id: string; department_name: string; students: number; coursework_entered: number; locked: boolean };
@@ -55,6 +56,7 @@ export default function ResultsCenterPage() {
   const open = qp.view === 'course' && qp.course ? String(qp.course) : null;
   const levelView = qp.view === 'level';
   const [openFac, setOpenFac] = useState('');
+  const [lookup, setLookup] = useState(false);
   const [pubCtx, setPubCtx] = useState<{ department_id: string; level: string; semester_id: string; preselect?: string } | null>(null);
   const toList = () => go({ pathname: '/results-center', params: f }, { back: true });
   const openView = (p: Record<string, string>) => router.push({ pathname: '/results-center', params: Object.fromEntries(Object.entries({ ...f, ...p }).filter(([, x]) => x)) } as any);
@@ -152,6 +154,9 @@ export default function ResultsCenterPage() {
                 <TextInput style={st.searchInput} value={q} onChangeText={setQ} placeholder="ابحث باسم المقرر أو رقمه" placeholderTextColor="#94a3b8" testID="rc-course-search" />
                 {!!q && <TouchableOpacity onPress={() => setQ('')} testID="rc-course-search-clear"><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity>}
               </View>
+              <TouchableOpacity onPress={() => setLookup(true)} style={[st.chip, { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#1565c0', borderColor: '#1565c0' }]} testID="rc-student-lookup-btn">
+                <Ionicons name="person-circle-outline" size={16} color="#fff" /><Text style={[st.chipTxt, { color: '#fff' }]}>استعلام عن طالب</Text>
+              </TouchableOpacity>
               <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
                 <Text style={st.cSub}>عدد العرض:</Text>
                 {[12, 24, 48, 0].map((n) => (
@@ -163,6 +168,7 @@ export default function ResultsCenterPage() {
               <Text style={st.cSub} testID="rc-courses-count">{shown.length} مقرر{term ? ` (من ${courses.length})` : ''}</Text>
             </View>
             {!!err && <Text style={st.err} testID="rc-error">{err}</Text>}
+            {lookup && <RcStudentLookup semesterId={f.semester_id} onClose={() => setLookup(false)} onOpenCourse={(cid) => { setLookup(false); openView({ view: 'course', course: cid }); }} />}
             {loading ? <ActivityIndicator style={{ marginTop: 30 }} /> : courses.length === 0
               ? <Text style={{ textAlign: 'center', color: '#94a3b8', marginTop: 30 }} testID="rc-courses-empty">لا توجد مقررات ضمن نطاقك لهذه الفلاتر</Text>
               : shown.length === 0 ? <Text style={{ textAlign: 'center', color: '#94a3b8', marginTop: 30 }} testID="rc-search-empty">لا توجد مقررات تطابق «{q}»</Text>
