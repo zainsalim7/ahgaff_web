@@ -1,6 +1,6 @@
 import { goBack } from '../src/utils/navigation';
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
@@ -37,6 +37,7 @@ export default function AbsenceSummaryReport() {
   const [exporting, setExporting] = useState<'' | 'pdf' | 'excel'>('');
   const [err, setErr] = useState('');
   const [outcome, setOutcome] = useState('');
+  const [q, setQ] = useState('');
 
   useEffect(() => {
     departmentsAPI.getAll().then((r) => setDepartments(r.data || [])).catch(() => {});
@@ -62,12 +63,13 @@ export default function AbsenceSummaryReport() {
   const [briefing, setBriefing] = useState('');
   const exp = async (fmt: 'pdf' | 'excel', view: 'sheet' | 'summary' = 'sheet') => {
     view === 'sheet' ? setExporting(fmt) : setBriefing(fmt);
-    await downloadReport('/reports/absence-summary', { ...params(), fmt: fmt === 'pdf' ? 'pdf' : 'xlsx', view, ...(outcome ? { outcome } : {}) },
+    await downloadReport('/reports/absence-summary', { ...params(), fmt: fmt === 'pdf' ? 'pdf' : 'xlsx', view, ...(outcome ? { outcome } : {}), ...(q.trim() ? { q: q.trim() } : {}) },
       [view === 'summary' ? 'ملخص المحصلة' : 'المحصلة النهائية للغياب', `م${f.level}`, f.section, OUT_AR[outcome] || ''], fmt === 'pdf' ? 'pdf' : 'xlsx');
     setExporting(''); setBriefing('');
   };
   const c = data?.counts, cc = data?.cell_counts;
-  const shown = !data ? [] : data.rows.filter((r) => !outcome || (outcome === 'first' ? r.all_first : r.outcomes.includes(outcome)));
+  const qt = q.trim().split(/\s+/).join(' ');
+  const shown = !data ? [] : data.rows.filter((r) => (!outcome || (outcome === 'first' ? r.all_first : r.outcomes.includes(outcome))) && (!qt || (r.name || '').split(/\s+/).join(' ').includes(qt) || String((r as any).reg_no || '').startsWith(qt)));
   const kpi = (key: string, label: string, color: string, icon: any, sub: string) => ({
     label, value: (c as any)?.[key] ?? 0, color, icon, sub, active: outcome === key, testID: `as-kpi-${key}`, onPress: () => setOutcome(outcome === key ? '' : key),
   });
@@ -115,7 +117,15 @@ export default function AbsenceSummaryReport() {
             )}
           </>
         )}
-        {data && (shown.length ? <AbsenceSummaryTable d={{ ...data, rows: shown }} /> : <ReportEmpty text={outcome ? 'لا يوجد طلاب بهذه النتيجة' : 'لا يوجد طلاب في هذا المستوى/الشعبة'} />)}
+        {data && (
+          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 10, backgroundColor: '#fff', marginBottom: 8, maxWidth: 420 }}>
+            <Ionicons name="search" size={16} color="#8a95a8" />
+            <TextInput value={q} onChangeText={setQ} placeholder="بحث باسم الطالب أو رقم قيده" placeholderTextColor="#94a3b8" style={{ flex: 1, paddingVertical: 8, textAlign: 'right', fontSize: 13.5, outlineStyle: 'none' } as any} testID="as-student-search" />
+            {!!q && <TouchableOpacity onPress={() => setQ('')} testID="as-student-search-clear"><Ionicons name="close-circle" size={16} color="#94a3b8" /></TouchableOpacity>}
+            {!!qt && <Text style={{ fontSize: 12, color: '#64748b' }} testID="as-student-search-count">{shown.length} طالب</Text>}
+          </View>
+        )}
+        {data && (shown.length ? <AbsenceSummaryTable d={{ ...data, rows: shown }} /> : <ReportEmpty text={qt ? `لا يوجد طالب يطابق «${qt}»` : outcome ? 'لا يوجد طلاب بهذه النتيجة' : 'لا يوجد طلاب في هذا المستوى/الشعبة'} />)}
       </ScrollView>
     </SafeAreaView>
   );

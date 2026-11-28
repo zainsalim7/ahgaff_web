@@ -13265,6 +13265,7 @@ async def absence_summary_report(
     fmt: str = "json",
     outcome: Optional[str] = None,
     view: str = "sheet",
+    q: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """كشف «المحصلة النهائية للغياب» لمستوى/شعبة — نفس النموذج الرسمي (دور أول · تكميلي · إعادة · فصل)"""
@@ -13335,6 +13336,9 @@ async def absence_summary_report(
     d["students"] = len(d["rows"])
     if outcome in ("first", "takmili", "repeat", "dismiss"):
         d["rows"] = [r for r in d["rows"] if (r["all_first"] if outcome == "first" else outcome in r["outcomes"])]
+    if q and q.strip():
+        t = " ".join(q.split())
+        d["rows"] = [r for r in d["rows"] if t in " ".join(str(r.get("name") or "").split()) or str(r.get("reg_no") or "").startswith(t)]
     if fmt == "json":
         return d
     dep = await db.departments.find_one({"_id": ObjectId(department_id)}, {"name": 1}) if ObjectId.is_valid(department_id) else None
